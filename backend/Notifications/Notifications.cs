@@ -1,4 +1,5 @@
 using System.Net;
+using System.Net.Http.Json;
 using System.Net.Mail;
 using Microsoft.Extensions.Options;
 using NailsByLeah.Api.Configuration;
@@ -19,6 +20,17 @@ public interface INotificationService
     /// <summary>Sent when the administrator confirms the booking.</summary>
     Task SendBookingApprovedAsync(Booking booking, CancellationToken ct = default);
     Task SendAppointmentReminderAsync(Booking booking, CancellationToken ct = default);
+
+    // Alerts to the salon (Notifications:SalonEmail), so Leyah hears about changes without opening the admin pages.
+
+    /// <summary>A client booked and paid; the booking waits for the salon to confirm it.</summary>
+    Task SendSalonNewBookingAsync(Booking booking, Payment payment, CancellationToken ct = default);
+
+    /// <summary>A client cancelled their booking.</summary>
+    Task SendSalonCancellationAsync(Booking booking, string reasonLabel, CancellationToken ct = default);
+
+    /// <summary>A client moved their booking; <paramref name="fromDate"/> and <paramref name="fromTime"/> are the old slot.</summary>
+    Task SendSalonRescheduleAsync(Booking booking, DateOnly fromDate, TimeOnly fromTime, CancellationToken ct = default);
 }
 
 /// <summary>Delivery channel. An SMS sender can be added later behind its own interface.</summary>
@@ -30,8 +42,73 @@ public interface IEmailSender
 /// <summary>Builds plain-text emails. Plain text means user-entered names cannot inject HTML.</summary>
 public sealed class EmailNotificationService(
     IEmailSender email,
-    IOptions<AuthOptions> authOptions) : INotificationService
+    IOptions<AuthOptions> authOptions,
+    IOptions<NotificationOptions> notificationOptions,
+    IOptions<FrontendOptions> frontendOptions) : INotificationService
 {
+    private const string SalonName = "Nails by Leyah";
+
+    public Task SendSalonNewBookingAsync(Booking booking, Payment payment, CancellationToken ct = default) =>
+        ToSalon($"New booking to confirm: {booking.Client.FirstName} {booking.Client.LastName}, {booking.BookingDate:MMM d} at {booking.StartTime:h:mm tt}",
+            $"""
+            A client booked and paid. Please check the payment and confirm the booking.
+
+            {AppointmentLines(booking)}
+            Total: PHP {booking.TotalPrice:0.00}
+            {Labels.For(payment.Option)} paid: PHP {payment.Amount:0.00} via {payment.Method} (reference {payment.ReferenceNumber})
+            Balance due at the salon: PHP {booking.BalanceDue:0.00}
+            Note for Leyah: {booking.NoteText}
+
+            Confirm it here: {AdminLink(booking, pendingOnly: true)}
+            """, ct);
+
+    public Task SendSalonCancellationAsync(Booking booking, string reasonLabel, CancellationToken ct = default) =>
+        ToSalon($"Booking cancelled: {booking.Client.FirstName} {booking.Client.LastName}, {booking.BookingDate:MMM d} at {booking.StartTime:h:mm tt}",
+            $"""
+            A client cancelled their booking. The time is free again for other clients.
+
+            {AppointmentLines(booking)}
+            Reason: {reasonLabel}
+            Paid online: PHP {booking.AmountPaid:0.00} (the PHP {booking.DepositAmount:0.00} deposit is non-refundable)
+
+            Bookings that day: {AdminLink(booking, pendingOnly: false)}
+            """, ct);
+
+    public Task SendSalonRescheduleAsync(Booking booking, DateOnly fromDate, TimeOnly fromTime, CancellationToken ct = default) =>
+        ToSalon($"Booking moved: {booking.Client.FirstName} {booking.Client.LastName}, now {booking.BookingDate:MMM d} at {booking.StartTime:h:mm tt}",
+            $"""
+            A client moved their booking.
+
+            Was: {fromDate:dddd, MMMM d, yyyy} at {fromTime:h\:mm tt}
+            {AppointmentLines(booking)}
+
+            Bookings that day: {AdminLink(booking, pendingOnly: false)}
+            """, ct);
+
+    /// <summary>Sends to the salon's address, or does nothing when none is configured.</summary>
+    private Task ToSalon(string subject, string body, CancellationToken ct)
+    {
+        var to = notificationOptions.Value.SalonEmail;
+        return string.IsNullOrWhiteSpace(to) ? Task.CompletedTask : email.SendAsync(to, SalonName, subject, body, ct);
+    }
+
+    private static string AppointmentLines(Booking booking)
+    {
+        var addOns = booking.AddOns.Count == 0 ? "None"
+            : string.Join(", ", booking.AddOns.Select(a => $"{a.AddOn.Name} ({Labels.For(a.Hand).ToLowerInvariant()}, {a.NailCount} {(a.NailCount == 1 ? "nail" : "nails")})"));
+        return $"""
+            Client: {booking.Client.FirstName} {booking.Client.LastName} (@{booking.Client.Username})
+            Contact: {booking.Client.Email}, {booking.Client.PhoneNumber}
+            Service: {booking.Service.CategoryLabel} - {booking.Service.Name}
+            Add-ons: {addOns}
+            Date: {booking.BookingDate:dddd, MMMM d, yyyy}
+            Time: {booking.StartTime:h\:mm tt} - {booking.EndTime:h\:mm tt}
+            """;
+    }
+
+    private string AdminLink(Booking booking, bool pendingOnly) =>
+        $"{frontendOptions.Value.BaseUrl.TrimEnd('/')}/admin/bookings?date={booking.BookingDate:yyyy-MM-dd}{(pendingOnly ? "&status=Pending" : "")}";
+
     public Task SendEmailVerificationAsync(User user, string code, CancellationToken ct = default) =>
         email.SendAsync(user.Email, FullName(user), "Verify your Nails by Leyah account",
             $"""
@@ -108,12 +185,45 @@ public sealed class EmailNotificationService(
     private static string FullName(User user) => $"{user.FirstName} {user.LastName}";
 }
 
-public sealed class SmtpEmailSender(IOptions<SmtpOptions> options) : IEmailSender
+/// <summary>
+/// Sends through Brevo's transactional email API over HTTPS, so it works on hosts that block SMTP ports.
+/// A rejected email (bad key, unverified sender, daily limit) throws with Brevo's reason; the key is never logged.
+/// </summary>
+public sealed class BrevoEmailSender(HttpClient http, IOptions<BrevoOptions> brevo, IOptions<EmailOptions> email) : IEmailSender
+{
+    public async Task SendAsync(string toAddress, string toName, string subject, string textBody, CancellationToken ct = default)
+    {
+        var from = email.Value;
+        using var request = new HttpRequestMessage(HttpMethod.Post, "smtp/email")
+        {
+            Content = JsonContent.Create(new
+            {
+                sender = new { name = from.FromName, email = from.FromAddress },
+                to = new[] { new { email = toAddress, name = toName } },
+                subject,
+                textContent = textBody,
+            }),
+        };
+        request.Headers.Add("api-key", brevo.Value.ApiKey);
+        request.Headers.Accept.ParseAdd("application/json");
+
+        using var response = await http.SendAsync(request, ct);
+        if (!response.IsSuccessStatusCode)
+        {
+            var reason = await response.Content.ReadAsStringAsync(ct);
+            throw new InvalidOperationException(
+                $"Brevo rejected the email \"{subject}\" ({(int)response.StatusCode} {response.ReasonPhrase}): {reason[..Math.Min(reason.Length, 500)]}");
+        }
+    }
+}
+
+public sealed class SmtpEmailSender(IOptions<SmtpOptions> options, IOptions<EmailOptions> email) : IEmailSender
 {
     public async Task SendAsync(string toAddress, string toName, string subject, string textBody, CancellationToken ct = default)
     {
         var smtp = options.Value;
-        using var message = new MailMessage(new MailAddress(smtp.FromAddress, smtp.FromName), new MailAddress(toAddress, toName))
+        var from = email.Value;
+        using var message = new MailMessage(new MailAddress(from.FromAddress, from.FromName), new MailAddress(toAddress, toName))
         {
             Subject = subject,
             Body = textBody,

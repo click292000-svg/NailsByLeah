@@ -97,8 +97,9 @@ export function Layout() {
       </main>
 
       <footer className="site-footer">
+        {/* One slim row: copyright, legal links, social icons (no logo here: the header already shows it). */}
         <div className="footer-inner">
-          {/* No logo here: the header already shows it. */}
+          <p className="footer-copy">© {YEAR} {salon.name}</p>
           <nav className="footer-links" aria-label="Footer">
             <button type="button" onClick={() => setLegalDocument('terms')}>Terms of Service</button>
             <span aria-hidden="true">•</span>
@@ -106,9 +107,6 @@ export function Layout() {
             {/* No Support link: a chatbot will take its place. */}
           </nav>
           <SocialLinks variant="plain" className="footer-social" />
-        </div>
-        <div className="footer-fine">
-          <span>© {YEAR} {salon.name}</span>
         </div>
       </footer>
       {legalDocument && <LegalDocumentModal document={legalDocument} onClose={() => setLegalDocument(null)} />}

@@ -26,6 +26,8 @@ public static class ServiceRegistration
         services.AddOptions<ScheduleOptions>().Bind(configuration.GetSection(ScheduleOptions.Section));
         services.AddOptions<LegalOptions>().Bind(configuration.GetSection(LegalOptions.Section));
         services.AddOptions<FrontendOptions>().Bind(configuration.GetSection(FrontendOptions.Section));
+        services.AddOptions<EmailOptions>().Bind(configuration.GetSection(EmailOptions.Section));
+        services.AddOptions<BrevoOptions>().Bind(configuration.GetSection(BrevoOptions.Section));
         services.AddOptions<SmtpOptions>().Bind(configuration.GetSection(SmtpOptions.Section));
         services.AddOptions<NotificationOptions>().Bind(configuration.GetSection(NotificationOptions.Section));
         services.AddOptions<DatabaseOptions>().Bind(configuration.GetSection(DatabaseOptions.Section));
@@ -76,8 +78,15 @@ public static class ServiceRegistration
         // External integrations
         services.AddSingleton<IPaymentGateway, SimulatedPaymentGateway>();
         services.AddScoped<INotificationService, EmailNotificationService>();
-        services.AddScoped<IEmailSender>(sp => sp.GetRequiredService<IOptions<SmtpOptions>>().Value.IsConfigured
-            ? ActivatorUtilities.CreateInstance<SmtpEmailSender>(sp)
+        // Email channel: Brevo's HTTPS API when a key is set, else SMTP (e.g. Gmail) when a host is set, else the log.
+        services.AddHttpClient<BrevoEmailSender>((sp, client) =>
+        {
+            client.BaseAddress = new Uri(sp.GetRequiredService<IOptions<BrevoOptions>>().Value.BaseUrl);
+            client.Timeout = TimeSpan.FromSeconds(20);
+        });
+        services.AddScoped<IEmailSender>(sp =>
+            sp.GetRequiredService<IOptions<BrevoOptions>>().Value.IsConfigured ? sp.GetRequiredService<BrevoEmailSender>()
+            : sp.GetRequiredService<IOptions<SmtpOptions>>().Value.IsConfigured ? ActivatorUtilities.CreateInstance<SmtpEmailSender>(sp)
             : ActivatorUtilities.CreateInstance<LoggingEmailSender>(sp));
         services.AddSingleton<IReferenceImageStore, FileSystemReferenceImageStore>();
         services.AddScoped<IAppointmentReminderJob, AppointmentReminderJob>();

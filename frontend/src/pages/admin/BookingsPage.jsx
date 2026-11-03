@@ -3,7 +3,8 @@ import { useSearchParams } from 'react-router'
 import { api } from '../../api'
 import { useAsync, useDebouncedValue } from '../../hooks/useAsync'
 import { errorMessage } from '../../api/errors'
-import { Alert, Button, Card, PageHeader, PageLoader, Spinner, TextField } from '../../components/ui'
+import { Alert, Button, Card, PageHeader, PageLoader, Pager, Spinner, TextField } from '../../components/ui'
+import { DateFilter } from '../../components/DateFilter'
 import { AdminBookingTable } from './AdminBookingTable'
 
 // Quick filters shown as chips; "Pending" is where new paid bookings wait for confirmation.
@@ -30,49 +31,53 @@ export default function BookingsPage() {
     setParams(next, { replace: true })
   }
 
+  const filtered = Boolean(date || status || clientName)
+  const clear = () => { setClientName(''); setParams(new URLSearchParams(), { replace: true }) }
   const totalPages = results.data ? Math.max(1, Math.ceil(results.data.totalCount / PAGE_SIZE)) : 1
+  const count = results.data?.totalCount ?? 0
 
   return (
-    <div className="stack">
-      <PageHeader title="Bookings" />
+    <div className="stack-lg">
+      <PageHeader title="Bookings" subtitle="Find a booking, then confirm, reschedule, complete or cancel it." />
       {message && <Alert kind="success" onClose={() => setMessage(null)}>{message}</Alert>}
-      <Card>
-        <form className="filters filters-two" onSubmit={(e) => e.preventDefault()} role="search">
-          <TextField label="Booking date" type="date" value={date} onChange={(e) => update({ date: e.target.value })} />
-          <TextField label="Client name" type="search" placeholder="First, last or username" value={clientName}
-            onChange={(e) => { setClientName(e.target.value); update({ clientName: e.target.value }) }} />
-          <div className="filters-actions">
-            <Button variant="ghost" onClick={() => { setClientName(''); setParams(new URLSearchParams(), { replace: true }) }}>Clear</Button>
+
+      <Card title="Find bookings" actions={filtered ? <Button variant="ghost" size="sm" onClick={clear}>Clear filters</Button> : null}>
+        <form className="booking-filters" onSubmit={(e) => e.preventDefault()} role="search">
+          <DateFilter label="Booking date" value={date} onChange={(value) => update({ date: value, status, clientName })} />
+          <div className="booking-filters-row">
+            <div className="booking-filters-search">
+              <TextField label="Client" type="search" placeholder="First name, last name or username" value={clientName}
+                onChange={(e) => { setClientName(e.target.value); update({ clientName: e.target.value, date, status }) }} />
+            </div>
+            <div className="booking-filters-status">
+              <span className="field-label" id="status-filter-label">Status</span>
+              <div className="status-chips" role="radiogroup" aria-labelledby="status-filter-label">
+                {STATUSES.map((s) => (
+                  <button key={s.label} type="button" role="radio" aria-checked={status === s.value}
+                    className={`status-chip status-chip-${(s.value || 'all').toLowerCase()}${status === s.value ? ' selected' : ''}`}
+                    onClick={() => update({ status: s.value, date, clientName })}>
+                    {s.label}
+                  </button>
+                ))}
+              </div>
+            </div>
           </div>
         </form>
-        <div className="status-chips" role="radiogroup" aria-label="Status">
-          {STATUSES.map((s) => (
-            <button key={s.label} type="button" role="radio" aria-checked={status === s.value}
-              className={`status-chip status-chip-${(s.value || 'all').toLowerCase()}${status === s.value ? ' selected' : ''}`}
-              onClick={() => update({ status: s.value, date, clientName })}>
-              {s.label}
-            </button>
-          ))}
-        </div>
       </Card>
 
-      <Card>
+      <Card title="Results" actions={
+        <span className="results-count">
+          {results.loading && results.data && <Spinner small label="Refreshing" />}
+          {results.data && `${count} booking${count === 1 ? '' : 's'}`}
+        </span>
+      }>
         {results.loading && !results.data && <PageLoader label="Searching…" />}
         {results.error && <Alert kind="error">{errorMessage(results.error)}</Alert>}
         {results.data && (
           <>
-            <div className="results-meta">
-              <span>{results.data.totalCount} booking{results.data.totalCount === 1 ? '' : 's'}</span>
-              {results.loading && <Spinner small label="Refreshing" />}
-            </div>
-            <AdminBookingTable bookings={results.data.items} onChanged={(text) => { setMessage(text); results.reload() }} />
-            {totalPages > 1 && (
-              <nav className="pager" aria-label="Pages">
-                <Button variant="secondary" size="sm" disabled={page <= 1} onClick={() => update({ page: page - 1, date, status, clientName })}>Previous</Button>
-                <span>Page {page} of {totalPages}</span>
-                <Button variant="secondary" size="sm" disabled={page >= totalPages} onClick={() => update({ page: page + 1, date, status, clientName })}>Next</Button>
-              </nav>
-            )}
+            <AdminBookingTable bookings={results.data.items} onChanged={(text) => { setMessage(text); results.reload() }}
+              emptyText={filtered ? 'Try another date or status, or clear the filters.' : 'New bookings show up here.'} />
+            <Pager page={page} pages={totalPages} onChange={(p) => update({ page: p, date, status, clientName })} />
           </>
         )}
       </Card>

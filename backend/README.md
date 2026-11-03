@@ -48,7 +48,7 @@ dotnet run --project backend/NailsByLeah.Api.csproj --launch-profile https
 
 | Concern | Development | Before going live |
 |---|---|---|
-| Email | Logged to the console (look for `DEV EMAIL`), including verification codes and reset links | Set `Smtp:Host`, `Smtp:Username`, `Smtp:Password` (user secrets or environment variables) |
+| Email | Logged to the console (look for `DEV EMAIL`), including verification codes and reset links | Set `Brevo:ApiKey` and `Email:FromAddress` (a sender verified in Brevo). Brevo's HTTPS API works on hosts that block SMTP ports. `Smtp:Host`, `Smtp:Username`, `Smtp:Password` (e.g. Gmail with an app password) also work where SMTP is allowed |
 | Payments | `SimulatedPaymentGateway` approves every GCash/Maya charge without moving money | Implement `IPaymentGateway` for a real provider and register it in `Infrastructure/ServiceRegistration.cs` |
 
 Outside Development the app refuses to start while either stand-in is still in use.
@@ -72,7 +72,9 @@ All settings are in `appsettings.json`. Override any of them with user secrets o
 | `Booking` | Deposit (PHP 150), minimum notice for rescheduling (24 h) |
 | `Schedule` | Time zone (Asia/Manila), the 11:00 AM opening time, the 30-minute start-time grid, the 30-minute break after every appointment, booking window, closed weekdays. The closing time (default 9:00 PM) is set by administrators on the Schedule page and stored in `salon_settings` |
 | `Legal:TermsVersion` | Terms & Conditions version recorded at registration |
-| `Smtp`, `Notifications` | Email delivery and the 24-hour reminder job |
+| `Email` | Sender address and name shown on every email |
+| `Brevo`, `Smtp` | Email delivery: Brevo's API when `Brevo:ApiKey` is set, otherwise SMTP when `Smtp:Host` is set, otherwise the console |
+| `Notifications` | The 24-hour reminder job, and `SalonEmail`: where the salon's alerts go (new booking to confirm, client cancellation, client reschedule). Empty sends no alerts |
 | `AdminSeed` | First administrator (user secrets only) |
 
 ## Project layout

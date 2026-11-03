@@ -65,6 +65,24 @@ public sealed class FrontendOptions
     public string BaseUrl { get; set; } = "http://localhost:5173";
 }
 
+/// <summary>The sender every email shows, whichever delivery channel is used. With Brevo it must be a verified sender.</summary>
+public sealed class EmailOptions
+{
+    public const string Section = "Email";
+    public string FromAddress { get; set; } = "no-reply@nailsbyleah.local";
+    public string FromName { get; set; } = "Nails by Leyah";
+}
+
+/// <summary>Brevo's HTTPS email API. Preferred when hosted, because many hosts block outgoing SMTP ports.</summary>
+public sealed class BrevoOptions
+{
+    public const string Section = "Brevo";
+    public string? ApiKey { get; set; }
+    public string BaseUrl { get; set; } = "https://api.brevo.com/v3/";
+
+    public bool IsConfigured => !string.IsNullOrWhiteSpace(ApiKey);
+}
+
 public sealed class SmtpOptions
 {
     public const string Section = "Smtp";
@@ -73,8 +91,6 @@ public sealed class SmtpOptions
     public bool EnableSsl { get; set; } = true;
     public string? Username { get; set; }
     public string? Password { get; set; }
-    public string FromAddress { get; set; } = "no-reply@nailsbyleah.local";
-    public string FromName { get; set; } = "Nails by Leyah";
 
     public bool IsConfigured => !string.IsNullOrWhiteSpace(Host);
 }
@@ -86,6 +102,9 @@ public sealed class NotificationOptions
     /// <summary>How often the reminder job runs. 0 disables it.</summary>
     public int ReminderCheckIntervalMinutes { get; set; } = 15;
     public int ReminderLeadHours { get; set; } = 24;
+
+    /// <summary>Where the salon's own alerts go (new booking, client cancellation, client reschedule). Empty: no alerts.</summary>
+    public string? SalonEmail { get; set; }
 }
 
 public sealed class DatabaseOptions

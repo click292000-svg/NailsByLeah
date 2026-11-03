@@ -18,41 +18,53 @@ export default function ServicesPage() {
     catalog.reload()
   }
 
+  // Main services are listed under their category (Soft Gel, Removal) instead of repeating it on every row.
+  const groups = [...new Set(catalog.data.services.map((s) => s.category))]
+    .map((value) => {
+      const items = catalog.data.services.filter((s) => s.category === value)
+      return { value, label: items[0].categoryLabel, items }
+    })
+
   return (
-    <div className="stack">
-      <PageHeader title="Services & prices" subtitle="Price and duration changes apply to new bookings. Existing bookings keep the price and length they were booked with. The duration decides which times clients can book." />
+    <div className="stack-lg">
+      <PageHeader title="Services & prices" subtitle="Changes apply to new bookings only; existing bookings keep their price and length. The length decides which times clients can book." />
       {message && <Alert kind="success" onClose={() => setMessage(null)}>{message}</Alert>}
 
       <Card title="Main services">
-        <CatalogTable items={catalog.data.services} kind="service" onChanged={changed} />
+        <p className="card-intro">The price and appointment length of each service.</p>
+        <div className="catalog">
+          <CatalogHead kind="service" />
+          {groups.map((g) => (
+            <section key={g.value} className="catalog-group" aria-label={g.label}>
+              <h3 className="list-group-title">{g.label}<span>{g.items.length}</span></h3>
+              {g.items.map((item) => <CatalogRow key={item.id} item={item} kind="service" onChanged={changed} />)}
+            </section>
+          ))}
+        </div>
         <NewItemForm kind="service" onCreated={changed} />
       </Card>
-      <Card title="Stone add-ons (priced per nail)">
-        <CatalogTable items={catalog.data.addOns} kind="addOn" onChanged={changed} />
+
+      <Card title="Stone add-ons">
+        <p className="card-intro">Priced per nail and added to a Soft Gel service.</p>
+        <div className="catalog">
+          <CatalogHead kind="addOn" />
+          {catalog.data.addOns.map((item) => <CatalogRow key={item.id} item={item} kind="addOn" onChanged={changed} />)}
+        </div>
         <NewItemForm kind="addOn" onCreated={changed} />
       </Card>
     </div>
   )
 }
 
-function CatalogTable({ items, kind, onChanged }) {
+/** Column titles. Both lists use the same columns, so prices line up from one card to the next. */
+function CatalogHead({ kind }) {
   return (
-    <div className="table-wrap">
-      <table className="data-table">
-        <thead>
-          <tr>
-            {kind === 'service' && <th>Category</th>}
-            <th>Name</th>
-            <th>Price (₱){kind === 'addOn' && ' per nail'}</th>
-            {kind === 'service' && <th>Duration (min)</th>}
-            <th>Active</th>
-            <th><span className="sr-only">Actions</span></th>
-          </tr>
-        </thead>
-        <tbody>
-          {items.map((item) => <CatalogRow key={item.id} item={item} kind={kind} onChanged={onChanged} />)}
-        </tbody>
-      </table>
+    <div className="catalog-head" aria-hidden="true">
+      <span>Name</span>
+      <span>{kind === 'addOn' ? 'Price per nail' : 'Price'}</span>
+      <span>{kind === 'service' ? 'Length' : ''}</span>
+      <span>Offered</span>
+      <span />
     </div>
   )
 }
@@ -100,36 +112,47 @@ function CatalogRow({ item, kind, onChanged }) {
   }
 
   return (
-    <tr>
-      {kind === 'service' && <td data-label="Category">{item.categoryLabel}</td>}
-      <td data-label="Name">
+    <div className={`catalog-row${dirty ? ' is-dirty' : ''}${isActive ? '' : ' is-inactive'}`}>
+      <div className="catalog-cell catalog-name">
         <input className="input input-compact" aria-label={`Name of ${item.name}`} value={name} onChange={(e) => setName(e.target.value)} />
         {errors.name && <div className="field-error">{errors.name}</div>}
-      </td>
-      <td data-label="Price">
-        <input className="input input-compact input-price" type="number" min="0" step="1" aria-label={`Price of ${item.name}`}
-          value={price} onChange={(e) => setPrice(e.target.value)} />
+      </div>
+      <div className="catalog-cell" data-label={isService ? 'Price' : 'Price per nail'}>
+        <div className="affix">
+          <span className="affix-text">₱</span>
+          <input className="input input-compact" type="number" min="0" step="1" aria-label={`Price of ${item.name}`}
+            value={price} onChange={(e) => setPrice(e.target.value)} />
+        </div>
         {errors.price && <div className="field-error">{errors.price}</div>}
-        {!errors.price && Number(price) !== item.price && <div className="muted small">was <Money amount={item.price} /></div>}
-      </td>
-      {isService && (
-        <td data-label="Duration">
-          <input className="input input-compact input-price" type="number" min="15" max="480" step="5" aria-label={`Duration of ${item.name} in minutes`}
-            value={duration} onChange={(e) => setDuration(e.target.value)} />
-          {errors.durationMinutes && <div className="field-error">{errors.durationMinutes}</div>}
-        </td>
-      )}
-      <td data-label="Active">
-        <input type="checkbox" aria-label={`${item.name} is offered`} checked={isActive} onChange={(e) => setIsActive(e.target.checked)} />
-      </td>
-      <td className="actions-cell">
+        {!errors.price && Number(price) !== item.price && <div className="catalog-was">was <Money amount={item.price} /></div>}
+      </div>
+      <div className="catalog-cell" data-label={isService ? 'Length' : undefined}>
+        {isService && (
+          <>
+            <div className="affix affix-end">
+              <input className="input input-compact" type="number" min="15" max="480" step="5" aria-label={`Duration of ${item.name} in minutes`}
+                value={duration} onChange={(e) => setDuration(e.target.value)} />
+              <span className="affix-text">min</span>
+            </div>
+            {errors.durationMinutes && <div className="field-error">{errors.durationMinutes}</div>}
+          </>
+        )}
+      </div>
+      <div className="catalog-cell" data-label="Offered">
+        <label className="switch">
+          <input type="checkbox" aria-label={`${item.name} is offered`} checked={isActive} onChange={(e) => setIsActive(e.target.checked)} />
+          <span className="switch-track" aria-hidden="true" />
+          <span className="switch-text" aria-hidden="true">{isActive ? 'Yes' : 'No'}</span>
+        </label>
+      </div>
+      <div className="catalog-cell catalog-actions">
         <div className="row-actions">
           <Button size="sm" disabled={!dirty} loading={saving} onClick={save}>Save</Button>
           <Button variant="danger-ghost" size="sm" disabled={saving} onClick={remove}>Remove</Button>
         </div>
         {errors.form && <div className="field-error">{errors.form}</div>}
-      </td>
-    </tr>
+      </div>
+    </div>
   )
 }
 
@@ -145,16 +168,17 @@ function NewItemForm({ kind, onCreated }) {
   const [duration, setDuration] = useState('60')
   const [errors, setErrors] = useState({})
   const [saving, setSaving] = useState(false)
+  const isService = kind === 'service'
 
   const submit = async (e) => {
     e.preventDefault()
     const found = Object.fromEntries([['name', validateServiceName(name)], ['price', validatePrice(price)],
-      ['durationMinutes', kind === 'service' ? validateDuration(duration) : null]].filter(([, m]) => m))
+      ['durationMinutes', isService ? validateDuration(duration) : null]].filter(([, m]) => m))
     setErrors(found)
     if (Object.keys(found).length) return
     setSaving(true)
     try {
-      if (kind === 'service') await api.admin.createService({ category, name, price: Number(price), durationMinutes: Number(duration) })
+      if (isService) await api.admin.createService({ category, name, price: Number(price), durationMinutes: Number(duration) })
       else await api.admin.createAddOn({ name, price: Number(price) })
       setName('')
       setPrice('')
@@ -166,19 +190,22 @@ function NewItemForm({ kind, onCreated }) {
     }
   }
 
+  // Same columns as the list above, so the new item's fields sit under the matching column.
   return (
-    <form className="inline-form" onSubmit={submit} noValidate>
-      <h3>Add {kind === 'service' ? 'a service' : 'an add-on'}</h3>
+    <form className="catalog-add" onSubmit={submit} noValidate>
+      <h3>Add {isService ? 'a service' : 'an add-on'}</h3>
       {errors.form && <Alert kind="error">{errors.form}</Alert>}
-      <div className="inline-form-fields">
-        {kind === 'service' && <SelectField label="Category" value={category} options={CATEGORIES} onChange={(e) => setCategory(e.target.value)} />}
-        <TextField label="Name" value={name} error={errors.name} onChange={(e) => setName(e.target.value)} />
-        <TextField label={kind === 'addOn' ? 'Price per nail (₱)' : 'Price (₱)'} type="number" min="0" value={price} error={errors.price}
+      <div className="catalog-add-fields">
+        <div className={isService ? 'catalog-add-name with-category' : 'catalog-add-name'}>
+          {isService && <SelectField label="Category" value={category} options={CATEGORIES} onChange={(e) => setCategory(e.target.value)} />}
+          <TextField label="Name" value={name} error={errors.name} onChange={(e) => setName(e.target.value)} />
+        </div>
+        <TextField label={isService ? 'Price (₱)' : 'Price per nail (₱)'} type="number" min="0" value={price} error={errors.price}
           onChange={(e) => setPrice(e.target.value)} />
-        {kind === 'service' && (
-          <TextField label="Duration (minutes)" type="number" min="15" max="480" step="5" value={duration} error={errors.durationMinutes}
-            onChange={(e) => setDuration(e.target.value)} />
-        )}
+        {isService
+          ? <TextField label="Length (min)" type="number" min="15" max="480" step="5" value={duration} error={errors.durationMinutes}
+              onChange={(e) => setDuration(e.target.value)} />
+          : <span className="catalog-spacer" />}
         <Button type="submit" loading={saving}>Add</Button>
       </div>
     </form>

@@ -148,6 +148,28 @@ public sealed class CapturingNotificationService : INotificationService
         RemindedBookingIds.Add(booking.Id);
         return Task.CompletedTask;
     }
+
+    public ConcurrentBag<int> SalonNewBookingIds { get; } = [];
+    public ConcurrentDictionary<int, string> SalonCancellationReasons { get; } = new();
+    public ConcurrentDictionary<int, (DateOnly Date, TimeOnly Time)> SalonReschedules { get; } = new();
+
+    public Task SendSalonNewBookingAsync(Booking booking, Payment payment, CancellationToken ct = default)
+    {
+        SalonNewBookingIds.Add(booking.Id);
+        return Task.CompletedTask;
+    }
+
+    public Task SendSalonCancellationAsync(Booking booking, string reasonLabel, CancellationToken ct = default)
+    {
+        SalonCancellationReasons[booking.Id] = reasonLabel;
+        return Task.CompletedTask;
+    }
+
+    public Task SendSalonRescheduleAsync(Booking booking, DateOnly fromDate, TimeOnly fromTime, CancellationToken ct = default)
+    {
+        SalonReschedules[booking.Id] = (fromDate, fromTime);
+        return Task.CompletedTask;
+    }
 }
 
 /// <summary>Approves charges like the simulated gateway, but counts them and can be told to fail.</summary>

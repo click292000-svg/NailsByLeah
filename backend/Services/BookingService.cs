@@ -69,7 +69,18 @@ public sealed class BookingService(
         var selection = await prices.ResolveSelectionAsync(request.ServiceId, request.AddOns, ct);
         var quote = prices.Calculate(selection);
         var duration = selection.Service.DurationMinutes;
-        await slots.EnsureBookableAsync(request.BookingDate, request.StartTime, duration, movingBookingId: null, ct);
+        try
+        {
+            await slots.EnsureBookableAsync(request.BookingDate, request.StartTime, duration, movingBookingId: null, ct);
+        }
+        catch (ConflictException)
+        {
+            // A duplicate click whose first request committed after the check above sees its own booking as
+            // taking the slot; return the first result instead of "slot taken".
+            if (await payments.FindByIdempotencyKeyAsync(request.IdempotencyKey, ct) is { } committed)
+                return (await BuildCreateResponseAsync(clientId, committed, ct), false);
+            throw;
+        }
 
         CreateOutcome outcome;
         try
@@ -172,7 +183,10 @@ public sealed class BookingService(
             throw new ConflictException(
                 $"Appointments can only be rescheduled at least {minimumHours} hours before the scheduled time.", "reschedule_window_passed");
 
-        return await MoveAsync(booking, request, ct);
+        var (fromDate, fromTime) = (booking.BookingDate, booking.StartTime);
+        var moved = await MoveAsync(booking, request, ct);
+        await TryNotifyAsync(() => notifications.SendSalonRescheduleAsync(booking, fromDate, fromTime, ct), "reschedule alert", booking.Id);
+        return moved;
     }
 
     public async Task<BookingResponse> CancelAsync(int clientId, int bookingId, ClientCancelRequest request, CancellationToken ct = default)
@@ -182,7 +196,10 @@ public sealed class BookingService(
             throw new ConflictException("This appointment has already started or passed and can no longer be cancelled.", "invalid_status");
 
         await CancelCoreAsync(booking, clientId, request.Reason.ToString(), explanation: null, ct);
-        return Map(await ReloadAsync(booking.Id, ct), includeClient: false);
+        var cancelled = await ReloadAsync(booking.Id, ct);
+        await TryNotifyAsync(() => notifications.SendSalonCancellationAsync(cancelled, Labels.ForCancellationReason(request.Reason.ToString()), ct),
+            "cancellation alert", booking.Id);
+        return Map(cancelled, includeClient: false);
     }
 
     // ---- Administrator operations ----
@@ -321,14 +338,20 @@ public sealed class BookingService(
 
     private async Task NotifyConfirmedAsync(Booking booking, Payment payment, CancellationToken ct)
     {
+        await TryNotifyAsync(() => notifications.SendBookingConfirmationAsync(booking, payment, ct), "confirmation", booking.Id);
+        await TryNotifyAsync(() => notifications.SendSalonNewBookingAsync(booking, payment, ct), "new booking alert", booking.Id);
+    }
+
+    /// <summary>The change is already committed; a failed email is logged and must not undo it.</summary>
+    private async Task TryNotifyAsync(Func<Task> send, string what, int bookingId)
+    {
         try
         {
-            await notifications.SendBookingConfirmationAsync(booking, payment, ct);
+            await send();
         }
         catch (Exception ex)
         {
-            // The booking is already committed; a failed email must not undo it.
-            logger.LogWarning(ex, "Could not send the confirmation for booking {BookingId}", booking.Id);
+            logger.LogWarning(ex, "Could not send the {What} for booking {BookingId}", what, bookingId);
         }
     }
 

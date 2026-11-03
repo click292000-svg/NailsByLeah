@@ -60,6 +60,29 @@ export function EmptyState({ title, children }) {
   )
 }
 
+/** A summary number (dashboard, reports): label, value, a one-line explanation and an optional link. */
+export function StatCard({ label, value, hint, dot, action }) {
+  return (
+    <div className="stat">
+      <span className="stat-label">{dot && <span className={`stat-dot stat-dot-${dot}`} aria-hidden="true" />}{label}</span>
+      <span className="stat-value">{value}</span>
+      {(hint || action) && <span className="stat-hint">{hint}{action && <span className="stat-action">{action}</span>}</span>}
+    </div>
+  )
+}
+
+/** Previous / Next for long lists. Shown only when there is more than one page. */
+export function Pager({ page, pages, onChange }) {
+  if (pages <= 1) return null
+  return (
+    <nav className="pager" aria-label="Pages">
+      <Button variant="secondary" size="sm" disabled={page <= 1} onClick={() => onChange(page - 1)}>Previous</Button>
+      <span className="muted small">Page {page} of {pages}</span>
+      <Button variant="secondary" size="sm" disabled={page >= pages} onClick={() => onChange(page + 1)}>Next</Button>
+    </nav>
+  )
+}
+
 export function PageHeader({ title, subtitle, actions }) {
   return (
     <div className="page-header">

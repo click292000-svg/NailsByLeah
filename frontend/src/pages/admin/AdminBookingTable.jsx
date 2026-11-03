@@ -15,7 +15,7 @@ const isActive = (b) => b.status === 'Pending' || b.status === 'Confirmed'
  * Bookings table with the administrator actions Confirm, Reschedule, Complete and Cancel (Ref 11.2).
  * On small screens each row becomes a card (cells carry data-label).
  */
-export function AdminBookingTable({ bookings, onChanged }) {
+export function AdminBookingTable({ bookings, onChanged, emptyTitle = 'No bookings found', emptyText }) {
   const lookups = useAsync(() => api.catalog.lookups(), [])
   const [dialog, setDialog] = useState(null)
   const [busyId, setBusyId] = useState(null)
@@ -39,7 +39,7 @@ export function AdminBookingTable({ bookings, onChanged }) {
     onChanged(message)
   }
 
-  if (bookings.length === 0) return <EmptyState title="No bookings found" />
+  if (bookings.length === 0) return <EmptyState title={emptyTitle}>{emptyText}</EmptyState>
 
   return (
     <>

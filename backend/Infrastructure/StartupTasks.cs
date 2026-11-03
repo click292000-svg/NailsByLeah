@@ -32,8 +32,8 @@ public static class StartupTasks
     /// <summary>Refuses to start a non-development environment with development-only stand-ins.</summary>
     private static void EnsureProductionReady(IServiceProvider services)
     {
-        if (!services.GetRequiredService<IOptions<SmtpOptions>>().Value.IsConfigured)
-            throw new InvalidOperationException("Smtp:Host must be configured outside Development; emails would otherwise only be logged.");
+        if (!services.GetRequiredService<IOptions<BrevoOptions>>().Value.IsConfigured && !services.GetRequiredService<IOptions<SmtpOptions>>().Value.IsConfigured)
+            throw new InvalidOperationException("Brevo:ApiKey (or Smtp:Host) must be configured outside Development; emails would otherwise only be logged.");
         if (services.GetRequiredService<IPaymentGateway>() is SimulatedPaymentGateway)
             throw new InvalidOperationException("The simulated payment gateway cannot be used outside Development. Register a real GCash/Maya gateway.");
     }
