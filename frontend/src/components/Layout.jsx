@@ -1,0 +1,117 @@
+import { useState } from 'react'
+import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router'
+import { useAuth } from '../auth/AuthContext'
+import { Alert } from './ui'
+import { SocialLinks } from './SocialLinks'
+import { LegalDocumentModal } from './Modal'
+import { salon } from '../content/salon'
+
+const YEAR = new Date().getFullYear()
+
+// No Messages link: a chatbot will take its place.
+const clientLinks = [
+  { to: '/book', label: 'Book now' },
+  { to: '/bookings', label: 'My bookings' },
+  { to: '/feedback', label: 'Rate us' },
+]
+
+const adminLinks = [
+  { to: '/admin', label: 'Dashboard', end: true },
+  { to: '/admin/bookings', label: 'Bookings' },
+  { to: '/admin/services', label: 'Services' },
+  { to: '/admin/schedule', label: 'Schedule' },
+  { to: '/admin/reports', label: 'Reports' },
+  { to: '/admin/feedback', label: 'Feedback' },
+  { to: '/admin/activity', label: 'Activity log' },
+]
+
+export function Layout() {
+  const { user, logout } = useAuth()
+  const [legalDocument, setLegalDocument] = useState(null)
+  const navigate = useNavigate()
+  const location = useLocation()
+  // Both are tied to the current location, so navigating closes the mobile menu and
+  // the guard's "access denied" message shows once per redirect.
+  const [menuOpenAt, setMenuOpenAt] = useState(null)
+  const [dismissedAt, setDismissedAt] = useState(null)
+  const menuOpen = menuOpenAt === location.key
+  const setMenuOpen = (update) => setMenuOpenAt((update(menuOpen) ? location.key : null))
+  const accessDenied = Boolean(location.state?.accessDenied) && dismissedAt !== location.key
+  const setAccessDenied = () => setDismissedAt(location.key)
+
+  const isAdmin = user?.role === 'Administrator'
+  const isHome = location.pathname === '/'
+  const links = isAdmin ? adminLinks : user ? clientLinks : []
+  // Explore and Pricing glide to their home page section (HomePage reads the hash).
+  const homeLinks = isAdmin ? [] : [{ to: '/#tour', label: 'Explore' }, { to: '/#prices', label: 'Pricing' }]
+
+  const signOut = async () => {
+    await logout()
+    navigate('/login')
+  }
+
+  return (
+    <div className="app-shell">
+      <a href="#main" className="skip-link">Skip to content</a>
+      <header className="site-header">
+        <div className="header-inner">
+          <Link to={isAdmin ? '/admin' : '/'} className="brand">
+            <img src="/img/logo.png" width="1000" height="455" alt={salon.name} />
+          </Link>
+          <button type="button" className="menu-toggle" aria-expanded={menuOpen} aria-controls="site-nav"
+            onClick={() => setMenuOpen((open) => !open)}>
+            <span className="sr-only">Menu</span>
+            <span className="menu-bars" aria-hidden="true" />
+          </button>
+          <nav id="site-nav" className={menuOpen ? 'site-nav open' : 'site-nav'} aria-label="Main">
+            {homeLinks.map((link) => (
+              <Link key={link.to} to={link.to} className="nav-link">{link.label}</Link>
+            ))}
+            {links.map((link) => (
+              <NavLink key={link.to} to={link.to} end={link.end} className="nav-link">
+                {link.label}
+              </NavLink>
+            ))}
+            {user ? (
+              <div className="nav-user">
+                <span className="nav-greeting">Hi, {user.firstName}</span>
+                <button type="button" className="btn btn-ghost btn-sm" onClick={signOut}>Log out</button>
+              </div>
+            ) : (
+              <div className="nav-user">
+                <NavLink to="/login" className="nav-link">Log in</NavLink>
+                <Link to="/register" className="btn btn-primary btn-sm">Sign up</Link>
+              </div>
+            )}
+          </nav>
+        </div>
+      </header>
+
+      <main id="main" className={isHome ? 'page page-home' : 'page'}>
+        {accessDenied && (
+          <Alert kind="warning" onClose={setAccessDenied}>
+            You don&apos;t have access to that page, so we brought you here instead.
+          </Alert>
+        )}
+        <Outlet />
+      </main>
+
+      <footer className="site-footer">
+        <div className="footer-inner">
+          {/* No logo here: the header already shows it. */}
+          <nav className="footer-links" aria-label="Footer">
+            <button type="button" onClick={() => setLegalDocument('terms')}>Terms of Service</button>
+            <span aria-hidden="true">•</span>
+            <button type="button" onClick={() => setLegalDocument('privacy')}>Privacy Policy</button>
+            {/* No Support link: a chatbot will take its place. */}
+          </nav>
+          <SocialLinks variant="plain" className="footer-social" />
+        </div>
+        <div className="footer-fine">
+          <span>© {YEAR} {salon.name}</span>
+        </div>
+      </footer>
+      {legalDocument && <LegalDocumentModal document={legalDocument} onClose={() => setLegalDocument(null)} />}
+    </div>
+  )
+}

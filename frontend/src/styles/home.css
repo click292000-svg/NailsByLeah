@@ -1,0 +1,253 @@
+/* Home page: animated landing (intro, hero, "Up close" photo tour, Our Works, Pricing, Nail Rules, FAQ, Find us).
+   Every class starts with hm- so nothing here clashes with the app's shared styles in app.css. */
+
+html { scroll-padding-top: var(--header-h); }
+.hm-section:focus { outline: none; box-shadow: none; }
+.page-home { max-width: none; padding: 0; gap: 0; overflow-x: clip; }
+.page-home > .alert { margin: 16px; }
+
+/* ===== Intro: the logo is "written" left to right, sparkles twinkle, then the curtain lifts ===== */
+.hm-intro { position: fixed; inset: 0; z-index: 60; display: grid; place-items: center; background: var(--rose-50); transition: opacity .6s ease, visibility .6s; }
+.hm-intro.is-hidden { opacity: 0; visibility: hidden; }
+.hm-intro-logo { position: relative; width: min(560px, 82vw); }
+.hm-intro-logo img { display: block; width: 100%; height: auto; clip-path: inset(0 100% 0 0); opacity: 0; transform: scale(.96);
+  transition: clip-path 1.6s cubic-bezier(.6,.05,.3,1), opacity .4s ease, transform 1.8s cubic-bezier(.2,.8,.2,1); }
+.hm-intro-logo.show img { clip-path: inset(0 -2% 0 0); opacity: 1; transform: none; }
+.hm-sparkle { position: absolute; width: 22px; height: 22px; color: var(--rose-500); opacity: 0; }
+.hm-intro.is-done .hm-sparkle { animation: hm-twinkle 1.2s ease-in-out infinite; }
+.hm-sparkle:nth-of-type(2) { animation-delay: .4s !important; }
+.hm-sparkle:nth-of-type(3) { animation-delay: .8s !important; }
+@keyframes hm-twinkle { 0%, 100% { opacity: 0; transform: scale(.4) rotate(0deg); } 50% { opacity: 1; transform: scale(1) rotate(45deg); } }
+
+/* ===== Hero: typing tagline + photo cards that drift with the mouse ===== */
+.hm-hero { position: relative; min-height: calc(100svh - var(--header-h)); display: grid; place-items: center; text-align: center; padding: 40px 20px; overflow: hidden;
+  background: radial-gradient(ellipse at 50% 40%, var(--rose-50), var(--cream) 70%); }
+.hm-hero-copy { position: relative; z-index: 2; max-width: 600px; padding: 24px; border-radius: 24px; background: rgb(253 249 246 / .72); backdrop-filter: blur(6px); }
+.hm-eyebrow { text-transform: uppercase; letter-spacing: .14em; font-size: .8rem; color: var(--rose-600); font-weight: 600; }
+.hm-hero h1 { font-size: clamp(2rem, 6vw, 3.4rem); margin: .3em 0; line-height: 1.1; }
+.hm-typed { min-height: 1.6em; font-size: 1.15rem; color: var(--ink-soft); }
+.hm-typed::after { content: '|'; margin-left: 2px; color: var(--rose-500); animation: hm-blink 1s steps(1) infinite; }
+@keyframes hm-blink { 50% { opacity: 0; } }
+.hm-hero-actions { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; margin-top: 24px; }
+.hm-float { position: absolute; z-index: 1; width: clamp(110px, 16vw, 210px); will-change: transform; }
+.hm-float .hm-bob { animation: hm-bob 6s ease-in-out infinite; }
+.hm-float img { display: block; width: 100%; aspect-ratio: 3 / 4; object-fit: cover; border-radius: 16px; border: 5px solid #fff;
+  box-shadow: 0 18px 40px rgb(44 34 38 / .22); transform: rotate(var(--tilt)); }
+.hm-float.a { left: 5%; top: 9%; --tilt: -8deg; }
+.hm-float.b { right: 6%; top: 12%; --tilt: 7deg; }
+.hm-float.c { left: 10%; bottom: 6%; --tilt: 5deg; }
+.hm-float.d { right: 11%; bottom: 5%; --tilt: -6deg; }
+.hm-float.b .hm-bob { animation-delay: -1.5s; }
+.hm-float.c .hm-bob { animation-delay: -3s; }
+.hm-float.d .hm-bob { animation-delay: -4.5s; }
+@keyframes hm-bob { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-14px); } }
+/* Hovering a card straightens it and lifts it forward. */
+.hm-float img { transition: transform .45s cubic-bezier(.2,.8,.2,1.2), box-shadow .45s ease; }
+.hm-float:hover { z-index: 3; }
+.hm-float:hover img { transform: rotate(0deg) scale(1.08); box-shadow: 0 26px 50px rgb(104 44 67 / .3); }
+
+/* Back layer: smaller, softer cards in the gaps around the text (wide screens only). */
+.hm-float.far { display: none; width: clamp(84px, 7.5vw, 132px); z-index: 0; }
+.hm-float.far img { border-width: 4px; border-radius: 12px; box-shadow: 0 10px 24px rgb(104 44 67 / .16); filter: saturate(.92); }
+.hm-float.far .hm-bob { animation-duration: 8s; }
+.hm-float.e { left: 22%; top: 5%; --tilt: 9deg; }
+.hm-float.f { right: 23%; top: 3%; --tilt: -7deg; }
+.hm-float.g { left: 26%; bottom: 4%; --tilt: -10deg; }
+.hm-float.h { right: 26%; bottom: 6%; --tilt: 8deg; }
+.hm-float.i { left: 1%; top: 46%; --tilt: 6deg; }
+.hm-float.j { right: 1.5%; top: 44%; --tilt: -9deg; }
+.hm-float.e .hm-bob { animation-delay: -2s; }
+.hm-float.f .hm-bob { animation-delay: -5s; }
+.hm-float.g .hm-bob { animation-delay: -1s; }
+.hm-float.h .hm-bob { animation-delay: -6s; }
+.hm-float.i .hm-bob { animation-delay: -3.5s; }
+.hm-float.j .hm-bob { animation-delay: -7s; }
+@media (min-width: 1100px) and (min-height: 600px) { .hm-float.far { display: block; } }
+@media (max-width: 1499px) { .hm-float.g { left: 28%; bottom: 3%; } .hm-float.h { right: 29%; bottom: 3%; } }
+@media (prefers-reduced-motion: reduce) { .hm-float img { transition: none; } .hm-float:hover img { transform: rotate(var(--tilt)); } }
+@media (max-width: 700px) {
+  .hm-float { width: 96px; }
+  .hm-float.a { left: -14px; top: 4%; }
+  .hm-float.b { right: -14px; top: 6%; }
+  .hm-float.c { left: -10px; bottom: 3%; }
+  .hm-float.d { right: -10px; bottom: 2%; }
+}
+.hm-scroll-hint { position: absolute; z-index: 2; bottom: 18px; left: 50%; transform: translateX(-50%); font-size: .8rem; color: var(--muted); animation: hm-nudge 1.8s ease-in-out infinite; }
+@keyframes hm-nudge { 50% { transform: translate(-50%, 6px); } }
+
+/* Soft rose light that trails the mouse (mouse devices only) */
+.hm-glow { position: fixed; z-index: 0; left: 0; top: 0; width: 220px; height: 220px; margin: -110px 0 0 -110px; border-radius: 50%; pointer-events: none;
+  background: radial-gradient(circle, rgb(201 85 123 / .16), transparent 70%); }
+
+/* ===== "Up close": the section stays put while scrolling zooms into one nail per photo ===== */
+.hm-tour { position: relative; height: 700vh; background: var(--rose-50); }
+.hm-tour-sticky { position: sticky; top: 0; height: 100svh; overflow: hidden; }
+.hm-tour canvas { display: block; width: 100%; height: 100%; }
+.hm-tour-intro { position: absolute; top: calc(var(--header-h) + 16px); left: 0; right: 0; text-align: center; color: #fff; text-shadow: 0 2px 12px rgb(44 34 38 / .6); pointer-events: none; transition: opacity .4s; }
+.hm-tour-intro h2 { font-family: var(--font-display); font-size: clamp(1.4rem, 4vw, 2rem); }
+.hm-tour-intro p { margin-top: 4px; color: rgb(255 255 255 / .7); }
+.hm-tour-intro.gone { opacity: 0; }
+/* Caption card: frosted blush glass, serif italic title, segmented progress and a price row */
+.hm-panel { position: absolute; left: 22px; bottom: 22px; width: min(290px, calc(100% - 32px)); padding: 14px 18px 15px;
+  background: linear-gradient(135deg, rgb(255 255 255 / .84), rgb(253 242 246 / .78));
+  backdrop-filter: blur(14px) saturate(1.3); -webkit-backdrop-filter: blur(14px) saturate(1.3);
+  border: 1px solid rgb(255 255 255 / .75); border-radius: 18px; box-shadow: 0 12px 34px rgb(44 34 38 / .2), 0 1px 4px rgb(44 34 38 / .06); }
+@media (max-width: 700px) { .hm-panel { left: 50%; bottom: 14px; transform: translateX(-50%); } }
+/* Wide screens: a larger card in the blush space beside the photo. */
+@media (min-width: 1300px) {
+  .hm-panel { left: max(28px, calc(25vw - 330px)); bottom: auto; top: 50%; transform: translateY(-50%); width: 300px; padding: 20px 24px 21px; }
+  .hm-panel h3 { font-size: 1.6rem; }
+  .hm-panel-text { font-size: .9rem; }
+  .hm-panel-amount { font-size: 1.3rem; }
+}
+.hm-panel-top { display: flex; align-items: center; gap: 10px; margin-bottom: 9px; }
+.hm-panel-num { flex: none; font-size: .68rem; color: var(--muted); letter-spacing: .06em; }
+.hm-panel-num em { font-family: var(--font-display); font-size: .95rem; color: var(--rose-600); }
+.hm-steps { flex: 1; display: flex; gap: 4px; }
+.hm-steps i { flex: 1; height: 2px; border-radius: 2px; background: rgb(201 85 123 / .18); overflow: hidden; }
+.hm-steps b { display: block; height: 100%; width: 0; border-radius: 2px; background: var(--rose-500); }
+.hm-panel h3 { margin-bottom: 3px; font-family: var(--font-display); font-style: italic; font-weight: 500; font-size: 1.25rem; line-height: 1.2; color: var(--ink); }
+.hm-panel-text { font-size: .82rem; line-height: 1.45; color: var(--ink-soft); }
+.hm-panel-price { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; margin-top: 10px; padding-top: 9px; border-top: 1px solid rgb(201 85 123 / .18); }
+.hm-panel-service { font-size: .64rem; font-weight: 600; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); }
+.hm-panel-amount { font-family: var(--font-display); font-size: 1.05rem; color: var(--rose-700); white-space: nowrap; }
+.hm-panel-amount small { font-family: var(--font); font-size: .68rem; color: var(--muted); margin-left: 2px; }
+/* Title, text and price trade places one after another when the nail changes */
+.hm-swap > * { transition: opacity .35s ease, transform .45s cubic-bezier(.2,.8,.2,1); }
+.hm-swap > :nth-child(2) { transition-delay: .05s; }
+.hm-swap > :nth-child(3) { transition-delay: .1s; }
+.hm-swap.out > * { opacity: 0; transform: translateY(10px); transition-delay: 0s; }
+
+/* ===== Our Works: a row of photos above and below the title, sliding in opposite directions ===== */
+.hm-gallery { position: relative; height: 280vh; background: linear-gradient(var(--cream), var(--rose-50) 50%, var(--cream)); }
+.hm-gallery-sticky { position: sticky; top: 0; height: 100svh; overflow: hidden; display: flex; flex-direction: column; justify-content: center; gap: clamp(14px, 3vh, 30px); padding-top: var(--header-h); }
+.hm-works-title { text-align: center; padding: 0 20px; }
+.hm-works-title h2, .hm-head h2 { font-family: var(--font-display); font-weight: 600; font-size: clamp(1.8rem, 5vw, 3rem); text-transform: uppercase; letter-spacing: .04em; line-height: 1; }
+.hm-works-title p { margin: 10px auto 0; max-width: 560px; font-size: clamp(.85rem, 2vw, 1.05rem); text-transform: uppercase; letter-spacing: .06em; font-weight: 600; color: var(--rose-700); }
+.hm-track { display: flex; gap: 22px; width: max-content; padding: 0 22px; will-change: transform; }
+/* Cards are as tall as the screen allows (two rows + the title), in the photos' own 3:4 shape so whole sets show. */
+.hm-track button { flex: none; padding: 0; overflow: hidden; border-radius: 16px; border: 4px solid #fff; background: #fff; box-shadow: 0 10px 28px rgb(143 44 77 / .14); cursor: zoom-in; }
+.hm-track img { display: block; height: clamp(180px, calc((100svh - var(--header-h) - 190px) / 2), 460px); aspect-ratio: 3 / 4; object-fit: cover; transition: transform .5s ease; }
+.hm-track button:hover img { transform: scale(1.05); }
+
+/* Tap a photo to see it full size */
+.hm-viewer { position: fixed; inset: 0; z-index: 45; display: grid; place-items: center; padding: 20px; background: rgb(253 242 246 / .92); backdrop-filter: blur(8px);
+  opacity: 0; visibility: hidden; transition: opacity .3s ease, visibility .3s; cursor: zoom-out; }
+.hm-viewer.open { opacity: 1; visibility: visible; transition: opacity .3s ease, visibility 0s; }
+.hm-viewer img { max-width: 100%; max-height: calc(100svh - 40px); border-radius: 16px; border: 5px solid #fff; box-shadow: 0 20px 60px rgb(143 44 77 / .25);
+  transform: scale(.94); transition: transform .35s cubic-bezier(.2,.8,.2,1); }
+.hm-viewer.open img { transform: none; }
+.hm-viewer-close { position: absolute; top: 16px; right: 16px; width: 44px; height: 44px; border-radius: 50%; border: 0; background: var(--rose-600); color: #fff; font-size: 1.5rem; line-height: 1; cursor: pointer; }
+
+/* ===== Back to top: appears once the hero is scrolled past ===== */
+.hm-to-top { position: fixed; right: 18px; bottom: 18px; z-index: 25; width: 52px; height: 52px; display: grid; place-items: center;
+  border-radius: 12px; border: 0; background: var(--rose-600); color: #fff; cursor: pointer;
+  box-shadow: 0 8px 24px rgb(143 44 77 / .3); opacity: 0; visibility: hidden; transform: translateY(12px);
+  transition: opacity .3s ease, transform .3s ease, visibility .3s, background .2s ease; }
+.hm-to-top.show { opacity: 1; visibility: visible; transform: none; }
+.hm-to-top:hover { background: var(--rose-700); }
+.hm-to-top svg { width: 22px; height: 22px; }
+
+/* ===== Section headings (Pricing, Nail Rules, FAQ, Find us) ===== */
+.hm-head { text-align: center; margin: 0 auto 36px; max-width: 680px; }
+.hm-head h2 { font-size: clamp(2rem, 6vw, 3.4rem); }
+.hm-head p { margin-top: 16px; text-transform: uppercase; letter-spacing: .05em; font-size: .9rem; font-weight: 600; color: var(--muted); }
+.hm-head .hm-script { font-family: var(--font-display); font-style: italic; text-transform: none; letter-spacing: 0; font-size: 1.15rem; color: var(--rose-600); font-weight: 400; }
+
+/* Fades and lifts into place when scrolled into view; siblings follow one after another (--i).
+   data-in (not a class) marks it, so React re-rendering className doesn't undo the reveal. */
+.hm-reveal { opacity: 0; transform: translateY(28px); transition: opacity .6s ease, transform .7s cubic-bezier(.2,.8,.2,1); transition-delay: calc(var(--i, 0) * 70ms); }
+.hm-reveal[data-in] { opacity: 1; transform: none; }
+
+/* ===== Pricing: three cards fly in (left, top, right), then the full price list unfolds on demand ===== */
+.hm-prices { padding: 80px 20px 70px; text-align: center; background: var(--cream); }
+.hm-cards { display: grid; gap: 22px; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); max-width: 1180px; margin: 0 auto; }
+.hm-card { background: #fff; border: 1px solid var(--line); border-radius: 18px; box-shadow: var(--shadow); padding: 34px 24px;
+  opacity: 0; transition: opacity .6s ease, transform .8s cubic-bezier(.2,.8,.2,1), box-shadow .3s ease; }
+.hm-card.from-left { transform: translateX(-60px); }
+.hm-card.from-top { transform: translateY(-50px); }
+.hm-card.from-right { transform: translateX(60px); }
+.hm-cards.is-in .hm-card { opacity: 1; transform: none; }
+.hm-cards.is-in .hm-card.from-top { transition-delay: .1s; }
+.hm-cards.is-in .hm-card.from-right { transition-delay: .2s; }
+.hm-cards.is-in .hm-card:hover { transform: translateY(-6px); box-shadow: 0 16px 36px rgb(143 44 77 / .14); transition-delay: 0s; }
+.hm-card h3 { font-size: 1.35rem; text-transform: uppercase; letter-spacing: .06em; }
+.hm-card .hm-from { margin-top: 8px; font-size: .8rem; text-transform: uppercase; letter-spacing: .1em; font-weight: 600; color: var(--muted); }
+.hm-card .hm-amount { font-family: var(--font-display); font-size: clamp(2.4rem, 5vw, 3rem); font-weight: 600; margin: 22px 0; color: var(--rose-700); }
+.hm-card .hm-tags { font-size: .82rem; text-transform: uppercase; letter-spacing: .06em; font-weight: 600; color: var(--muted); }
+.hm-price-actions { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; margin-top: 30px; }
+.hm-price-actions .btn { text-transform: uppercase; letter-spacing: .05em; font-size: .85rem; }
+.hm-unfold { display: grid; grid-template-rows: 0fr; opacity: 0; transition: grid-template-rows .6s cubic-bezier(.2,.8,.2,1), opacity .4s ease; }
+.hm-unfold.open { grid-template-rows: 1fr; opacity: 1; }
+.hm-unfold > div { overflow: hidden; }
+.hm-full-list { max-width: 420px; margin: 34px auto 0; }
+.hm-full-list figure { margin: 0; text-align: center; }
+.hm-full-list figure button { display: block; width: 100%; padding: 0; border: 0; background: none; border-radius: 18px; cursor: zoom-in; }
+.hm-full-list figure img { display: block; width: 100%; height: auto; border-radius: 18px; border: 5px solid #fff; box-shadow: 0 16px 40px rgb(143 44 77 / .18); }
+.hm-full-list figcaption { margin-top: 10px; font-size: .85rem; color: var(--muted); }
+
+/* ===== Nail rules ===== */
+.hm-rules { padding: 80px 20px; background: linear-gradient(var(--cream), var(--rose-50)); }
+.hm-rule-grid { display: grid; gap: 18px; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); max-width: 1180px; margin: 0 auto; list-style: none; padding: 0; }
+.hm-rule { display: flex; gap: 16px; align-items: flex-start; background: #fff; border: 1px solid var(--line); border-radius: 18px; box-shadow: var(--shadow); padding: 22px; }
+.hm-rule-num { flex: none; width: 46px; height: 46px; border-radius: 50%; display: grid; place-items: center; background: var(--rose-100); color: var(--rose-700); font-family: var(--font-display); font-size: 1.3rem; font-weight: 600; }
+.hm-rule h3 { margin: 2px 0 6px; text-transform: uppercase; letter-spacing: .06em; }
+.hm-rule p { color: var(--ink-soft); font-size: .95rem; }
+.hm-fine { display: block; margin-top: 4px; font-size: .8rem; color: var(--rose-600); }
+.hm-notes { max-width: 1180px; margin: 22px auto 0; display: grid; gap: 18px; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); }
+.hm-note { background: var(--rose-100); border-radius: 18px; padding: 24px 26px; }
+.hm-note h3 { margin-bottom: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--rose-700); }
+.hm-note ul { margin: 0; padding-left: 20px; color: var(--ink-soft); line-height: 1.6; }
+.hm-note li::marker { color: var(--rose-500); }
+.hm-note p { color: var(--ink-soft); line-height: 1.6; }
+.hm-note .hm-sign { margin-top: 10px; font-family: var(--font-display); font-style: italic; color: var(--rose-600); }
+
+/* ===== FAQ accordion ===== */
+.hm-faq { padding: 56px 20px 64px; background: var(--rose-50); }
+/* Compact: two independent columns on wide screens, so opening one only moves the questions below it. */
+.hm-faq-list { max-width: 920px; margin: 0 auto; display: grid; gap: 10px; align-items: start; }
+.hm-faq-col { display: grid; gap: 10px; }
+@media (min-width: 820px) { .hm-faq-list { grid-template-columns: 1fr 1fr; } }
+.hm-faq-item { background: #fff; border: 1px solid var(--line); border-radius: 12px; box-shadow: 0 6px 18px rgb(176 59 98 / .06); overflow: hidden; }
+.hm-faq-item h3 { font-size: inherit; }
+.hm-faq-q { width: 100%; display: flex; align-items: center; gap: 12px; padding: 14px 18px; border: 0; background: none; cursor: pointer; text-align: left;
+  font: 600 .78rem/1.35 var(--font); text-transform: uppercase; letter-spacing: .05em; color: var(--ink); }
+.hm-faq-q:hover { color: var(--rose-700); }
+.hm-faq-q svg { flex: none; margin-left: auto; width: 16px; height: 16px; color: var(--rose-500); transition: transform .35s ease; }
+.hm-faq-item.open .hm-faq-q svg { transform: rotate(180deg); }
+.hm-faq-a { display: grid; grid-template-rows: 0fr; transition: grid-template-rows .4s cubic-bezier(.2,.8,.2,1); }
+.hm-faq-item.open .hm-faq-a { grid-template-rows: 1fr; }
+.hm-faq-a > div { overflow: hidden; }
+.hm-faq-a p { padding: 0 18px 16px; color: var(--ink-soft); font-size: .88rem; line-height: 1.55; }
+
+/* ===== Visit us: deep rose panel with the details on the left and the live map on the right ===== */
+.hm-find { padding: 56px 20px 72px; background: var(--cream); }
+.visit-card { max-width: 920px; margin: 0 auto; display: grid; overflow: hidden; border-radius: 18px;
+  background: radial-gradient(circle at 15% 10%, var(--rose-600), var(--rose-700) 65%); color: var(--cream);
+  box-shadow: 0 14px 36px rgb(143 44 77 / .2); }
+@media (min-width: 820px) { .visit-card { grid-template-columns: minmax(0, 1fr) minmax(0, 1.05fr); } }
+.visit-copy { padding: clamp(22px, 3.5vw, 32px); display: flex; flex-direction: column; align-items: flex-start; gap: 12px; }
+.visit-eyebrow { text-transform: uppercase; letter-spacing: .18em; font-size: .72rem; font-weight: 700; color: rgb(253 249 246 / .65); }
+.visit-copy h2 { font-family: var(--font-display); font-weight: 600; font-size: clamp(1.7rem, 3.4vw, 2.35rem); line-height: 1.05; text-transform: uppercase; letter-spacing: .02em; color: var(--white); margin-top: -2px; }
+.visit-lead { max-width: 40ch; text-transform: uppercase; letter-spacing: .04em; font-weight: 600; font-size: .78rem; line-height: 1.6; color: rgb(253 249 246 / .8); }
+.visit-facts { font-style: normal; display: flex; flex-direction: column; align-items: flex-start; gap: 8px; margin-top: 2px; }
+.visit-pill, .visit-maps { display: inline-flex; align-items: center; gap: 8px; padding: 8px 12px; border-radius: 10px;
+  border: 1px solid rgb(253 249 246 / .22); background: rgb(255 255 255 / .07); color: var(--white);
+  text-transform: uppercase; letter-spacing: .04em; font-weight: 700; font-size: .74rem; line-height: 1.35; }
+.visit-pill svg, .visit-maps svg { flex: none; width: 16px; height: 16px; }
+.visit-maps { margin-top: 6px; text-decoration: none; transition: background .2s ease, color .2s ease, transform .2s ease; }
+.visit-maps:hover { background: var(--cream); color: var(--rose-700); transform: translateY(-2px); }
+.visit-maps:focus-visible { outline: 3px solid var(--cream); outline-offset: 3px; }
+.visit-map { min-height: 240px; background: var(--nude-100); }
+.visit-map iframe { display: block; width: 100%; height: 100%; min-height: 240px; border: 0; }
+@media (min-width: 820px) { .visit-map, .visit-map iframe { min-height: 300px; } }
+@media (prefers-reduced-motion: reduce) { .visit-maps:hover { transform: none; } }
+
+/* ===== Header: Explore / Pricing are underlined while their section is on screen ===== */
+html[data-home-section="tour"] .nav-link[href="/#tour"],
+html[data-home-section="prices"] .nav-link[href="/#prices"] { background: var(--rose-100); color: var(--rose-700); }
+
+@media (prefers-reduced-motion: reduce) {
+  .page-home *, .page-home *::before, .page-home *::after, .hm-intro, .hm-intro * {
+    animation: none !important; transition-duration: .01ms !important; transition-delay: 0s !important; }
+}

@@ -1,0 +1,8 @@
+<Solution>
+  <Folder Name="/backend/">
+    <Project Path="backend/NailsByLeah.Api.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/NailsByLeah.Api.Tests/NailsByLeah.Api.Tests.csproj" />
+  </Folder>
+</Solution>

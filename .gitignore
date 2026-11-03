@@ -1,24 +1,30 @@
-# Logs
-logs
-*.log
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-pnpm-debug.log*
-lerna-debug.log*
+# Nails by Leyah: what never goes to GitHub. (frontend/.gitignore adds node_modules, dist and .env.local.)
 
-node_modules
-dist
-dist-ssr
+# Real data: database backups hold clients' names, emails and phone numbers; App_Data holds their design photos.
+backups/
+*.bak
+backend/App_Data/
+
+# Build output and caches
+bin/
+obj/
+.vs/
+TestResults/
+node_modules/
+dist/
+
+# Personal and machine-specific settings (passwords live in dotnet user-secrets, outside this folder)
+*.user
 *.local
-
-# Editor directories and files
+.env.local
+.claude/
 .vscode/*
 !.vscode/extensions.json
-.idea
+
+# Logs and OS files
+*.log
 .DS_Store
-*.suo
-*.ntvs*
-*.njsproj
-*.sln
-*.sw?
+Thumbs.db
+
+# Leftover from the GitHub repository's first commit
+/NailsByLeah/
