@@ -84,12 +84,13 @@ public static class RateLimiting
         http.RequestServices.GetRequiredService<ILoggerFactory>().CreateLogger(typeof(RateLimiting))
             .LogWarning("Rate limit reached for {Method} {Path}", http.Request.Method, http.Request.Path);
 
+        // The limiter reports the whole window, not the time left in it, so this is the longest anyone waits: "up to".
         var minutes = (int)Math.Ceiling(seconds / 60.0);
         var problem = new ProblemDetails
         {
             Status = StatusCodes.Status429TooManyRequests,
             Title = "Too many requests",
-            Detail = $"Too many attempts. Please wait {(minutes <= 1 ? "a minute" : $"{minutes} minutes")} and try again.",
+            Detail = $"Too many attempts. Please wait {(minutes <= 1 ? "a minute" : $"up to {minutes} minutes")} and try again.",
             Extensions = { ["code"] = "rate_limited", ["retryAfterSeconds"] = seconds },
         };
         await http.RequestServices.GetRequiredService<IProblemDetailsService>()

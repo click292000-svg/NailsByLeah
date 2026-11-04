@@ -93,6 +93,8 @@ export function VerifyEmailPage() {
 export function ForgotPasswordPage() {
   const [email, setEmail] = useState('')
   const [error, setError] = useState(null)
+  // Problems that aren't about the email itself (e.g. "Too many attempts") go above the form, not under the field.
+  const [formError, setFormError] = useState(null)
   const [sent, setSent] = useState(null)
   const [submitting, setSubmitting] = useState(false)
 
@@ -100,12 +102,15 @@ export function ForgotPasswordPage() {
     e.preventDefault()
     const emailError = validateEmail(email)
     setError(emailError)
+    setFormError(null)
     if (emailError) return
     setSubmitting(true)
     try {
       setSent((await api.auth.forgotPassword(email)).message)
     } catch (err) {
-      setError(fieldErrors(err).email ?? errorMessage(err))
+      const fieldError = fieldErrors(err).email
+      if (fieldError) setError(fieldError)
+      else setFormError(errorMessage(err))
     } finally {
       setSubmitting(false)
     }
@@ -123,6 +128,7 @@ export function ForgotPasswordPage() {
         ) : (
           <form onSubmit={submit} noValidate className="stack">
             <p>Enter the email address you registered with. We&apos;ll send you a link to choose a new password. The link expires in 15 minutes.</p>
+            {formError && <Alert kind="error">{formError}</Alert>}
             <TextField label="Email address" type="email" autoComplete="email" value={email} required error={error}
               onChange={(e) => setEmail(e.target.value)} />
             <Button type="submit" loading={submitting} className="btn-block">Send reset link</Button>
