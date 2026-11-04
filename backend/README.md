@@ -122,7 +122,7 @@ The last command registers a daily Windows Scheduled Task. Backups go to `%USERP
 ## Assumptions to confirm
 
 1. **Stone add-ons are priced per nail**, up to 10 nails per add-on. Confirm against Kyla's official price list.
-2. **Appointment times:** appointments start every 30 minutes from 11:00 AM and must finish by the closing time (default 9:00 PM, changed by administrators). Each booking lasts as long as its service (set per service on the admin Services page; the seeded lengths are estimates), and the next appointment can start 30 minutes after the previous one ends. Bookings for the same day are serialized with a per-day application lock (`sp_getapplock`) inside the booking transaction, then checked for overlaps. Bookable up to 60 days ahead.
+2. **Appointment times:** appointments start every 30 minutes from 11:00 AM and must finish by the closing time (default 9:00 PM, changed by administrators). Each booking lasts as long as its service (set per service on the admin Services page; the seeded lengths are estimates), and the next appointment can start 30 minutes after the previous one ends. Bookings for the same day are serialized with a per-day application lock (`sp_getapplock`) inside the booking transaction, then checked for overlaps. Bookable up to 30 days ahead.
 3. **The deposit counts toward the total**, so the balance due at the salon is the total minus PHP 150.
 4. **"Note for Leyah" options** are placeholders until the final list is confirmed. They are in `Domain/Enums.cs` and `Domain/Labels.cs`.
 5. **Payments complete in one step.** Real GCash/Maya checkouts usually redirect the client and confirm by webhook, so the real gateway will need a pending → confirmed step.

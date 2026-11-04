@@ -492,7 +492,9 @@ select.input { appearance: auto; }
 
 .report-head { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 12px; padding-bottom: 14px; border-bottom: 1px solid var(--line); }
 .report-head h2 { margin: 0; color: var(--burgundy); font-family: var(--font-display); font-size: 1.35rem; }
-.report-controls { width: 200px; max-width: 100%; }
+.report-controls { max-width: 100%; }
+/* On phones the picker takes the full row, so its calendar can centre on the screen. */
+@media (max-width: 559px) { .report-controls { width: 100%; } }
 .report-totals { display: flex; flex-direction: column; gap: 18px; }
 .report-section-title { margin: 0 0 8px; color: var(--muted); font-size: 0.74rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; }
 /* Every report card in a row has the same width and height; labels stay on one line so the values line up. */
@@ -589,6 +591,7 @@ select.input { appearance: auto; }
 }
 .legal-scroll { max-height: 55vh; overflow-y: auto; padding-right: 6px; display: flex; flex-direction: column; gap: 14px; }
 .legal-scroll h3 { margin-bottom: 4px; }
+.legal-scroll ul { margin: 0 0 6px; padding-left: 20px; display: flex; flex-direction: column; gap: 6px; }
 
 /* ---------- Nail design reference photos ---------- */
 
@@ -750,8 +753,19 @@ select.input { appearance: auto; }
   font-weight: 600; color: var(--burgundy); cursor: pointer; transition: border-color .15s, background .15s; }
 .calendar-pop-today:hover { border-color: var(--rose-500); background: var(--rose-100); }
 .calendar-pop-link:focus-visible, .calendar-pop-today:focus-visible { outline: none; box-shadow: var(--focus); }
+/* Pickers on the right of the page (sales reports) open from their right edge so the calendar stays on screen. */
+.calendar-pop-end { left: auto; right: 0; }
+/* The month picker: a year of months, three per row, in the same round rose style as the days. */
+.calendar-pop-months { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+.calendar-pop-month { height: 44px; border: 0; border-radius: 99px; background: none; font: inherit; font-size: 0.92rem; color: var(--ink); cursor: pointer;
+  transition: background .15s, color .15s; }
+.calendar-pop-month:hover { background: var(--rose-50); color: var(--rose-700); }
+.calendar-pop-month:focus-visible { outline: none; box-shadow: var(--focus); }
+.calendar-pop-month.today { box-shadow: inset 0 0 0 1.5px var(--dusty-rose); font-weight: 700; color: var(--rose-700); }
+.calendar-pop-month.selected { background: var(--rose-600); color: var(--white); font-weight: 700; box-shadow: 0 4px 10px rgb(142 58 87 / .3); }
+.calendar-pop-month.selected:focus-visible { box-shadow: var(--focus); }
 @media (prefers-reduced-motion: reduce) { .calendar-pop { animation: none; } }
-@media (max-width: 559px) { .date-picker { width: 100%; } .calendar-pop { left: 50%; transform: translateX(-50%); width: min(320px, calc(100vw - 32px)); animation: none; } }
+@media (max-width: 559px) { .date-picker { width: 100%; } .calendar-pop, .calendar-pop-end { left: 50%; right: auto; transform: translateX(-50%); width: min(320px, calc(100vw - 32px)); animation: none; } }
 
 .booking-filters { display: flex; flex-direction: column; gap: 16px; }
 .booking-filters-row { display: grid; gap: 16px; align-items: end; }

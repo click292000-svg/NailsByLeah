@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using NailsByLeah.Api.Contracts;
 using NailsByLeah.Api.Data;
 using NailsByLeah.Api.Domain;
@@ -23,6 +24,7 @@ public sealed class AuthController(
     private const string ResetRequestedMessage = "If that email address is registered, a password reset link has been sent. It expires in 15 minutes.";
 
     [AllowAnonymous]
+    [EnableRateLimiting(RateLimitPolicies.Email)]
     [HttpPost("register")]
     public async Task<ActionResult<RegisterResponse>> Register(RegisterRequest request, CancellationToken ct)
     {
@@ -38,6 +40,7 @@ public sealed class AuthController(
         registration.CheckUsernameAsync(username, ct);
 
     [AllowAnonymous]
+    [EnableRateLimiting(RateLimitPolicies.Code)]
     [HttpPost("verify-email")]
     public async Task<MessageResponse> VerifyEmail(VerifyEmailRequest request, CancellationToken ct)
     {
@@ -46,6 +49,7 @@ public sealed class AuthController(
     }
 
     [AllowAnonymous]
+    [EnableRateLimiting(RateLimitPolicies.Email)]
     [HttpPost("resend-verification")]
     public async Task<MessageResponse> ResendVerification(EmailRequest request, CancellationToken ct)
     {
@@ -54,6 +58,7 @@ public sealed class AuthController(
     }
 
     [AllowAnonymous]
+    [EnableRateLimiting(RateLimitPolicies.Login)]
     [HttpPost("login")]
     public async Task<UserProfileResponse> Login(LoginRequest request, CancellationToken ct)
     {
@@ -86,6 +91,7 @@ public sealed class AuthController(
         ToProfile(await users.GetByIdAsync(User.GetUserId(), ct) ?? throw new UnauthorizedAppException("Please log in again."));
 
     [AllowAnonymous]
+    [EnableRateLimiting(RateLimitPolicies.Email)]
     [HttpPost("forgot-password")]
     public async Task<MessageResponse> ForgotPassword(EmailRequest request, CancellationToken ct)
     {
@@ -94,6 +100,7 @@ public sealed class AuthController(
     }
 
     [AllowAnonymous]
+    [EnableRateLimiting(RateLimitPolicies.Code)]
     [HttpGet("reset-password/validate")]
     public async Task<MessageResponse> ValidateResetToken([FromQuery] string token, CancellationToken ct)
     {
@@ -102,6 +109,7 @@ public sealed class AuthController(
     }
 
     [AllowAnonymous]
+    [EnableRateLimiting(RateLimitPolicies.Code)]
     [HttpPost("reset-password")]
     public async Task<MessageResponse> ResetPassword(ResetPasswordRequest request, CancellationToken ct)
     {

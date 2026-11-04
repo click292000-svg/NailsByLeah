@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using NailsByLeah.Api.Contracts;
 using NailsByLeah.Api.Domain;
 using NailsByLeah.Api.Infrastructure;
@@ -14,6 +15,7 @@ namespace NailsByLeah.Api.Controllers;
 public sealed class ReferenceImagesController(IReferenceImageService images) : ControllerBase
 {
     /// <summary>Uploads one JPG, PNG or WebP photo (5 MB max) as multipart form field "file".</summary>
+    [EnableRateLimiting(RateLimitPolicies.Upload)]
     [HttpPost]
     [Authorize(Roles = Roles.Client)]
     [Consumes("multipart/form-data")]

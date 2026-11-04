@@ -5,6 +5,7 @@ import { errorMessage } from '../../api/errors'
 import { addDays, addMinutesToTime, daysInMonth, today, toIsoDate } from '../../lib/dates'
 import { formatDate, formatTime } from '../../lib/format'
 import { LIMITS } from '../../validation/rules'
+import { schedule } from '../../content/salon'
 import { Alert, Button, Card, PageHeader, PageLoader, SelectField, Spinner, TextField } from '../../components/ui'
 
 const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
@@ -276,7 +277,7 @@ function DayPanel({ date, blocks, onChanged }) {
           <Button variant="secondary" loading={busy === 'day'} onClick={() => block(null)}>Close the whole day</Button>
         </div>
       )}
-      {date > addDays(today(), 60) && <p className="muted small">Clients can only book up to 60 days ahead.</p>}
+      {date > addDays(today(), schedule.maxDaysAhead) && <p className="muted small">Clients can only book up to {schedule.maxDaysAhead} days ahead.</p>}
     </Card>
   )
 }

@@ -5,6 +5,7 @@ import { addDays, today } from '../lib/dates'
 import { formatDate, formatDuration, formatTime } from '../lib/format'
 import { errorMessage } from '../api/errors'
 import { Alert, Spinner } from './ui'
+import { schedule } from '../content/salon'
 
 const STATUS_TEXT = { Open: 'Available', Booked: 'Booked', Break: 'Break', Closed: 'Closed', Past: 'Past', TooShort: 'Not enough time' }
 const STATUS_TITLE = {
@@ -34,7 +35,7 @@ function TakenTimes({ taken }) {
  * finish, and times where it doesn't fit (past closing, or into another appointment or its 30-minute break) are
  * grayed out like booked, closed and past ones.
  */
-export function SlotPicker({ date, onDateChange, selectedTime, onTimeChange, serviceId, maxDaysAhead = 60, error, keepTime }) {
+export function SlotPicker({ date, onDateChange, selectedTime, onTimeChange, serviceId, maxDaysAhead = schedule.maxDaysAhead, error, keepTime }) {
   const slots = useAsync(() => (date ? api.catalog.slots(date, serviceId) : Promise.resolve(null)), [date, serviceId])
 
   return (

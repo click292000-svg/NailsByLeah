@@ -33,6 +33,8 @@ public static class ServiceRegistration
         services.AddOptions<DatabaseOptions>().Bind(configuration.GetSection(DatabaseOptions.Section));
         services.AddOptions<AdminSeedOptions>().Bind(configuration.GetSection(AdminSeedOptions.Section));
         services.AddOptions<UploadOptions>().Bind(configuration.GetSection(UploadOptions.Section));
+        services.AddOptions<RateLimitOptions>().Bind(configuration.GetSection(RateLimitOptions.Section));
+        services.AddNailsByLeahRateLimiting();
 
         services.AddSingleton(TimeProvider.System);
         services.AddSingleton<ISalonClock, SalonClock>();

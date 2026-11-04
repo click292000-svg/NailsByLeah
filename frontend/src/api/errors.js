@@ -36,6 +36,7 @@ function defaultMessage(status) {
   if (status === 403) return "You don't have access to this."
   if (status === 404) return 'Not found.'
   if (status === 413) return 'The file is too large.'
+  if (status === 429) return 'Too many attempts. Please wait a few minutes and try again.'
   if (status >= 500) return 'Something went wrong on our side. Please try again later.'
   return 'The request could not be completed.'
 }

@@ -47,11 +47,12 @@ export function LegalDocumentModal({ document: kind, onClose }) {
   return (
     <Modal title={doc.title} onClose={onClose} wide footer={<Button onClick={onClose}>Close</Button>}>
       <div className="legal-scroll" tabIndex={0} aria-label={`${doc.title} text`}>
-        <p className="muted">Version {doc.version}</p>
+        <p className="muted">Version {doc.version}{doc.updated && ` · Last updated ${doc.updated}`}</p>
         {doc.sections.map((section) => (
           <section key={section.heading}>
             <h3>{section.heading}</h3>
-            <p>{section.body}</p>
+            {section.points && <ul>{section.points.map((point) => <li key={point}>{point}</li>)}</ul>}
+            {[section.body ?? []].flat().map((paragraph) => <p key={paragraph}>{paragraph}</p>)}
           </section>
         ))}
       </div>

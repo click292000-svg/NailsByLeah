@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using NailsByLeah.Api.Contracts;
 using NailsByLeah.Api.Domain;
 using NailsByLeah.Api.Infrastructure;
@@ -17,6 +18,7 @@ public sealed class BookingsController(IClientBookingService bookings) : Control
     /// Books a slot and pays the non-refundable deposit in one step. Sending the same
     /// <c>idempotencyKey</c> again returns the original booking instead of charging twice.
     /// </summary>
+    [EnableRateLimiting(RateLimitPolicies.Booking)]
     [HttpPost]
     public async Task<ActionResult<CreateBookingResponse>> Create(CreateBookingRequest request, CancellationToken ct)
     {
@@ -34,10 +36,12 @@ public sealed class BookingsController(IClientBookingService bookings) : Control
     [HttpGet("{id:int}/receipt")]
     public Task<ReceiptResponse> Receipt(int id, CancellationToken ct) => bookings.GetReceiptAsync(User.GetUserId(), id, ct);
 
+    [EnableRateLimiting(RateLimitPolicies.Booking)]
     [HttpPost("{id:int}/reschedule")]
     public Task<BookingResponse> Reschedule(int id, RescheduleRequest request, CancellationToken ct) =>
         bookings.RescheduleAsync(User.GetUserId(), id, request, ct);
 
+    [EnableRateLimiting(RateLimitPolicies.Booking)]
     [HttpPost("{id:int}/cancel")]
     public Task<BookingResponse> Cancel(int id, ClientCancelRequest request, CancellationToken ct) =>
         bookings.CancelAsync(User.GetUserId(), id, request, ct);
@@ -71,6 +75,7 @@ public sealed class BookingDraftController(IBookingDraftService drafts) : Contro
 [Route("api/feedback")]
 public sealed class FeedbackController(IFeedbackService feedback) : ControllerBase
 {
+    [EnableRateLimiting(RateLimitPolicies.Feedback)]
     [HttpPost]
     public async Task<ActionResult<FeedbackResponse>> Submit(SubmitFeedbackRequest request, CancellationToken ct)
     {

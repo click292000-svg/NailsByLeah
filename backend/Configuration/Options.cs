@@ -38,7 +38,7 @@ public sealed class ScheduleOptions
     /// <summary>Mandatory gap after every appointment's scheduled end before the next one may begin.</summary>
     public int BufferMinutes { get; set; } = 30;
 
-    public int MaxDaysAhead { get; set; } = 60;
+    public int MaxDaysAhead { get; set; } = 30;
     public DayOfWeek[] ClosedDays { get; set; } = [];
 }
 
@@ -56,7 +56,7 @@ public sealed class UploadOptions
 public sealed class LegalOptions
 {
     public const string Section = "Legal";
-    public string TermsVersion { get; set; } = "1.0";
+    public string TermsVersion { get; set; } = "2.0";
 }
 
 public sealed class FrontendOptions
@@ -127,4 +127,33 @@ public sealed class AdminSeedOptions
     public bool IsConfigured =>
         !string.IsNullOrWhiteSpace(Username) && !string.IsNullOrWhiteSpace(Email) &&
         !string.IsNullOrWhiteSpace(Password) && !string.IsNullOrWhiteSpace(PhoneNumber);
+}
+
+/// <summary>How many requests one visitor or client may make in a time window (see Infrastructure/RateLimiting.cs).</summary>
+public sealed class RateLimitOptions
+{
+    public const string Section = "RateLimits";
+
+    /// <summary>Off only in automated tests that are not about rate limits.</summary>
+    public bool Enabled { get; set; } = true;
+    /// <summary>Every API request from one visitor.</summary>
+    public RateLimitRule Overall { get; set; } = new(300, 60);
+    public RateLimitRule Login { get; set; } = new(10, 5 * 60);
+    /// <summary>Sign-up, resend code and forgot password together (each sends an email).</summary>
+    public RateLimitRule Email { get; set; } = new(5, 15 * 60);
+    /// <summary>Checking an email code or a password reset link.</summary>
+    public RateLimitRule Code { get; set; } = new(10, 15 * 60);
+    public RateLimitRule Booking { get; set; } = new(10, 10 * 60);
+    public RateLimitRule Upload { get; set; } = new(20, 10 * 60);
+    public RateLimitRule Feedback { get; set; } = new(5, 10 * 60);
+}
+
+/// <summary><see cref="PermitLimit"/> requests per <see cref="WindowSeconds"/> seconds.</summary>
+public sealed class RateLimitRule
+{
+    public RateLimitRule() { }
+    public RateLimitRule(int permitLimit, int windowSeconds) => (PermitLimit, WindowSeconds) = (permitLimit, windowSeconds);
+
+    public int PermitLimit { get; set; }
+    public int WindowSeconds { get; set; }
 }

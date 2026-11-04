@@ -34,16 +34,8 @@ function monthGrid(firstOfMonth) {
  */
 export function DateFilter({ label, value, onChange }) {
   const labelId = useId()
-  const [open, setOpen] = useState(false)
-  const pickRef = useRef(null)
   const now = today()
   const tomorrow = addDays(now, 1)
-
-  const choose = (iso) => {
-    onChange(iso)
-    setOpen(false)
-    pickRef.current?.focus()
-  }
 
   const quick = [
     { label: 'Any date', value: '' },
@@ -60,28 +52,67 @@ export function DateFilter({ label, value, onChange }) {
             <button key={q.label} type="button" aria-pressed={value === q.value} onClick={() => onChange(q.value)}>{q.label}</button>
           ))}
         </div>
-        <div className="date-picker">
-          <div className={`date-stepper${value && value !== now && value !== tomorrow ? ' is-picked' : ''}${open ? ' is-open' : ''}`}>
-            <button type="button" className="date-stepper-arrow" aria-label="Previous day" onClick={() => onChange(addDays(value || now, -1))}>‹</button>
-            <button ref={pickRef} type="button" className="date-stepper-pick" aria-haspopup="dialog" aria-expanded={open}
-              aria-label={value ? `Booking date: ${formatDate(value)}. Change date` : 'Pick a date'} onClick={() => setOpen((o) => !o)}>
-              <CalendarIcon />
-              <span>{value ? formatDate(value) : 'Pick a date'}</span>
-            </button>
-            <button type="button" className="date-stepper-arrow" aria-label="Next day" onClick={() => onChange(addDays(value || now, 1))}>›</button>
-          </div>
-          {open && <CalendarPopover value={value} today={now} onChoose={choose} onClose={() => { setOpen(false); pickRef.current?.focus() }} anchor={pickRef} />}
-        </div>
+        <DateStepper value={value} onChange={onChange} name={label} allowAny highlight={Boolean(value) && value !== now && value !== tomorrow} />
       </div>
     </div>
   )
 }
 
+/** A required day ("yyyy-mm-dd") with the same stepper and calendar as the bookings filter, e.g. the daily sales report. */
+export function DayPicker({ label, value, onChange, align }) {
+  const labelId = useId()
+  return (
+    <div className="date-filter" role="group" aria-labelledby={labelId}>
+      <span className="field-label" id={labelId}>{label}</span>
+      <DateStepper value={value} onChange={onChange} name={label} align={align} />
+    </div>
+  )
+}
+
+/** ‹ [calendar icon  Wed, Nov 4, 2026] › with the calendar popover behind the middle button. */
+function DateStepper({ value, onChange, name, allowAny = false, highlight = false, align }) {
+  const [open, setOpen] = useState(false)
+  const pickRef = useRef(null)
+  const now = today()
+
+  const choose = (iso) => {
+    onChange(iso)
+    setOpen(false)
+    pickRef.current?.focus()
+  }
+
+  return (
+    <div className="date-picker">
+      <div className={`date-stepper${highlight ? ' is-picked' : ''}${open ? ' is-open' : ''}`}>
+        <button type="button" className="date-stepper-arrow" aria-label="Previous day" onClick={() => onChange(addDays(value || now, -1))}>‹</button>
+        <button ref={pickRef} type="button" className="date-stepper-pick" aria-haspopup="dialog" aria-expanded={open}
+          aria-label={value ? `${name}: ${formatDate(value)}. Change date` : 'Pick a date'} onClick={() => setOpen((o) => !o)}>
+          <CalendarIcon />
+          <span>{value ? formatDate(value) : 'Pick a date'}</span>
+        </button>
+        <button type="button" className="date-stepper-arrow" aria-label="Next day" onClick={() => onChange(addDays(value || now, 1))}>›</button>
+      </div>
+      {open && <CalendarPopover value={value} today={now} allowAny={allowAny} align={align} onChoose={choose}
+        onClose={() => { setOpen(false); pickRef.current?.focus() }} anchor={pickRef} />}
+    </div>
+  )
+}
+
+/** Closes a popover when someone clicks outside it and outside the button that opened it. */
+function useClickAway(panel, anchor, onClose) {
+  useEffect(() => {
+    const away = (e) => { if (!panel.current?.contains(e.target) && !anchor.current?.contains(e.target)) onClose() }
+    document.addEventListener('mousedown', away)
+    return () => document.removeEventListener('mousedown', away)
+  }, [panel, anchor, onClose])
+}
+
 /**
  * Month calendar. Click a day to choose it; with the keyboard, arrows move a day or a week, Page Up/Down a month,
- * Home/End to the start or end of the week, Enter chooses and Escape closes.
+ * Home/End to the start or end of the week, Enter chooses and Escape closes. `allowAny` adds "Any date" to the
+ * footer; `align="end"` opens it from the right edge of the button (for pickers on the right of the page).
  */
-function CalendarPopover({ value, today: now, onChoose, onClose, anchor }) {
+function CalendarPopover({ value, today: now, allowAny, align, onChoose, onClose, anchor }) {
   const [focused, setFocused] = useState(value || now)
   const [month, setMonth] = useState(monthOf(value || now))
   const panel = useRef(null)
@@ -98,11 +129,7 @@ function CalendarPopover({ value, today: now, onChoose, onClose, anchor }) {
     panel.current?.querySelector(`[data-day="${focused}"]`)?.focus()
   }, [focused])
 
-  useEffect(() => {
-    const away = (e) => { if (!panel.current?.contains(e.target) && !anchor.current?.contains(e.target)) onClose() }
-    document.addEventListener('mousedown', away)
-    return () => document.removeEventListener('mousedown', away)
-  }, [onClose, anchor])
+  useClickAway(panel, anchor, onClose)
 
   const onKeyDown = (e) => {
     const moves = { ArrowLeft: -1, ArrowRight: 1, ArrowUp: -7, ArrowDown: 7 }
@@ -123,7 +150,7 @@ function CalendarPopover({ value, today: now, onChoose, onClose, anchor }) {
   const days = monthGrid(month)
 
   return (
-    <div ref={panel} className="calendar-pop" role="dialog" aria-modal="false" aria-labelledby={titleId} onKeyDown={onKeyDown}>
+    <div ref={panel} className={align === 'end' ? 'calendar-pop calendar-pop-end' : 'calendar-pop'} role="dialog" aria-modal="false" aria-labelledby={titleId} onKeyDown={onKeyDown}>
       <div className="calendar-pop-head">
         <button type="button" className="calendar-pop-nav" aria-label="Previous month" onClick={() => setMonth(addMonths(month, -1))}>‹</button>
         <h3 id={titleId} aria-live="polite">{monthTitle(month)}</h3>
@@ -154,8 +181,82 @@ function CalendarPopover({ value, today: now, onChoose, onClose, anchor }) {
         ))}
       </div>
       <div className="calendar-pop-foot">
-        <button type="button" className="calendar-pop-link" onClick={() => onChoose('')}>Any date</button>
+        {allowAny ? <button type="button" className="calendar-pop-link" onClick={() => onChoose('')}>Any date</button> : <span />}
         <button type="button" className="calendar-pop-today" onClick={() => onChoose(now)}>Today</button>
+      </div>
+    </div>
+  )
+}
+
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+const stepMonth = (yearMonth, n) => addMonths(`${yearMonth}-01`, n).slice(0, 7)
+
+/** A month ("yyyy-mm") in the same style: ‹ November 2026 › with a year of months behind the middle button. */
+export function MonthPicker({ label, value, onChange, align }) {
+  const labelId = useId()
+  const [open, setOpen] = useState(false)
+  const pickRef = useRef(null)
+
+  const choose = (yearMonth) => {
+    onChange(yearMonth)
+    setOpen(false)
+    pickRef.current?.focus()
+  }
+
+  return (
+    <div className="date-filter" role="group" aria-labelledby={labelId}>
+      <span className="field-label" id={labelId}>{label}</span>
+      <div className="date-picker">
+        <div className={`date-stepper${open ? ' is-open' : ''}`}>
+          <button type="button" className="date-stepper-arrow" aria-label="Previous month" onClick={() => onChange(stepMonth(value, -1))}>‹</button>
+          <button ref={pickRef} type="button" className="date-stepper-pick" aria-haspopup="dialog" aria-expanded={open}
+            aria-label={`${label}: ${monthTitle(`${value}-01`)}. Change month`} onClick={() => setOpen((o) => !o)}>
+            <CalendarIcon />
+            <span>{monthTitle(`${value}-01`)}</span>
+          </button>
+          <button type="button" className="date-stepper-arrow" aria-label="Next month" onClick={() => onChange(stepMonth(value, 1))}>›</button>
+        </div>
+        {open && <MonthPopover value={value} align={align} onChoose={choose} onClose={() => { setOpen(false); pickRef.current?.focus() }} anchor={pickRef} />}
+      </div>
+    </div>
+  )
+}
+
+/** One year of months: ‹ › change the year, click a month to choose it, Escape closes. */
+function MonthPopover({ value, align, onChoose, onClose, anchor }) {
+  const thisMonth = today().slice(0, 7)
+  const [year, setYear] = useState(Number(value.slice(0, 4)))
+  const panel = useRef(null)
+  const titleId = useId()
+  useClickAway(panel, anchor, onClose)
+
+  useEffect(() => {
+    panel.current?.querySelector('[aria-pressed="true"]')?.focus()
+  }, [])
+
+  return (
+    <div ref={panel} className={align === 'end' ? 'calendar-pop calendar-pop-end' : 'calendar-pop'} role="dialog" aria-modal="false"
+      aria-labelledby={titleId} onKeyDown={(e) => { if (e.key === 'Escape') { e.preventDefault(); onClose() } }}>
+      <div className="calendar-pop-head">
+        <button type="button" className="calendar-pop-nav" aria-label="Previous year" onClick={() => setYear((y) => y - 1)}>‹</button>
+        <h3 id={titleId} aria-live="polite">{year}</h3>
+        <button type="button" className="calendar-pop-nav" aria-label="Next year" onClick={() => setYear((y) => y + 1)}>›</button>
+      </div>
+      <div className="calendar-pop-months">
+        {MONTHS.map((name, i) => {
+          const yearMonth = `${year}-${String(i + 1).padStart(2, '0')}`
+          const classes = ['calendar-pop-month']
+          if (yearMonth === thisMonth) classes.push('today')
+          if (yearMonth === value) classes.push('selected')
+          return (
+            <button key={name} type="button" className={classes.join(' ')} aria-pressed={yearMonth === value}
+              aria-label={monthTitle(`${yearMonth}-01`)} onClick={() => onChoose(yearMonth)}>{name}</button>
+          )
+        })}
+      </div>
+      <div className="calendar-pop-foot">
+        <span />
+        <button type="button" className="calendar-pop-today" onClick={() => onChoose(thisMonth)}>This month</button>
       </div>
     </div>
   )

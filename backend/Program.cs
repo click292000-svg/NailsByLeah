@@ -15,6 +15,8 @@ app.UseHttpsRedirection();
 app.UseSecurityHeaders();
 
 app.UseAuthentication();
+// After authentication, so a signed-in client's limits follow their account rather than their network.
+app.UseNailsByLeahRateLimiting();
 app.UseAuthorization();
 
 if (app.Environment.IsDevelopment())

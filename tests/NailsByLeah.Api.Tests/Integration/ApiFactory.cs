@@ -52,6 +52,8 @@ public sealed class ApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
         builder.UseSetting("AdminSeed:Password", AdminPassword);
         builder.UseSetting("AdminSeed:PhoneNumber", "09990000000");
         builder.UseSetting("Uploads:ReferenceImagePath", UploadFolder);
+        // Many tests share one test client address; RateLimitTests turns the limits back on with small numbers.
+        builder.UseSetting("RateLimits:Enabled", "false");
 
         builder.ConfigureTestServices(services =>
         {

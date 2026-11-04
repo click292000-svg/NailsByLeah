@@ -4,7 +4,8 @@ import { useAsync } from '../../hooks/useAsync'
 import { errorMessage } from '../../api/errors'
 import { today } from '../../lib/dates'
 import { formatDate } from '../../lib/format'
-import { Alert, Card, Money, PageHeader, PageLoader, StatCard, TextField } from '../../components/ui'
+import { Alert, Card, Money, PageHeader, PageLoader, StatCard } from '../../components/ui'
+import { DayPicker, MonthPicker } from '../../components/DateFilter'
 
 /** Daily and monthly sales reports (Ref 11.6). */
 export default function ReportsPage() {
@@ -60,7 +61,7 @@ function DailyReport() {
   return (
     <Card>
       <ReportHeader title={formatDate(date)}>
-        <TextField label="Day" type="date" value={date} onChange={(e) => e.target.value && setDate(e.target.value)} />
+        <DayPicker label="Day" value={date} onChange={(value) => value && setDate(value)} align="end" />
       </ReportHeader>
       {report.loading && <PageLoader label="Building report…" />}
       {report.error && <Alert kind="error">{errorMessage(report.error)}</Alert>}
@@ -78,7 +79,7 @@ function MonthlyReport() {
   return (
     <Card>
       <ReportHeader title={new Date(year, month - 1, 1).toLocaleDateString('en-PH', { month: 'long', year: 'numeric' })}>
-        <TextField label="Month" type="month" value={value} onChange={(e) => e.target.value && setValue(e.target.value)} />
+        <MonthPicker label="Month" value={value} onChange={setValue} align="end" />
       </ReportHeader>
       {report.loading && <PageLoader label="Building report…" />}
       {report.error && <Alert kind="error">{errorMessage(report.error)}</Alert>}
