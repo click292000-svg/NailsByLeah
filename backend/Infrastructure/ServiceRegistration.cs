@@ -93,6 +93,9 @@ public static class ServiceRegistration
         services.AddSingleton<IReferenceImageStore, FileSystemReferenceImageStore>();
         services.AddScoped<IAppointmentReminderJob, AppointmentReminderJob>();
         services.AddHostedService<AppointmentReminderWorker>();
+        services.AddSingleton<QueuedBackgroundNotifications>();
+        services.AddSingleton<IBackgroundNotifications>(sp => sp.GetRequiredService<QueuedBackgroundNotifications>());
+        services.AddHostedService(sp => sp.GetRequiredService<QueuedBackgroundNotifications>());
 
         // Web
         // The strict encoder writes < > & ' " as \u escapes, so user text never appears as raw HTML (Ref 1.1).

@@ -61,6 +61,9 @@ public sealed class ApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
             services.AddSingleton<TimeProvider>(Clock);
             services.RemoveAll<INotificationService>();
             services.AddSingleton<INotificationService>(Notifications);
+            // Emails queued to send after the answer are sent straight away, so tests can read them right after a request.
+            services.RemoveAll<IBackgroundNotifications>();
+            services.AddSingleton<IBackgroundNotifications>(new InlineBackgroundNotifications(Notifications));
             services.RemoveAll<IPaymentGateway>();
             services.AddSingleton<IPaymentGateway>(Gateway);
         });
@@ -104,8 +107,35 @@ public sealed class ApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
     }
 }
 
+/// <summary>Sends queued emails immediately and, like the real queue, swallows a failure instead of failing the request.</summary>
+public sealed class InlineBackgroundNotifications(INotificationService notifications) : IBackgroundNotifications
+{
+    public async ValueTask EnqueueAsync(Func<INotificationService, CancellationToken, Task> send, string description)
+    {
+        try
+        {
+            await send(notifications, CancellationToken.None);
+        }
+        catch (InvalidOperationException)
+        {
+            // The real queue logs this; the request has already been answered normally.
+        }
+    }
+}
+
 public sealed class CapturingNotificationService : INotificationService
 {
+    private int _failNext;
+
+    /// <summary>The next verification or password reset email throws, like Brevo being down.</summary>
+    public void FailNextEmail() => Interlocked.Exchange(ref _failNext, 1);
+
+    private void ThrowIfFailing()
+    {
+        if (Interlocked.Exchange(ref _failNext, 0) == 1)
+            throw new InvalidOperationException("Brevo returned 503.");
+    }
+
     private readonly ConcurrentDictionary<string, string> _verificationCodes = new(StringComparer.OrdinalIgnoreCase);
     private readonly ConcurrentDictionary<string, string> _resetLinks = new(StringComparer.OrdinalIgnoreCase);
 
@@ -123,12 +153,14 @@ public sealed class CapturingNotificationService : INotificationService
 
     public Task SendEmailVerificationAsync(User user, string code, CancellationToken ct = default)
     {
+        ThrowIfFailing();
         _verificationCodes[user.Email] = code;
         return Task.CompletedTask;
     }
 
     public Task SendPasswordResetAsync(User user, string resetLink, CancellationToken ct = default)
     {
+        ThrowIfFailing();
         _resetLinks[user.Email] = resetLink;
         return Task.CompletedTask;
     }

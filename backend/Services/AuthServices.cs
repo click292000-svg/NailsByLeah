@@ -25,6 +25,7 @@ public sealed class RegistrationService(
     IUnitOfWork unitOfWork,
     IPasswordHasher hasher,
     INotificationService notifications,
+    IBackgroundNotifications background,
     IAuditLogger audit,
     ISalonClock clock,
     IOptions<AuthOptions> authOptions,
@@ -158,7 +159,8 @@ public sealed class RegistrationService(
         var code = SecureTokens.NewNumericCode();
         tokens.Add(NewVerificationToken(user.Id, code, now));
         await unitOfWork.SaveChangesAsync(ct);
-        await notifications.SendEmailVerificationAsync(user, code, ct);
+        // Sent after the answer, so a real account doesn't answer slower (or fail) where an unknown email wouldn't.
+        await background.EnqueueAsync((n, stop) => n.SendEmailVerificationAsync(user, code, stop), "verification code email");
     }
 
     private UserToken NewVerificationToken(int userId, string code, DateTime now) => new()
@@ -188,8 +190,9 @@ public sealed class AuthService(
 {
     private const string InvalidCredentials = "Invalid username or password.";
 
-    // Hash checked when the user does not exist, so both cases take about the same time.
-    private static readonly Lazy<string> DummyHash = new(() => BCrypt.Net.BCrypt.HashPassword("not-a-real-password-1", 10));
+    // Hash checked when the user does not exist, so both cases take about the same time. Made by the same hasher
+    // (same bcrypt work factor) as real passwords: a cheaper dummy would make unknown usernames answer faster.
+    private static string? s_dummyHash;
 
     private readonly AuthOptions _options = authOptions.Value;
 
@@ -199,7 +202,7 @@ public sealed class AuthService(
         var user = await users.FindByUsernameOrEmailAsync(identifier, ct);
         if (user is null)
         {
-            hasher.Verify(request.Password, DummyHash.Value);
+            hasher.Verify(request.Password, s_dummyHash ??= hasher.Hash("not-a-real-password-1"));
             throw new UnauthorizedAppException(InvalidCredentials, "invalid_credentials");
         }
 
@@ -251,7 +254,7 @@ public sealed class PasswordResetService(
     IUserTokenRepository tokens,
     IUnitOfWork unitOfWork,
     IPasswordHasher hasher,
-    INotificationService notifications,
+    IBackgroundNotifications background,
     IAuditLogger audit,
     ISalonClock clock,
     IOptions<AuthOptions> authOptions,
@@ -278,7 +281,8 @@ public sealed class PasswordResetService(
         await unitOfWork.SaveChangesAsync(ct);
 
         var link = $"{frontendOptions.Value.BaseUrl.TrimEnd('/')}/reset-password?token={Uri.EscapeDataString(token)}";
-        await notifications.SendPasswordResetAsync(user, link, ct);
+        // Sent after the answer, so a real account doesn't answer slower (or fail) where an unknown email wouldn't.
+        await background.EnqueueAsync((n, stop) => n.SendPasswordResetAsync(user, link, stop), "password reset email");
     }
 
     public async Task ValidateTokenAsync(string token, CancellationToken ct = default) => await GetUsableTokenAsync(token, ct);

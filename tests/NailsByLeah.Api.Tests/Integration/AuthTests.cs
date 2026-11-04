@@ -166,11 +166,33 @@ public sealed class AuthTests(ApiFactory factory) : IClassFixture<ApiFactory>
             .ShouldHaveStatus(HttpStatusCode.OK);
     }
 
-    [Fact] // Forgot password does not reveal whether an email is registered
-    public async Task Forgot_password_answers_the_same_for_unknown_emails()
+    // "Forgot password" and "resend code" must not reveal whether an email is registered: same status, same words.
+    [Theory]
+    [InlineData("/api/auth/forgot-password")]
+    [InlineData("/api/auth/resend-verification")]
+    public async Task Email_endpoints_answer_the_same_for_registered_and_unknown_emails(string url)
     {
-        var response = await factory.NewClient().PostJsonAsync("/api/auth/forgot-password", new EmailRequest("nobody@test.local"));
+        var registered = factory.NewRegistration();
+        await (await factory.NewClient().PostJsonAsync("/api/auth/register", registered)).ShouldHaveStatus(HttpStatusCode.Created);
+
+        var forReal = await factory.NewClient().PostJsonAsync(url, new EmailRequest(registered.Email));
+        var forUnknown = await factory.NewClient().PostJsonAsync(url, new EmailRequest("nobody@test.local"));
+
+        Assert.Equal(forUnknown.StatusCode, forReal.StatusCode);
+        Assert.Equal(HttpStatusCode.OK, forReal.StatusCode);
+        Assert.Equal(await forUnknown.Content.ReadAsStringAsync(), await forReal.Content.ReadAsStringAsync());
+    }
+
+    [Fact] // A failed email is logged, not shown: otherwise only real accounts would get an error.
+    public async Task Forgot_password_answers_normally_when_the_email_cannot_be_sent()
+    {
+        var user = await factory.CreateClientAsync();
+        factory.Notifications.FailNextEmail();
+
+        var response = await factory.NewClient().PostJsonAsync("/api/auth/forgot-password", new EmailRequest(user.Email));
+
         await response.ShouldHaveStatus(HttpStatusCode.OK);
+        Assert.Contains("If that email address is registered", await response.Content.ReadAsStringAsync());
     }
 
     [Fact] // 9.1.12
