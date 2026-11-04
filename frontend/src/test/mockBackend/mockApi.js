@@ -618,15 +618,15 @@ const routes = [
       db.userTokens.push({ id: nextId('userTokens'), userId: user.id, purpose: 'PasswordReset', token,
         expiresAt: new Date(Date.now() + policies.passwordResetTokenMinutes * MINUTE).toISOString(), consumedAt: null, failedAttempts: 0, createdAt: nowIso() })
       audit(db, user.id, 'PasswordResetRequested', 'User', user.id)
-      const link = `${window.location.origin}/reset-password?token=${token}`
+      const link = `${window.location.origin}/reset-password#token=${token}`
       sendEmail(db, user.email, 'Reset your Nails by Leyah password', `Use this link within 15 minutes to choose a new password: ${link}`, { link })
       saveDb()
     }
     return { message: 'If that email address is registered, a password reset link has been sent. It expires in 15 minutes.' }
   }],
 
-  ['GET', '/auth/reset-password/validate', (db, { query }) => {
-    usableResetToken(db, query.token)
+  ['POST', '/auth/reset-password/validate', (db, { body }) => {
+    usableResetToken(db, body.token)
     return { message: 'This password reset link is valid.' }
   }],
 

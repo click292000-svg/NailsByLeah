@@ -49,7 +49,7 @@ export const api = {
     logout: () => post('/auth/logout'),
     me: () => get('/auth/me'),
     forgotPassword: (email) => post('/auth/forgot-password', { email }),
-    validateResetToken: (token) => get('/auth/reset-password/validate', { token }),
+    validateResetToken: (token) => post('/auth/reset-password/validate', { token }),
     resetPassword: (body) => post('/auth/reset-password', body),
   },
   catalog: {

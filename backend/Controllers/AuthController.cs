@@ -101,10 +101,11 @@ public sealed class AuthController(
 
     [AllowAnonymous]
     [EnableRateLimiting(RateLimitPolicies.Code)]
-    [HttpGet("reset-password/validate")]
-    public async Task<MessageResponse> ValidateResetToken([FromQuery] string token, CancellationToken ct)
+    // POST with the token in the body: an address with ?token= would be written to web server and proxy logs.
+    [HttpPost("reset-password/validate")]
+    public async Task<MessageResponse> ValidateResetToken(TokenRequest request, CancellationToken ct)
     {
-        await passwordReset.ValidateTokenAsync(token, ct);
+        await passwordReset.ValidateTokenAsync(request.Token, ct);
         return new MessageResponse("This password reset link is valid.");
     }
 

@@ -33,6 +33,7 @@ public sealed record LoginRequest(string UsernameOrEmail, string Password);
 
 /// <summary>The new password is entered once; the form has a show/hide toggle instead of a second field.</summary>
 public sealed record ResetPasswordRequest(string Token, string NewPassword);
+public sealed record TokenRequest(string Token);
 
 public sealed record UserProfileResponse(
     int Id, string FirstName, string LastName, string Username, string Email, string PhoneNumber, string Role);

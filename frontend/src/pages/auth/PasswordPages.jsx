@@ -143,7 +143,10 @@ export function ForgotPasswordPage() {
 /** Choose a new password from a reset link. Expired or used links are reported straight away (Ref 1.11). */
 export function ResetPasswordPage() {
   const [params] = useSearchParams()
-  const token = params.get('token') ?? ''
+  const { hash } = useLocation()
+  // Emailed links carry the token after "#", which browsers never send to a server, so it can't end up in hosting
+  // logs. "?token=" still works for links sent before this change.
+  const token = new URLSearchParams(hash.replace(/^#/, '')).get('token') ?? params.get('token') ?? ''
   const check = useAsync(() => (token ? api.auth.validateResetToken(token) : Promise.reject(missingToken())), [token])
   const [values, setValues] = useState({ newPassword: '' })
   const [errors, setErrors] = useState({})

@@ -280,7 +280,8 @@ public sealed class PasswordResetService(
         audit.Record(AuditActions.PasswordResetRequested, nameof(User), user.Id, userId: user.Id);
         await unitOfWork.SaveChangesAsync(ct);
 
-        var link = $"{frontendOptions.Value.BaseUrl.TrimEnd('/')}/reset-password?token={Uri.EscapeDataString(token)}";
+        // The token goes after "#": browsers never send that part to a server, so it stays out of hosting logs.
+        var link = $"{frontendOptions.Value.BaseUrl.TrimEnd('/')}/reset-password#token={Uri.EscapeDataString(token)}";
         // Sent after the answer, so a real account doesn't answer slower (or fail) where an unknown email wouldn't.
         await background.EnqueueAsync((n, stop) => n.SendPasswordResetAsync(user, link, stop), "password reset email");
     }

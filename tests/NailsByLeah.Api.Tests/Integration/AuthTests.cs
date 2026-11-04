@@ -131,11 +131,11 @@ public sealed class AuthTests(ApiFactory factory) : IClassFixture<ApiFactory>
         await (await client.PostJsonAsync("/api/auth/forgot-password", new EmailRequest(user.Email))).ShouldHaveStatus(HttpStatusCode.OK);
         var token = factory.Notifications.ResetTokenFor(user.Email);
 
-        await (await client.GetAsync($"/api/auth/reset-password/validate?token={Uri.EscapeDataString(token)}"))
+        await (await client.PostJsonAsync("/api/auth/reset-password/validate", new TokenRequest(token)))
             .ShouldHaveStatus(HttpStatusCode.OK);
 
         factory.Clock.Advance(TimeSpan.FromMinutes(15) + TimeSpan.FromSeconds(1));
-        var check = await client.GetAsync($"/api/auth/reset-password/validate?token={Uri.EscapeDataString(token)}");
+        var check = await client.PostJsonAsync("/api/auth/reset-password/validate", new TokenRequest(token));
         var response = await client.PostJsonAsync("/api/auth/reset-password", new ResetPasswordRequest(token, "BrandNew123"));
 
         await check.ShouldHaveStatus(HttpStatusCode.BadRequest);
@@ -181,6 +181,17 @@ public sealed class AuthTests(ApiFactory factory) : IClassFixture<ApiFactory>
         Assert.Equal(forUnknown.StatusCode, forReal.StatusCode);
         Assert.Equal(HttpStatusCode.OK, forReal.StatusCode);
         Assert.Equal(await forUnknown.Content.ReadAsStringAsync(), await forReal.Content.ReadAsStringAsync());
+    }
+
+    [Fact] // The token goes after "#", which browsers never send to a server, so it stays out of hosting logs.
+    public async Task Reset_link_keeps_the_token_out_of_server_addresses()
+    {
+        var user = await factory.CreateClientAsync();
+        await (await factory.NewClient().PostJsonAsync("/api/auth/forgot-password", new EmailRequest(user.Email))).ShouldHaveStatus(HttpStatusCode.OK);
+
+        var link = factory.Notifications.ResetLinkFor(user.Email);
+        Assert.Contains("/reset-password#token=", link);
+        Assert.DoesNotContain("?", link);
     }
 
     [Fact] // A failed email is logged, not shown: otherwise only real accounts would get an error.

@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Http.Json;
 using System.Net.Mail;
+using System.Text.RegularExpressions;
 using Microsoft.Extensions.Options;
 using NailsByLeah.Api.Configuration;
 using NailsByLeah.Api.Data;
@@ -189,8 +190,11 @@ public sealed class EmailNotificationService(
 /// Sends through Brevo's transactional email API over HTTPS, so it works on hosts that block SMTP ports.
 /// A rejected email (bad key, unverified sender, daily limit) throws with Brevo's reason; the key is never logged.
 /// </summary>
-public sealed class BrevoEmailSender(HttpClient http, IOptions<BrevoOptions> brevo, IOptions<EmailOptions> email) : IEmailSender
+public sealed partial class BrevoEmailSender(HttpClient http, IOptions<BrevoOptions> brevo, IOptions<EmailOptions> email) : IEmailSender
 {
+    [GeneratedRegex(@"[^\s""'<>,;:]+@[^\s""'<>,;:]+\.[A-Za-z]{2,}")]
+    private static partial Regex EmailAddressPattern();
+
     public async Task SendAsync(string toAddress, string toName, string subject, string textBody, CancellationToken ct = default)
     {
         var from = email.Value;
@@ -210,7 +214,8 @@ public sealed class BrevoEmailSender(HttpClient http, IOptions<BrevoOptions> bre
         using var response = await http.SendAsync(request, ct);
         if (!response.IsSuccessStatusCode)
         {
-            var reason = await response.Content.ReadAsStringAsync(ct);
+            // Brevo's reason can repeat the recipient's address; this message ends up in the logs, so addresses are hidden.
+            var reason = EmailAddressPattern().Replace(await response.Content.ReadAsStringAsync(ct), "[email]");
             throw new InvalidOperationException(
                 $"Brevo rejected the email \"{subject}\" ({(int)response.StatusCode} {response.ReasonPhrase}): {reason[..Math.Min(reason.Length, 500)]}");
         }

@@ -73,7 +73,7 @@ public static class StartupTasks
             UpdatedAt = now,
         });
         await db.SaveChangesAsync();
-        logger.LogInformation("Administrator account {Username} created", username);
+        logger.LogInformation("Administrator account created"); // no username: logs are kept by the host
     }
 
     /// <summary>Basic hardening headers for every API response.</summary>

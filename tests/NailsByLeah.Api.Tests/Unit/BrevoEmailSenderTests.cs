@@ -45,6 +45,19 @@ public sealed class BrevoEmailSenderTests
         Assert.DoesNotContain("xkeysib-test", error.Message);
     }
 
+    [Fact] // The error ends up in the server logs, which the host keeps: no client email addresses in it.
+    public async Task A_refused_email_does_not_repeat_the_clients_address()
+    {
+        var brevo = new FakeBrevo(HttpStatusCode.BadRequest,
+            """{"code":"invalid_parameter","message":"email kyla.santos@example.test is not valid"}""");
+
+        var error = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => Sender(brevo).SendAsync("kyla.santos@example.test", "Kyla Santos", "Reset your password", "Use this link"));
+
+        Assert.DoesNotContain("kyla.santos@example.test", error.Message);
+        Assert.Contains("email [email] is not valid", error.Message);
+    }
+
     private static BrevoEmailSender Sender(FakeBrevo brevo) => new(
         new HttpClient(brevo) { BaseAddress = new Uri(new BrevoOptions().BaseUrl) },
         Options.Create(new BrevoOptions { ApiKey = "xkeysib-test" }),

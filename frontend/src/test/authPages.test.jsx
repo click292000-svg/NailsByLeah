@@ -75,7 +75,7 @@ describe('Registration', () => {
 
 describe('Reset Password page (7.5)', () => {
   it('says so straight away when the link has expired', async () => {
-    renderApp('/reset-password?token=expired-demo-token')
+    renderApp('/reset-password#token=expired-demo-token')
     expect(await screen.findByText('This link has expired')).toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'Request a new link' })).toHaveAttribute('href', '/forgot-password')
     expect(screen.queryByLabelText(/New password/)).not.toBeInTheDocument()
@@ -94,7 +94,8 @@ describe('Reset Password page (7.5)', () => {
     await screen.findByText(/a password reset link has been sent/)
 
     const link = new URL(getDb().outbox.find((e) => e.link).link)
-    renderApp(link.pathname + link.search)
+    expect(link.search).toBe('') // the token travels after "#", never in the part sent to the server
+    renderApp(link.pathname + link.hash)
     await user.type(await screen.findByLabelText(/^New password/), 'NewSecret123')
     await user.click(screen.getByRole('button', { name: 'Change password' }))
 

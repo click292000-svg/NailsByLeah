@@ -145,6 +145,8 @@ public sealed class CapturingNotificationService : INotificationService
 
     public string VerificationCodeFor(string email) => _verificationCodes[email];
 
+    public string ResetLinkFor(string email) => _resetLinks[email];
+
     public string ResetTokenFor(string email)
     {
         var link = _resetLinks[email];
