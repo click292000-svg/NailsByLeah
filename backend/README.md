@@ -48,7 +48,7 @@ dotnet run --project backend/NailsByLeah.Api.csproj --launch-profile https
 
 | Concern | Development | Before going live |
 |---|---|---|
-| Email | Logged to the console (look for `DEV EMAIL`), including verification codes and reset links | Set `Brevo:ApiKey` and `Email:FromAddress` (a sender verified in Brevo). Brevo's HTTPS API works on hosts that block SMTP ports. `Smtp:Host`, `Smtp:Username`, `Smtp:Password` (e.g. Gmail with an app password) also work where SMTP is allowed |
+| Email | Logged to the console (look for `DEV EMAIL`), including verification codes and reset links. Only possible in Development | Set `Brevo:ApiKey` and `Email:FromAddress` (a sender verified in Brevo). Brevo's HTTPS API works on hosts that block SMTP ports. `Smtp:Host`, `Smtp:Username`, `Smtp:Password` (e.g. Gmail with an app password) also work where SMTP is allowed |
 | Payments | `SimulatedPaymentGateway` approves every GCash/Maya charge without moving money | Implement `IPaymentGateway` for a real provider and register it in `Infrastructure/ServiceRegistration.cs` |
 
 Outside Development the app refuses to start while either stand-in is still in use.
@@ -70,12 +70,13 @@ All settings are in `appsettings.json`. Override any of them with user secrets o
 | `ConnectionStrings:Default` | SQL Server connection (LocalDB by default) |
 | `Auth` | Lockout (5 attempts / 15 min), idle session timeout (30 min), reset link lifetime (15 min), bcrypt cost |
 | `Booking` | Deposit (PHP 150), minimum notice for rescheduling (24 h) |
-| `Schedule` | Time zone (Asia/Manila), the 11:00 AM opening time, the 30-minute start-time grid, the 30-minute break after every appointment, booking window, closed weekdays. The closing time (default 9:00 PM) is set by administrators on the Schedule page and stored in `salon_settings` |
-| `Legal:TermsVersion` | Terms & Conditions version recorded at registration |
+| `Schedule` | Time zone (Asia/Manila), the 11:00 AM opening time, the 30-minute start-time grid, the 30-minute break after every appointment, the booking window (30 days ahead), closed weekdays. The closing time (default 9:00 PM) is set by administrators on the Schedule page and stored in `salon_settings` |
+| `Legal:TermsVersion` | Terms & Conditions version recorded at registration (currently 2.1; the text is in `frontend/src/content/legal.js`) |
 | `Email` | Sender address and name shown on every email |
 | `Brevo`, `Smtp` | Email delivery: Brevo's API when `Brevo:ApiKey` is set, otherwise SMTP when `Smtp:Host` is set, otherwise the console |
 | `Notifications` | The 24-hour reminder job, and `SalonEmail`: where the salon's alerts go (new booking to confirm, client cancellation, client reschedule). Empty sends no alerts |
 | `AdminSeed` | First administrator (user secrets only) |
+| `RateLimits` | How many requests one visitor or client may make per time window (see [Security](#security)). `Enabled: false` only in tests |
 
 ## Project layout
 
@@ -97,11 +98,51 @@ Controller → Service → Repository (Ref 14.1):
 | Area | Endpoints |
 |---|---|
 | Public | `GET /api/services`, `POST /api/pricing/quote`, `GET /api/slots?date=`, `GET /api/lookups` |
-| Account | `POST /api/auth/register`, `GET /api/auth/username-availability`, `POST /api/auth/verify-email`, `POST /api/auth/resend-verification`, `POST /api/auth/login`, `POST /api/auth/logout`, `GET /api/auth/me`, `POST /api/auth/forgot-password`, `POST /api/auth/reset-password` |
+| Account | `POST /api/auth/register`, `GET /api/auth/username-availability`, `POST /api/auth/verify-email`, `POST /api/auth/resend-verification`, `POST /api/auth/login`, `POST /api/auth/logout`, `GET /api/auth/me`, `POST /api/auth/forgot-password`, `POST /api/auth/reset-password/validate`, `POST /api/auth/reset-password` |
 | Client | `POST /api/bookings` (book and pay), `GET /api/bookings`, `GET /api/bookings/{id}`, `GET /api/bookings/{id}/receipt`, `POST /api/bookings/{id}/reschedule`, `POST /api/bookings/{id}/cancel` |
 | Administrator | `GET /api/admin/dashboard`, `GET /api/admin/bookings`, `POST /api/admin/bookings/{id}/confirm`, `…/complete`, `…/reschedule`, `…/cancel`, `/api/admin/services`, `/api/admin/addons`, `/api/admin/blocked-slots`, `/api/admin/reports/daily`, `/api/admin/reports/monthly`, `/api/admin/activity-logs` |
 
-Errors are returned as RFC 7807 ProblemDetails with a `code` field (for example `slot_unavailable`, `account_locked`, `token_expired`) and, for validation errors, an `errors` object keyed by camelCase field name.
+Errors are returned as RFC 7807 ProblemDetails with a `code` field (for example `slot_unavailable`, `account_locked`, `token_expired`, `rate_limited`) and, for validation errors, an `errors` object keyed by camelCase field name.
+
+## Security
+
+### Rate limits
+
+Set in `RateLimits` (`Infrastructure/RateLimiting.cs`). A refused request gets **429** with a `Retry-After` header and
+"Too many attempts. Please wait up to N minutes and try again." The limiter reports its whole window, so that is the
+longest anyone waits.
+
+| Policy | Default | Counted per | Endpoints |
+|---|---|---|---|
+| Overall | 300 / minute | visitor (IP address) | every request |
+| Login | 10 / 5 minutes | visitor | `POST /api/auth/login` |
+| Email | 5 / 15 minutes, shared | visitor | register, resend verification, forgot password |
+| Code | 10 / 15 minutes | visitor | verify email, reset link check, reset password |
+| Booking | 10 / 10 minutes | client account | book, reschedule, cancel |
+| Upload | 20 / 10 minutes | client account | design photos |
+| Feedback | 5 / 10 minutes | client account | feedback |
+
+Behind a hosting proxy the visitor's real address needs the forwarded-headers setting (go-live plan); until then every
+visitor shares one allowance there.
+
+### Not revealing who has an account
+
+- "Forgot password" and "resend code" return the same answer for registered and unknown emails. Their emails are sent
+  from a background queue (`Notifications/BackgroundNotifications.cs`) after the answer, so both cases are equally fast
+  and a failed email is logged instead of becoming an error only real accounts would see.
+- Login checks unknown usernames against a dummy hash with the same bcrypt cost, so they take as long as real ones.
+- Sign-up must still say when an email or username is taken; the Email rate limit keeps that slow to abuse.
+
+### Logs
+
+Hosts keep logs, so they must not hold personal data:
+
+- Log messages name bookings, images and pages by ID or path only; never emails, phone numbers, passwords or tokens.
+- Password reset links put the token after `#` (`/reset-password#token=…`), which browsers never send to a server, and
+  the page checks it with `POST /api/auth/reset-password/validate`. Old `?token=` links still work.
+- Brevo error text has email addresses replaced with `[email]`.
+- EF Core's own save-error log (`Microsoft.EntityFrameworkCore.Update`) is off: it can repeat a duplicate value such as
+  an email. The API turns duplicates into 409 answers and logs unexpected errors itself.
 
 ## Database backups (Ref 13.7)
 

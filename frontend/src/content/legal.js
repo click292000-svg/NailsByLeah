@@ -14,7 +14,7 @@ const EMAIL = 'nailsbyleyah.bookings@gmail.com'
 
 export const termsAndConditions = {
   title: 'Terms & Conditions',
-  version: '2.0',
+  version: '2.1',
   updated: 'November 5, 2026',
   sections: [
     {
@@ -31,6 +31,7 @@ export const termsAndConditions = {
         'Keep your password private. You are responsible for bookings made with your account.',
         'For your security, your account is locked for 15 minutes after 5 wrong password attempts, and you are signed out after 30 minutes without activity.',
         'A password reset link works once and expires after 15 minutes.',
+        'To protect accounts from abuse, too many sign-in, sign-up, password reset or booking attempts in a short time are paused for a few minutes. The website tells you how long to wait.',
       ],
     },
     {
@@ -107,7 +108,7 @@ export const termsAndConditions = {
 
 export const privacyPolicy = {
   title: 'Privacy Policy',
-  version: '2.0',
+  version: '2.1',
   updated: 'November 5, 2026',
   sections: [
     {
@@ -151,6 +152,10 @@ export const privacyPolicy = {
         'Passwords are stored only as one-way hashes.',
         'Only the salon administrator can see other clients\' bookings. Each client sees only their own.',
         'Accounts are locked after repeated wrong passwords, and inactive sessions sign out after 30 minutes.',
+        'Repeated sign-in, sign-up and password reset attempts are limited, so no one can guess passwords or flood your inbox.',
+        'The "forgot password" and "resend code" pages answer the same way whether or not an email is registered, so no one can use them to find out who our clients are.',
+        'Password reset links work once and expire after 15 minutes. The secret part of the link is never sent to or stored in our server records.',
+        'Our technical logs do not contain your email address, phone number, password or reset links.',
         'Uploaded photos are checked to be real images and are not public.',
       ],
     },

@@ -27,7 +27,9 @@ so the browser only ever talks to one origin and the session cookie just works (
 
 - **Administrator login:** the account set with `dotnet user-secrets set "AdminSeed:…"` (see `backend/README.md`).
 - **Emails in development:** verification codes and reset links are printed in the **API's console** (look for `DEV EMAIL`)
-  until SMTP is configured.
+  until Brevo is configured (`Brevo:ApiKey`, see `backend/README.md`).
+- **"Too many attempts":** the API limits repeated sign-ins, sign-ups, password resets and bookings. While testing, restart
+  the API to clear the limits.
 
 | Command | What it does |
 |---|---|
@@ -99,5 +101,12 @@ Conventions:
 ## Placeholders to replace
 
 - Salon phone number: `src/content/salon.js` (the address, map pin and opening hours are real; the website reads the hours from `GET /api/salon-hours`)
-- Terms & Conditions and Privacy Policy text: `src/content/legal.js`
 - "Note for Leyah" quick suggestions: `backend/Domain/Labels.cs` (the website reads them from `GET /api/lookups`)
+
+## Terms & Privacy Policy
+
+The text is in `src/content/legal.js` (version 2.1), written from how the system works and Leyah's salon rules. When a
+rule changes, update the text and raise the version there and in `Legal:TermsVersion` (`backend/appsettings.json`), so
+new sign-ups record the version they accepted. Still to confirm with Leyah (marked in the file): refunds of cancelled
+full payments, bookings the salon cancels, and the amounts of the late-cancellation, no-show and late-payment fees.
+Have both texts reviewed before going live.

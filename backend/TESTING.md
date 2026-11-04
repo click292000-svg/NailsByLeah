@@ -6,6 +6,10 @@ Run everything from the repository root:
 dotnet test NailsByLeah.slnx
 ```
 
+Integration tests use SQL Server LocalDB. If a terminal run fails with "LocalDB instance startup: SQL Server process
+failed to start", run them from Visual Studio's Test Explorer (**Test → Run All Tests**). Rate limits are off in the
+shared test host; `RateLimitTests` switches them on with small numbers.
+
 ## Automated test coverage (backend doc 9)
 
 | No. | Scenario | Test |
@@ -24,7 +28,7 @@ dotnet test NailsByLeah.slnx
 | 9.1.12 | Five failed logins lock for 15 minutes | `AuthTests.Five_failed_logins_lock_the_account_for_15_minutes` |
 | 9.2.1 | Sign Up → Book → Pay → Cancel → Admin views | `EndToEndTests` |
 
-Also covered: role-based access (8.7), 30-minute idle session timeout (8.4), single-use reset links, email verification, failed payment rollback (6.1), slot blocking (11.4), price snapshots (13.6), rescheduling window (10.6), dashboard, search, reports, activity log and the 24-hour reminder.
+Also covered: rate limits (`RateLimitTests`), "forgot password" and "resend code" answering the same for registered and unknown emails and when an email can't be sent, reset links keeping the token out of server addresses, Brevo errors without client addresses, role-based access (8.7), 30-minute idle session timeout (8.4), single-use reset links, email verification, failed payment rollback (6.1), slot blocking (11.4), price snapshots (13.6), rescheduling window (10.6), dashboard, search, reports, activity log and the 24-hour reminder.
 
 ## Bug report list (Ref 15.6)
 

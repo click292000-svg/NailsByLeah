@@ -5,6 +5,7 @@ Nail salon booking and management system.
 - `backend/` — C# ASP.NET Core Web API (.NET 10) with SQL Server. Setup, configuration and API reference: [backend/README.md](backend/README.md)
 - `tests/` — backend unit and integration tests ([backend/TESTING.md](backend/TESTING.md))
 - `frontend/` — React (Vite). [frontend/README.md](frontend/README.md)
+- `docs/` — the plan for going live (Supabase Postgres, hosting, PayMongo): [docs/GO-LIVE-PLAN.md](docs/GO-LIVE-PLAN.md)
 
 ## Run (frontend connected to the backend)
 
@@ -36,3 +37,14 @@ dotnet test NailsByLeah.slnx
 cd frontend
 npm test
 ```
+
+The backend tests need SQL Server LocalDB. If they fail with "LocalDB instance startup: SQL Server process failed to
+start" from a terminal, run them from Visual Studio instead (**Test → Run All Tests**).
+
+## Security at a glance
+
+- Passwords hashed with bcrypt; accounts lock for 15 minutes after 5 wrong passwords; sessions end after 30 idle minutes.
+- Rate limits on sign-in, sign-up, password reset, code checks, bookings, uploads and feedback (`RateLimits` in `backend/appsettings.json`).
+- "Forgot password" and "resend code" answer identically, and equally fast, for registered and unknown emails.
+- Logs hold no client emails, phone numbers, passwords or reset links; reset links carry the token after `#`, which never reaches a server.
+- Details: [backend/README.md](backend/README.md#security).
