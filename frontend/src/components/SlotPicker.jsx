@@ -6,8 +6,28 @@ import { formatDate, formatDuration, formatTime } from '../lib/format'
 import { errorMessage } from '../api/errors'
 import { Alert, Spinner } from './ui'
 
-const STATUS_TEXT = { Open: 'Available', Booked: 'Booked', Closed: 'Closed', Past: 'Past', TooShort: 'Not enough time' }
-const STATUS_TITLE = { Closed: 'Closed by the salon', TooShort: 'This service would run past closing time or into another appointment and its 30-minute break.' }
+const STATUS_TEXT = { Open: 'Available', Booked: 'Booked', Break: 'Break', Closed: 'Closed', Past: 'Past', TooShort: 'Not enough time' }
+const STATUS_TITLE = {
+  Booked: 'Another appointment is at this time',
+  Break: 'The 30-minute break after an appointment',
+  Closed: 'Closed by the salon',
+  TooShort: 'This service would run past closing time or into another appointment and its 30-minute break.',
+}
+
+/** "Taken: 11:30 AM – 1:00 PM (break until 1:30 PM)": the appointments already on the day, times only. */
+function TakenTimes({ taken }) {
+  if (!taken?.length) return null
+  return (
+    <p className="slot-taken">
+      <span className="slot-taken-label">Taken:</span>
+      {taken.map((t) => (
+        <span key={t.startTime} className="slot-taken-item">
+          {formatTime(t.startTime)} – {formatTime(t.endTime)} <span className="muted">(break until {formatTime(t.breakUntil)})</span>
+        </span>
+      ))}
+    </p>
+  )
+}
 
 /**
  * Date picker plus that day's start times (Ref 10.1). With a serviceId each time shows when that service would
@@ -38,6 +58,7 @@ export function SlotPicker({ date, onDateChange, selectedTime, onTimeChange, ser
               {` · each appointment is followed by a ${slots.data.bufferMinutes}-minute break`}
             </p>
           )}
+          {!slots.data.isClosed && <TakenTimes taken={slots.data.taken} />}
           <div className="slot-grid">
             {slots.data.slots.map((slot) => {
               const isCurrent = keepTime && slot.startTime === keepTime
@@ -49,7 +70,8 @@ export function SlotPicker({ date, onDateChange, selectedTime, onTimeChange, ser
                   aria-pressed={selected} onClick={() => onTimeChange(slot.startTime)}
                   title={open ? undefined : isCurrent ? 'Your current time' : STATUS_TITLE[slot.status] ?? STATUS_TEXT[slot.status]}>
                   <span className="slot-time">{formatTime(slot.startTime)} – {formatTime(slot.endTime)}</span>
-                  <span className="slot-status">{isCurrent ? 'Current' : STATUS_TEXT[slot.status]}</span>
+                  {/* The exact reason when there is one ("Break until 1:30 PM", "Too close to the 11:30 AM appointment"). */}
+                  <span className="slot-status">{isCurrent ? 'Current' : slot.note ?? STATUS_TEXT[slot.status]}</span>
                 </button>
               )
             })}
@@ -57,6 +79,8 @@ export function SlotPicker({ date, onDateChange, selectedTime, onTimeChange, ser
           <div className="slot-legend" aria-hidden="true">
             <span><i className="legend legend-open" /> Available</span>
             <span><i className="legend legend-booked" /> Booked</span>
+            <span><i className="legend legend-break" /> Break after an appointment</span>
+            <span><i className="legend legend-tooshort" /> Not enough time</span>
             <span><i className="legend legend-closed" /> Closed</span>
           </div>
         </fieldset>

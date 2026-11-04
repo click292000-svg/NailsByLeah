@@ -78,7 +78,7 @@ tokens at the top of `app.css`, so change a colour or size there rather than in 
 
 Conventions:
 
-- **Forms:** related fields go in `.grid-2` (two columns from 760px, one column on phones). Short admin forms use `.inline-form-fields`, a wrapping row with the button at the end.
+- **Forms:** related fields go in `.grid-2` (two columns from 760px, one column on phones). Admin lists (Services, Activity log) share a column template so their columns line up, with the add form in a dashed `.catalog-add` box.
 - **Buttons:** `.btn-primary` for the main action, `.btn-secondary` for the alternative, `.btn-ghost` / `.btn-danger-ghost` for row actions. Full-width (`.btn-block`) only inside narrow cards such as login.
 - **Tables:** `.data-table` turns into labelled cards below 760px (each cell needs `data-label`).
 - **Motion:** buttons lift slightly on hover, dialogs fade and rise in, booking steps slide in. Everything respects `prefers-reduced-motion`.

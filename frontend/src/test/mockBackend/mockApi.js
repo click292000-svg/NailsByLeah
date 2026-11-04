@@ -196,27 +196,35 @@ function daySlots(db, date, serviceId) {
   const starts = slotStarts(db)
   const blocks = blocksFor(db, date)
   const closing = toMinutes(closingTime(db))
-  const slot = (start, status) => ({ startTime: start, endTime: addMinutesToTime(start, duration), status })
-  const day = (isClosed, slots) => ({ date, isClosed, closedReason: isClosed ? 'Closed' : null, slots,
+  const slot = (start, status, note = null) => ({ startTime: start, endTime: addMinutesToTime(start, duration), status, note })
+  const day = (isClosed, slots, taken = []) => ({ date, isClosed, closedReason: isClosed ? 'Closed' : null, slots, taken,
     openingTime: schedule.openingTime, closingTime: closingTime(db), durationMinutes: duration, bufferMinutes: schedule.bufferMinutes })
   if (schedule.closedDaysOfWeek.includes(dayOfWeek(date)) || blocks.some((b) => b.startTime === null))
     return day(true, starts.map((s) => slot(s, 'Closed')))
 
   const blocked = blocks.map(blockPeriod)
-  const occupied = activeOn(db, date).map((b) => occupiedBy(b.startTime, b.durationMinutes))
+  // Same as the API: each appointment is the service itself, then the break after it.
+  const booked = activeOn(db, date).map((b) => ({
+    start: b.startTime, service: period(b.startTime, b.durationMinutes), occupied: occupiedBy(b.startTime, b.durationMinutes),
+    endTime: addMinutesToTime(b.startTime, b.durationMinutes), breakUntil: addMinutesToTime(b.startTime, b.durationMinutes + schedule.bufferMinutes),
+  })).sort((a, b) => a.service[0] - b.service[0])
   const beyondWindow = date > addDays(today(), schedule.maxDaysAhead)
-  return day(false, starts.map((start) => {
+  const slots = starts.map((start) => {
     const minute = toMinutes(start)
     const inside = ([from, to]) => from <= minute && minute < to
     const service = period(start, duration)
-    return slot(start,
-      startsAt(date, start) <= new Date() ? 'Past'
-        : beyondWindow || blocked.some(inside) ? 'Closed'
-          : occupied.some(inside) ? 'Booked'
-            : service[1] > closing || blocked.some((b) => overlaps(b, service))
-              || occupied.some((o) => overlaps(o, occupiedBy(start, duration))) ? 'TooShort'
-              : 'Open')
-  }))
+    if (startsAt(date, start) <= new Date()) return slot(start, 'Past')
+    if (beyondWindow || blocked.some(inside)) return slot(start, 'Closed')
+    if (booked.some((b) => inside(b.service))) return slot(start, 'Booked')
+    const resting = booked.find((b) => inside(b.occupied))
+    if (resting) return slot(start, 'Break', `Break until ${clockText(resting.breakUntil)}`)
+    if (service[1] > closing) return slot(start, 'TooShort', `Ends after closing (${clockText(closingTime(db))})`)
+    if (blocked.some((b) => overlaps(b, service))) return slot(start, 'TooShort', 'Runs into a closed time')
+    const next = booked.find((b) => overlaps(b.occupied, occupiedBy(start, duration)))
+    if (next) return slot(start, 'TooShort', `Too close to the ${clockText(next.start)} appointment`)
+    return slot(start, 'Open')
+  })
+  return day(false, slots, booked.map((b) => ({ startTime: b.start, endTime: b.endTime, breakUntil: b.breakUntil })))
 }
 
 function ensureBookable(db, date, startTime, duration, movingBookingId = null) {

@@ -144,12 +144,12 @@ function OpeningHoursCard({ onSaved }) {
   )
 }
 
-const TAG_TEXT = { Open: 'Open', Booked: 'Booked', Closed: 'Closed', Past: 'Past', TooShort: 'Short gap' }
+const TAG_TEXT = { Open: 'Open', Booked: 'Booked', Break: 'Break', Closed: 'Closed', Past: 'Past', TooShort: 'Short gap' }
 
-/** "12 open · 4 booked · 1 closed" for the day, so the grid can be read at a glance. */
+/** "12 open · 3 booked · 1 break · 1 closed" for the day, so the grid can be read at a glance. */
 function TimeCounts({ slots }) {
   const count = (...statuses) => slots.filter((s) => statuses.includes(s.status)).length
-  const parts = [[count('Open', 'TooShort'), 'open'], [count('Booked'), 'booked'], [count('Closed'), 'closed']].filter(([n]) => n > 0)
+  const parts = [[count('Open', 'TooShort'), 'open'], [count('Booked'), 'booked'], [count('Break'), 'break'], [count('Closed'), 'closed']].filter(([n]) => n > 0)
   return <span className="muted small">{parts.map(([n, word]) => `${n} ${word}`).join(' · ')}</span>
 }
 
@@ -219,7 +219,7 @@ function DayPanel({ date, blocks, onChanged }) {
                 const label = TAG_TEXT[slot.status] ?? slot.status
                 // Booked and past times can't be changed: an appointment's time is never opened up for someone else.
                 const action = open ? () => block(slot.startTime, undefined, { quiet: true }) : period ? () => reopen(period, { quiet: true }) : null
-                const hint = open ? 'Click to close' : period ? (longPeriod ? `Click to reopen ${span(period.startTime, period.endTime)}` : 'Click to reopen') : label
+                const hint = open ? 'Click to close' : period ? (longPeriod ? `Click to reopen ${span(period.startTime, period.endTime)}` : 'Click to reopen') : slot.note ?? label
                 const working = busy === `${slot.startTime}-` || (period && busy === `un-${period.id}`)
                 return (
                   <button key={slot.startTime} type="button" disabled={!action || Boolean(busy)} onClick={action ?? undefined}
@@ -233,8 +233,8 @@ function DayPanel({ date, blocks, onChanged }) {
             </div>
           )}
           <p className="muted small">
-            Click an <strong>open</strong> time to close it, or a <strong>closed</strong> time to reopen it. <strong>Booked</strong> includes
-            the 30-minute break after each appointment; move or cancel the booking before closing that time.
+            Click an <strong>open</strong> time to close it, or a <strong>closed</strong> time to reopen it. <strong>Booked</strong> and
+            the 30-minute <strong>break</strong> after each appointment can't be closed; move or cancel the booking first.
           </p>
         </div>
       )}

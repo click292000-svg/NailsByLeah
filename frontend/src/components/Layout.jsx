@@ -56,7 +56,7 @@ export function Layout() {
       <header className="site-header">
         <div className="header-inner">
           <Link to={isAdmin ? '/admin' : '/'} className="brand">
-            <img src="/img/logo.png" width="1000" height="455" alt={salon.name} />
+            <img src="/img/logo-header.webp" width="360" height="164" alt={salon.name} />
           </Link>
           <button type="button" className="menu-toggle" aria-expanded={menuOpen} aria-controls="site-nav"
             onClick={() => setMenuOpen((open) => !open)}>

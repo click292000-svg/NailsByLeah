@@ -84,31 +84,44 @@ public sealed class ScheduleService(
         var closing = DayPeriod.ToMinutes(closingTime);
         var starts = StartTimes(closing);
         var blocks = await blockedSlots.GetForDateAsync(date, ct);
-        DaySlotsResponse Day(bool closed, IEnumerable<SlotResponse> slots) => new(
-            date, closed, closed ? "Closed" : null, slots.ToList(), _options.OpeningTime, closingTime, duration, Buffer);
+        DaySlotsResponse Day(bool closed, IEnumerable<SlotResponse> slots, IReadOnlyList<TakenPeriodResponse> taken) => new(
+            date, closed, closed ? "Closed" : null, slots.ToList(), _options.OpeningTime, closingTime, duration, Buffer, taken);
 
         if (_options.ClosedDays.Contains(date.DayOfWeek) || blocks.Any(b => b.IsWholeDay))
-            return Day(true, starts.Select(s => Slot(s, duration, SlotStatuses.Closed)));
+            return Day(true, starts.Select(s => Slot(s, duration, SlotStatuses.Closed)), []);
 
         var blocked = blocks.Select(BlockedPeriod).ToList();
-        var occupied = (await bookings.GetActiveOnDateAsync(date, ct))
-            .Select(a => DayPeriod.Occupied(a.StartTime, a.DurationMinutes, Buffer)).ToList();
+        // Each appointment is split into the appointment itself and the break after it, so a time can say which it falls in.
+        var appointments = (await bookings.GetActiveOnDateAsync(date, ct))
+            .OrderBy(a => a.StartTime)
+            .Select(a => new BookedTime(a.StartTime, a.DurationMinutes, Buffer))
+            .ToList();
         var now = clock.LocalNow;
         var beyondWindow = date > clock.Today.AddDays(_options.MaxDaysAhead);
 
-        return Day(false, starts.Select(start =>
+        var slots = starts.Select(start =>
         {
             var minute = DayPeriod.ToMinutes(start);
             var service = DayPeriod.From(start, duration);
-            var status =
-                date.ToDateTime(start) <= now ? SlotStatuses.Past
-                : beyondWindow || blocked.Any(b => b.Contains(minute)) ? SlotStatuses.Closed
-                : occupied.Any(o => o.Contains(minute)) ? SlotStatuses.Booked
-                : service.End > closing || blocked.Any(b => b.Overlaps(service))
-                  || occupied.Any(o => o.Overlaps(DayPeriod.Occupied(start, duration, Buffer))) ? SlotStatuses.TooShort
-                : SlotStatuses.Open;
-            return Slot(start, duration, status);
-        }));
+            var withBreak = DayPeriod.Occupied(start, duration, Buffer);
+            if (date.ToDateTime(start) <= now)
+                return Slot(start, duration, SlotStatuses.Past);
+            if (beyondWindow || blocked.Any(b => b.Contains(minute)))
+                return Slot(start, duration, SlotStatuses.Closed);
+            if (appointments.Any(a => a.Service.Contains(minute)))
+                return Slot(start, duration, SlotStatuses.Booked);
+            if (appointments.FirstOrDefault(a => a.Occupied.Contains(minute)) is { } resting)
+                return Slot(start, duration, SlotStatuses.Break, $"Break until {Format(resting.BreakUntil)}");
+            if (service.End > closing)
+                return Slot(start, duration, SlotStatuses.TooShort, $"Ends after closing ({Format(closingTime)})");
+            if (blocked.Any(b => b.Overlaps(service)))
+                return Slot(start, duration, SlotStatuses.TooShort, "Runs into a closed time");
+            if (appointments.FirstOrDefault(a => a.Occupied.Overlaps(withBreak)) is { } next)
+                return Slot(start, duration, SlotStatuses.TooShort, $"Too close to the {Format(next.Start)} appointment");
+            return Slot(start, duration, SlotStatuses.Open);
+        });
+
+        return Day(false, slots, appointments.Select(a => new TakenPeriodResponse(a.Start, a.End, a.BreakUntil)).ToList());
     }
 
     public async Task EnsureBookableAsync(DateOnly date, TimeOnly startTime, int durationMinutes, int? movingBookingId, CancellationToken ct = default)
@@ -251,7 +264,17 @@ public sealed class ScheduleService(
         return starts;
     }
 
-    private static SlotResponse Slot(TimeOnly start, int duration, string status) => new(start, start.AddMinutes(duration), status);
+    private static SlotResponse Slot(TimeOnly start, int duration, string status, string? note = null) =>
+        new(start, start.AddMinutes(duration), status, note);
+
+    /// <summary>An appointment on the day: the service itself, then the break after it.</summary>
+    private sealed record BookedTime(TimeOnly Start, int DurationMinutes, int BufferMinutes)
+    {
+        public TimeOnly End => Start.AddMinutes(DurationMinutes);
+        public TimeOnly BreakUntil => Start.AddMinutes(DurationMinutes + BufferMinutes);
+        public DayPeriod Service => DayPeriod.From(Start, DurationMinutes);
+        public DayPeriod Occupied => DayPeriod.Occupied(Start, DurationMinutes, BufferMinutes);
+    }
 
     private DayPeriod BlockedPeriod(BlockedSlot b) =>
         b.IsWholeDay ? new DayPeriod(0, 24 * 60) : DayPeriod.Between(b.StartTime!.Value, b.EndTime ?? b.StartTime.Value.AddMinutes(Interval));

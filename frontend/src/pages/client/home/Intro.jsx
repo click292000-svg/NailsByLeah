@@ -36,7 +36,7 @@ export function Intro({ plan }) {
   return (
     <div className={classes} aria-hidden="true">
       <div className={stage === 'start' ? 'hm-intro-logo' : 'hm-intro-logo show'}>
-        <img ref={img} src="/img/logo.png" width="1000" height="455" alt="" />
+        <img ref={img} src="/img/logo.webp" width="1000" height="455" alt="" />
         <Sparkle style={{ left: -26, top: -6 }} />
         <Sparkle style={{ right: -24, top: 4 }} />
         <Sparkle style={{ left: '45%', bottom: -24 }} />

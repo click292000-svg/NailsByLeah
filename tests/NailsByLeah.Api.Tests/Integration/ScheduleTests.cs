@@ -50,10 +50,13 @@ public sealed class ScheduleTests(ApiFactory factory) : IClassFixture<ApiFactory
         Assert.Equal(60, booked.Booking.DurationMinutes);
 
         var day = await factory.NewClient().GetAsync<DaySlotsResponse>(SlotsUrl(5, Plain));
-        string Status(int hour, int minute) => day.Slots.Single(s => s.StartTime == new TimeOnly(hour, minute)).Status;
-        Assert.Equal(SlotStatuses.Booked, Status(11, 0));
-        Assert.Equal(SlotStatuses.Booked, Status(12, 0)); // the break
-        Assert.Equal(SlotStatuses.Open, Status(12, 30));
+        SlotResponse SlotAt(int hour, int minute) => day.Slots.Single(s => s.StartTime == new TimeOnly(hour, minute));
+        Assert.Equal(SlotStatuses.Booked, SlotAt(11, 0).Status);
+        Assert.Equal(SlotStatuses.Booked, SlotAt(11, 30).Status);
+        Assert.Equal((SlotStatuses.Break, "Break until 12:30 PM"), (SlotAt(12, 0).Status, SlotAt(12, 0).Note));
+        Assert.Equal(SlotStatuses.Open, SlotAt(12, 30).Status);
+        var taken = Assert.Single(day.Taken);
+        Assert.Equal((new TimeOnly(11, 0), new TimeOnly(12, 0), new TimeOnly(12, 30)), (taken.StartTime, taken.EndTime, taken.BreakUntil));
 
         var second = await factory.CreateClientAsync();
         var tooEarly = await second.Client.PostJsonAsync("/api/bookings", TestHelpers.NewBooking(At(5, 12), Plain));
@@ -73,6 +76,7 @@ public sealed class ScheduleTests(ApiFactory factory) : IClassFixture<ApiFactory
         var day = await factory.NewClient().GetAsync<DaySlotsResponse>(SlotsUrl(6, WithDesign));
         var at1230 = day.Slots.Single(s => s.StartTime == new TimeOnly(12, 30));
         Assert.Equal(SlotStatuses.TooShort, at1230.Status);
+        Assert.Equal("Too close to the 2:00 PM appointment", at1230.Note);
         Assert.Equal(new TimeOnly(14, 0), at1230.EndTime);
         Assert.Equal(SlotStatuses.Open, day.Slots.Single(s => s.StartTime == new TimeOnly(12, 0)).Status);
 
@@ -150,6 +154,7 @@ public sealed class ScheduleTests(ApiFactory factory) : IClassFixture<ApiFactory
             var day = await factory.NewClient().GetAsync<DaySlotsResponse>(SlotsUrl(11, Plain));
             Assert.Equal(new TimeOnly(20, 0), day.ClosingTime);
             Assert.Equal(SlotStatuses.TooShort, day.Slots[^1].Status); // 7:30 PM + 60 minutes is past 8:00 PM
+            Assert.Equal("Ends after closing (8:00 PM)", day.Slots[^1].Note);
             await (await user.Client.PostJsonAsync("/api/bookings", TestHelpers.NewBooking(At(11, 19, 30), Plain)))
                 .ShouldHaveStatus(HttpStatusCode.Conflict);
         }

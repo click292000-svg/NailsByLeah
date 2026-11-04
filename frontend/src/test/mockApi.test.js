@@ -47,7 +47,7 @@ describe('Mock backend', () => {
     const { booking: first } = await call('POST', '/bookings', { body: booking({ startTime: '11:00:00' }) })
     expect(first).toMatchObject({ endTime: '12:00:00', durationMinutes: 60 })
     const day = await call('GET', '/slots', { query: { date: dateFromToday(3), serviceId: '1' } })
-    expect(day.slots.find((s) => s.startTime === '12:00:00').status).toBe('Booked')
+    expect(day.slots.find((s) => s.startTime === '12:00:00')).toMatchObject({ status: 'Break', note: 'Break until 12:30 PM' })
     expect(day.slots.find((s) => s.startTime === '12:30:00').status).toBe('Open')
 
     await signIn({ username: 'ana_lim', password: 'ClientPass123' })

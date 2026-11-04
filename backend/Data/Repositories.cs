@@ -14,7 +14,6 @@ public interface IUserRepository
     Task<User?> GetByIdAsync(int id, CancellationToken ct = default);
     Task<User?> FindByUsernameOrEmailAsync(string usernameOrEmail, CancellationToken ct = default);
     Task<User?> FindByEmailAsync(string email, CancellationToken ct = default);
-    Task<User?> FindByUsernameAsync(string username, CancellationToken ct = default);
     Task<bool> UsernameExistsAsync(string username, CancellationToken ct = default);
     Task<bool> EmailExistsAsync(string email, CancellationToken ct = default);
     Task<bool> PhoneNumberExistsAsync(string phoneNumber, CancellationToken ct = default);
@@ -138,7 +137,6 @@ internal sealed class UserRepository(AppDbContext db) : IUserRepository
 
     public Task<User?> FindByEmailAsync(string email, CancellationToken ct) => Live.FirstOrDefaultAsync(u => u.Email == email, ct);
 
-    public Task<User?> FindByUsernameAsync(string username, CancellationToken ct) => Live.FirstOrDefaultAsync(u => u.Username == username, ct);
 
     // Uniqueness checks include soft-deleted rows because the UNIQUE indexes do too.
     public Task<bool> UsernameExistsAsync(string username, CancellationToken ct) => db.Users.AnyAsync(u => u.Username == username, ct);

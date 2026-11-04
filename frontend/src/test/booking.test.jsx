@@ -121,8 +121,9 @@ describe('Booking flow', () => {
     // before the next appointment are disabled (Ref 10.1). Seeded booking #10: 1:00 PM, 60 minutes.
     pickDate(dateFromToday(5))
     expect(await screen.findByRole('button', { name: /^1:00.*Booked/ })).toBeDisabled()
-    expect(screen.getByRole('button', { name: /^2:00.*Booked/ })).toBeDisabled() // the break
-    expect(screen.getByRole('button', { name: /^11:30.*Not enough time/ })).toBeDisabled() // would end 1:00 PM
+    expect(screen.getByRole('button', { name: /^2:00.*Break until 2:30 PM/ })).toBeDisabled() // the break, not a booking
+    expect(screen.getByRole('button', { name: /^11:30.*Too close to the 1:00 PM appointment/ })).toBeDisabled() // would end 1:00 PM
+    expect(screen.getByText('1:00 PM – 2:00 PM')).toBeInTheDocument() // "Taken:" shows the real appointment
     expect(screen.getByRole('button', { name: /^11:00 AM – 12:30 PM.*Available/ })).toBeEnabled()
     expect(screen.getByRole('button', { name: /^2:30.*Available/ })).toBeEnabled()
     pickDate(dateFromToday(3))

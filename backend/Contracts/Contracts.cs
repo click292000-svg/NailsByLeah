@@ -70,7 +70,11 @@ public sealed record UpdateServiceRequest(string Name, decimal Price, bool IsAct
 
 // ---- Schedule ----
 
-public sealed record SlotResponse(TimeOnly StartTime, TimeOnly EndTime, string Status);
+/// <summary>One start time. <paramref name="Note"/> says exactly why a Break or TooShort time can't be chosen.</summary>
+public sealed record SlotResponse(TimeOnly StartTime, TimeOnly EndTime, string Status, string? Note = null);
+
+/// <summary>An appointment already on the day: when it runs and when the break after it ends. Times only, no client details.</summary>
+public sealed record TakenPeriodResponse(TimeOnly StartTime, TimeOnly EndTime, TimeOnly BreakUntil);
 
 /// <summary>
 /// Start times for one day. With a service, a time is Open only if that service fits before the closing time and
@@ -78,7 +82,7 @@ public sealed record SlotResponse(TimeOnly StartTime, TimeOnly EndTime, string S
 /// </summary>
 public sealed record DaySlotsResponse(
     DateOnly Date, bool IsClosed, string? ClosedReason, IReadOnlyList<SlotResponse> Slots,
-    TimeOnly OpeningTime, TimeOnly ClosingTime, int DurationMinutes, int BufferMinutes);
+    TimeOnly OpeningTime, TimeOnly ClosingTime, int DurationMinutes, int BufferMinutes, IReadOnlyList<TakenPeriodResponse> Taken);
 
 /// <summary>Opening hours shown on the website and the scheduling rules behind them.</summary>
 public sealed record SalonHoursResponse(TimeOnly OpeningTime, TimeOnly ClosingTime, int SlotIntervalMinutes, int BufferMinutes);
@@ -94,7 +98,10 @@ public sealed record BlockedSlotResponse(
 public static class SlotStatuses
 {
     public const string Open = "Open";
+    /// <summary>An appointment is happening at this time.</summary>
     public const string Booked = "Booked";
+    /// <summary>The 30-minute break after an appointment: no appointment, but nothing can start.</summary>
+    public const string Break = "Break";
     /// <summary>Closed by the administrator: a break, day off, holiday or any other reason.</summary>
     public const string Closed = "Closed";
     public const string Past = "Past";
