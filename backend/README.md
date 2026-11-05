@@ -114,6 +114,7 @@ Controller → Service → Repository (Ref 14.1):
 
 | Area | Endpoints |
 |---|---|
+| Health | `GET /api/health` (is the app running: for the host), `GET /api/health/database` (can it read its database: 200 or 503, for the keep-awake ping) |
 | Public | `GET /api/services`, `POST /api/pricing/quote`, `GET /api/slots?date=`, `GET /api/lookups` |
 | Account | `POST /api/auth/register`, `GET /api/auth/username-availability`, `POST /api/auth/verify-email`, `POST /api/auth/resend-verification`, `POST /api/auth/login`, `POST /api/auth/logout`, `GET /api/auth/me`, `POST /api/auth/forgot-password`, `POST /api/auth/reset-password/validate`, `POST /api/auth/reset-password` |
 | Client | `POST /api/bookings` (book and pay), `GET /api/bookings`, `GET /api/bookings/{id}`, `GET /api/bookings/{id}/receipt`, `POST /api/bookings/{id}/reschedule`, `POST /api/bookings/{id}/cancel` |
