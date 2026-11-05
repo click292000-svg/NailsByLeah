@@ -97,9 +97,9 @@ public sealed class ClientDataService(
         {
             try
             {
-                imageStore.Delete(file);
+                await imageStore.DeleteAsync(file);
             }
-            catch (IOException ex)
+            catch (Exception ex)
             {
                 logger.LogError(ex, "Could not delete a design photo file while erasing client {ClientId}", clientId);
             }

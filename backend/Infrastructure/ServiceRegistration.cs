@@ -34,6 +34,7 @@ public static class ServiceRegistration
         services.AddOptions<DatabaseOptions>().Bind(configuration.GetSection(DatabaseOptions.Section));
         services.AddOptions<AdminSeedOptions>().Bind(configuration.GetSection(AdminSeedOptions.Section));
         services.AddOptions<UploadOptions>().Bind(configuration.GetSection(UploadOptions.Section));
+        services.AddOptions<SupabaseOptions>().Bind(configuration.GetSection(SupabaseOptions.Section));
         services.AddOptions<RateLimitOptions>().Bind(configuration.GetSection(RateLimitOptions.Section));
         services.AddNailsByLeahRateLimiting();
         services.AddOptions<ProxyOptions>().Bind(configuration.GetSection(ProxyOptions.Section));
@@ -97,7 +98,17 @@ public static class ServiceRegistration
             sp.GetRequiredService<IOptions<BrevoOptions>>().Value.IsConfigured ? sp.GetRequiredService<BrevoEmailSender>()
             : sp.GetRequiredService<IOptions<SmtpOptions>>().Value.IsConfigured ? ActivatorUtilities.CreateInstance<SmtpEmailSender>(sp)
             : ActivatorUtilities.CreateInstance<LoggingEmailSender>(sp));
-        services.AddSingleton<IReferenceImageStore, FileSystemReferenceImageStore>();
+        // Photos: Supabase Storage when configured (hosts wipe their disk), otherwise this computer's disk.
+        services.AddSingleton<FileSystemReferenceImageStore>();
+        services.AddHttpClient<SupabaseReferenceImageStore>((sp, client) =>
+        {
+            client.BaseAddress = new Uri(sp.GetRequiredService<IOptions<SupabaseOptions>>().Value.StorageBaseUrl);
+            client.Timeout = TimeSpan.FromSeconds(30);
+        });
+        services.AddScoped<IReferenceImageStore>(sp =>
+            sp.GetRequiredService<IOptions<SupabaseOptions>>().Value.IsConfigured
+                ? sp.GetRequiredService<SupabaseReferenceImageStore>()
+                : sp.GetRequiredService<FileSystemReferenceImageStore>());
         services.AddScoped<IAppointmentReminderJob, AppointmentReminderJob>();
         services.AddHostedService<AppointmentReminderWorker>();
         services.AddSingleton<QueuedBackgroundNotifications>();

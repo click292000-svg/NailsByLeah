@@ -53,6 +53,18 @@ public sealed class UploadOptions
     public string ReferenceImagePath { get; set; } = "App_Data/reference-images";
 }
 
+/// <summary>Supabase Storage for reference photos. The key is a secret: user secrets or host settings only.</summary>
+public sealed class SupabaseOptions
+{
+    public const string Section = "Supabase";
+    public string? Url { get; set; }
+    public string? SecretKey { get; set; }
+    public string ReferenceImageBucket { get; set; } = "reference-images";
+
+    public bool IsConfigured => !string.IsNullOrWhiteSpace(Url) && !string.IsNullOrWhiteSpace(SecretKey);
+    public string StorageBaseUrl => $"{Url?.TrimEnd('/')}/storage/v1/";
+}
+
 public sealed class LegalOptions
 {
     public const string Section = "Legal";

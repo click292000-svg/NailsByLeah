@@ -49,9 +49,10 @@ dotnet run --project backend/NailsByLeah.Api.csproj --launch-profile https
 | Concern | Development | Before going live |
 |---|---|---|
 | Email | Logged to the console (look for `DEV EMAIL`), including verification codes and reset links. Only possible in Development | Set `Brevo:ApiKey` and `Email:FromAddress` (a sender verified in Brevo). Brevo's HTTPS API works on hosts that block SMTP ports. `Smtp:Host`, `Smtp:Username`, `Smtp:Password` (e.g. Gmail with an app password) also work where SMTP is allowed |
+| Design photos | Saved on this computer's disk unless `Supabase:Url` and `Supabase:SecretKey` are in user secrets | Set both on the host, with a private `reference-images` bucket. Hosts wipe their disk |
 | Payments | `SimulatedPaymentGateway` approves every GCash/Maya charge without moving money | Implement `IPaymentGateway` for a real provider and register it in `Infrastructure/ServiceRegistration.cs` |
 
-Outside Development the app refuses to start while either stand-in is still in use, or while `AllowedHosts` or `Frontend:BaseUrl` is not set to the site's real address, or `ForwardedHeaders:Enabled` is not true.
+Outside Development the app refuses to start while the email or payment stand-in is in use or Supabase Storage isn't set, or while `AllowedHosts` or `Frontend:BaseUrl` is not set to the site's real address, or `ForwardedHeaders:Enabled` is not true.
 
 ## Serving the website
 
@@ -85,6 +86,7 @@ All settings are in `appsettings.json`. Override any of them with user secrets o
 | `Booking` | Deposit (PHP 150), minimum notice for rescheduling (24 h) |
 | `Schedule` | Time zone (Asia/Manila), the 11:00 AM opening time, the 30-minute start-time grid, the 30-minute break after every appointment, the booking window (30 days ahead), closed weekdays. The closing time (default 9:00 PM) is set by administrators on the Schedule page and stored in `salon_settings` |
 | `Legal:TermsVersion` | Terms & Conditions version recorded at registration (currently 2.2; the text is in `frontend/src/content/legal.js`) |
+| `Supabase` | `Url`, `SecretKey` (user secrets or host settings only) and `ReferenceImageBucket`, for design photos. Empty uses `Uploads:ReferenceImagePath` on disk. The bucket must be private: only the API holds the key, and browsers get photos through its permission checks |
 | `Frontend:BaseUrl` | The site's address, used for every link in emails. On the host: the real `https://` address |
 | `Email` | Sender address and name shown on every email |
 | `Brevo`, `Smtp` | Email delivery: Brevo's API when `Brevo:ApiKey` is set, otherwise SMTP when `Smtp:Host` is set, otherwise the console |

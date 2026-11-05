@@ -2,11 +2,12 @@ import { useId, useState } from 'react'
 import { api, referenceImageUrl } from '../api'
 import { errorMessage } from '../api/errors'
 import { LIMITS, REFERENCE_IMAGE_ACCEPT, REFERENCE_IMAGE_MESSAGES, validateReferenceImage } from '../validation/rules'
+import { shrinkImage } from '../lib/shrinkImage'
 import { Spinner } from './ui'
 
 /**
- * Upload up to 3 photos of the nail design the client wants. Each photo is checked (JPG/PNG/WebP, 5 MB),
- * previewed straight away, and uploaded to private storage. `images` are the uploaded photos; they are
+ * Upload up to 3 photos of the nail design the client wants. Each photo is checked (JPG/PNG/WebP), shrunk if it is
+ * large, previewed straight away, and uploaded to private storage. `images` are the uploaded photos; they are
  * attached to the booking when it is paid for, and kept in the booking draft until then.
  */
 export function ReferenceImagePicker({ images, onChange }) {
@@ -22,15 +23,22 @@ export function ReferenceImagePicker({ images, onChange }) {
     const files = [...fileList]
     if (files.length > slotsLeft) setError(REFERENCE_IMAGE_MESSAGES.tooMany)
     for (const file of files.slice(0, Math.max(0, slotsLeft))) {
+      // Size is checked after shrinking: a large phone photo usually ends up well under the limit.
       const problem = validateReferenceImage(file)
-      if (problem) {
+      if (problem && problem !== REFERENCE_IMAGE_MESSAGES.size) {
         setError(`${file.name}: ${problem}`)
         continue
       }
       const pending = { key: `${file.name}-${Date.now()}-${Math.random()}`, name: file.name, previewUrl: URL.createObjectURL(file) }
       setUploading((current) => [...current, pending])
       try {
-        const uploaded = await api.referenceImages.upload(file)
+        const ready = await shrinkImage(file)
+        const stillTooBig = validateReferenceImage(ready)
+        if (stillTooBig) {
+          setError(`${file.name}: ${stillTooBig}`)
+          continue
+        }
+        const uploaded = await api.referenceImages.upload(ready)
         onChange((current) => [...current, { ...uploaded, name: file.name }])
       } catch (err) {
         setError(`${file.name}: ${err.fieldError?.('file') ?? errorMessage(err)}`)
@@ -64,7 +72,7 @@ export function ReferenceImagePicker({ images, onChange }) {
         <span className="field-label" id={`${inputId}-label`}>Design reference photos <span className="muted">(optional)</span></span>
         <span className="field-counter">{images.length + uploading.length}/{LIMITS.referenceImagesPerBooking}</span>
       </div>
-      <p className="field-hint">Show Leyah the look you want. JPG, PNG or WebP, up to 5 MB each.</p>
+      <p className="field-hint">Show Leyah the look you want. JPG, PNG or WebP. Large photos are shrunk for you.</p>
 
       <ul className="reference-grid" aria-label="Your reference photos">
         {images.map((image, i) => (

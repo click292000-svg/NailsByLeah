@@ -31,7 +31,7 @@ Hosting: ONE .NET service (API + the React website served together)
 
 2. **Email: SMTP is blocked on cheap hosting.** ✅ **Done 2026-11-03.** `BrevoEmailSender` sends through Brevo's HTTPS API (free 300/day). Sender: `nailsbyleyah.bookings@gmail.com` (verified in Brevo). Verification and password-reset emails tested and delivered. Salon alerts (new booking, client cancellation, client reschedule) go to `Notifications:SalonEmail`, tested and delivered. On the host, set `Brevo__ApiKey`, `Email__FromAddress` and `Notifications__SalonEmail`. Later: add the salon's own domain in Brevo so emails stop landing in spam.
 
-3. **Design photos: stored on the server disk** (`backend/Infrastructure/ReferenceImageStore.cs`). Hosts wipe the disk on deploy/restart → move to Supabase Storage (private bucket).
+3. **Design photos.** ✅ Saved to a private Supabase Storage bucket when `Supabase__Url` and `Supabase__SecretKey` are set (`Infrastructure/SupabaseReferenceImageStore.cs`), and shrunk in the browser first. The free plan has 1 GB. Still to decide: how long to keep photos after the appointment. Create a separate `reference-images` bucket and key for the live project.
 
 4. **Login sessions and HTTPS behind a proxy.**
    - ✅ Data Protection keys are in the database (`data_protection_keys`), so restarts don't log everyone out.
@@ -62,7 +62,6 @@ Status of how the parts fit together. Nothing here has run on Postgres, Render o
 - The test deployment depends on Postgres: there is no database to run against on Render until then.
 - Render must get `Frontend__BaseUrl`, `AllowedHosts`, `ForwardedHeaders__Enabled`, `Brevo__ApiKey`, `Email__FromAddress`, `Notifications__SalonEmail`, the connection string and `AdminSeed__*`, plus the port the Dockerfile listens on.
 - Check on the live site: `ForwardLimit` (see backend README), Render's health check against `AllowedHosts`, and the `Asia/Manila` time zone in the Docker image.
-- `IReferenceImageStore` has synchronous `OpenRead` and `Delete`; cloud storage needs them asynchronous, so that interface and `ReferenceImageService` change with the Supabase Storage step.
 - A sleeping free service delays webhooks. PayMongo retries failed deliveries; confirm the same for HitPay, and keep the keep-awake ping.
 
 ## Payments: keep PayMongo and HitPay swappable
@@ -95,7 +94,7 @@ What must change, whichever provider wins. **Today's `IPaymentGateway.ChargeAsyn
 ## Order
 1. Port the database code to Postgres; test against a Supabase dev project.
 2. Email API, photos in Supabase Storage, persisted login keys, forwarded headers, serve the website from the API.
-3. Deploy a test version; set the host's settings (database, email key, storage key, website address `Frontend__BaseUrl`, `AllowedHosts`, `ForwardedHeaders__Enabled=true`, admin account). The app refuses to start without them. After deploying, check the visitor address in the Activity log (backend README, Security): Render doesn't document `X-Forwarded-For`, so `ForwardLimit` must be confirmed on the live site.
+3. Deploy a test version; set the host's settings (database, email key, storage key, website address `Frontend__BaseUrl`, `AllowedHosts`, `ForwardedHeaders__Enabled=true`, `Supabase__Url`, `Supabase__SecretKey`, admin account). The app refuses to start without them. After deploying, check the visitor address in the Activity log (backend README, Security): Render doesn't document `X-Forwarded-For`, so `ForwardLimit` must be confirmed on the live site.
 4. Build the provider-neutral payment flow against a fake gateway, then connect PayMongo in test mode. If PayMongo doesn't approve the business, connect HitPay instead: only the gateway class and settings differ.
 5. Go live: live keys (after business verification), domain, add the domain in Brevo.
 

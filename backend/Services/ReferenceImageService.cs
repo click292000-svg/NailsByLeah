@@ -46,6 +46,7 @@ public sealed class ReferenceImageService(
     public static readonly string TooManyPendingMessage =
         $"You already have {UploadLimits.PendingReferenceImagesPerClient} photos waiting to be added to a booking. Remove one before uploading another.";
     public static readonly string TooManyPerBookingMessage = $"You can add up to {UploadLimits.ReferenceImagesPerBooking} reference photos per booking.";
+    public static readonly string StoreUnavailableMessage = "The photo couldn't be saved right now. Please try again in a moment.";
     public static readonly string UnavailableMessage = "One of the reference photos is no longer available. Please upload it again.";
 
     public static ReferenceImageResponse ToResponse(ReferenceImage r) => new(r.Id, r.ContentType, r.SizeBytes, r.CreatedAt);
@@ -71,7 +72,18 @@ public sealed class ReferenceImageService(
         if ((await images.GetPendingForClientAsync(clientId, ct)).Count >= UploadLimits.PendingReferenceImagesPerClient)
             throw new ConflictException(TooManyPendingMessage, "too_many_pending_images");
 
-        var storedName = await store.SaveAsync(bytes, format.Extension, ct);
+        string storedName;
+        try
+        {
+            storedName = await store.SaveAsync(bytes, format.Extension, ct);
+        }
+        // A timeout is also an OperationCanceledException; only the client giving up may pass through.
+        catch (Exception ex) when (ex is not OperationCanceledException || !ct.IsCancellationRequested)
+        {
+            logger.LogError(ex, "Could not save a reference photo");
+            throw new ConflictException(StoreUnavailableMessage, "image_store_unavailable");
+        }
+
         var image = new ReferenceImage
         {
             ClientId = clientId,
@@ -87,7 +99,7 @@ public sealed class ReferenceImageService(
         }
         catch
         {
-            store.Delete(storedName); // no orphan files when the row could not be saved
+            await TryDeleteFileAsync(storedName, null); // no orphan files when the row could not be saved
             throw;
         }
         audit.Record(AuditActions.ReferenceImageUploaded, nameof(ReferenceImage), image.Id, $"{format.ContentType}, {image.SizeBytes} bytes");
@@ -109,13 +121,19 @@ public sealed class ReferenceImageService(
         image.IsDeleted = true;
         audit.Record(AuditActions.ReferenceImageRemoved, nameof(ReferenceImage), image.Id);
         await unitOfWork.SaveChangesAsync(ct);
+        await TryDeleteFileAsync(image.StoredFileName, image.Id);
+    }
+
+    /// <summary>The record is already settled, so a file that can't be deleted right now is logged, not shown to the client.</summary>
+    private async Task TryDeleteFileAsync(string storedFileName, int? imageId)
+    {
         try
         {
-            store.Delete(image.StoredFileName);
+            await store.DeleteAsync(storedFileName);
         }
-        catch (IOException ex)
+        catch (Exception ex)
         {
-            logger.LogWarning(ex, "Could not delete the file of reference image {ImageId}", image.Id);
+            logger.LogWarning(ex, "Could not delete the file of reference image {ImageId}", imageId);
         }
     }
 
@@ -125,7 +143,7 @@ public sealed class ReferenceImageService(
         // Another client's photo looks exactly like a missing one.
         if (image is null || (!isAdministrator && image.ClientId != userId))
             throw new NotFoundException("Reference photo not found.");
-        var content = store.OpenRead(image.StoredFileName) ?? throw new NotFoundException("Reference photo not found.");
+        var content = await store.OpenReadAsync(image.StoredFileName, ct) ?? throw new NotFoundException("Reference photo not found.");
         return (content, image.ContentType);
     }
 

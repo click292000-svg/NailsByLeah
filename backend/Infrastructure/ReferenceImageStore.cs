@@ -4,16 +4,31 @@ using NailsByLeah.Api.Configuration;
 
 namespace NailsByLeah.Api.Infrastructure;
 
-/// <summary>Private storage for uploaded reference photos. Swap for blob storage in production if needed.</summary>
+/// <summary>Private storage for uploaded reference photos: Supabase Storage when configured, otherwise this computer's disk.</summary>
 public interface IReferenceImageStore
 {
     /// <summary>Saves the bytes under a new random name and returns that name.</summary>
     Task<string> SaveAsync(ReadOnlyMemory<byte> content, string extension, CancellationToken ct = default);
 
     /// <summary>Opens a stored file for reading, or returns null when it no longer exists.</summary>
-    Stream? OpenRead(string storedFileName);
+    Task<Stream?> OpenReadAsync(string storedFileName, CancellationToken ct = default);
 
-    void Delete(string storedFileName);
+    /// <summary>Removes a stored file. A file that is already gone is not an error.</summary>
+    Task DeleteAsync(string storedFileName, CancellationToken ct = default);
+}
+
+/// <summary>Stored names are random (never the client's file name), so they cannot be guessed or used to reach other files.</summary>
+public static class ReferenceImageFileName
+{
+    public static string New(string extension) => $"{Convert.ToHexString(RandomNumberGenerator.GetBytes(16)).ToLowerInvariant()}{extension}";
+
+    public static string ContentTypeFor(string extension) => extension switch
+    {
+        ".jpg" => ImageSignature.Jpeg.ContentType,
+        ".png" => ImageSignature.Png.ContentType,
+        ".webp" => ImageSignature.Webp.ContentType,
+        _ => "application/octet-stream",
+    };
 }
 
 /// <summary>
@@ -32,23 +47,24 @@ public sealed class FileSystemReferenceImageStore : IReferenceImageStore
 
     public async Task<string> SaveAsync(ReadOnlyMemory<byte> content, string extension, CancellationToken ct = default)
     {
-        var name = $"{Convert.ToHexString(RandomNumberGenerator.GetBytes(16)).ToLowerInvariant()}{extension}";
+        var name = ReferenceImageFileName.New(extension);
         await using var file = new FileStream(PathFor(name), FileMode.CreateNew, FileAccess.Write, FileShare.None);
         await file.WriteAsync(content, ct);
         return name;
     }
 
-    public Stream? OpenRead(string storedFileName)
+    public Task<Stream?> OpenReadAsync(string storedFileName, CancellationToken ct = default)
     {
         var path = PathFor(storedFileName);
-        return File.Exists(path) ? new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read) : null;
+        return Task.FromResult<Stream?>(File.Exists(path) ? new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read) : null);
     }
 
-    public void Delete(string storedFileName)
+    public Task DeleteAsync(string storedFileName, CancellationToken ct = default)
     {
         var path = PathFor(storedFileName);
         if (File.Exists(path))
             File.Delete(path);
+        return Task.CompletedTask;
     }
 
     private string PathFor(string storedFileName)
