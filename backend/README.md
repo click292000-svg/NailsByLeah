@@ -51,7 +51,7 @@ dotnet run --project backend/NailsByLeah.Api.csproj --launch-profile https
 | Email | Logged to the console (look for `DEV EMAIL`), including verification codes and reset links. Only possible in Development | Set `Brevo:ApiKey` and `Email:FromAddress` (a sender verified in Brevo). Brevo's HTTPS API works on hosts that block SMTP ports. `Smtp:Host`, `Smtp:Username`, `Smtp:Password` (e.g. Gmail with an app password) also work where SMTP is allowed |
 | Payments | `SimulatedPaymentGateway` approves every GCash/Maya charge without moving money | Implement `IPaymentGateway` for a real provider and register it in `Infrastructure/ServiceRegistration.cs` |
 
-Outside Development the app refuses to start while either stand-in is still in use.
+Outside Development the app refuses to start while either stand-in is still in use, or while `AllowedHosts` is not set to the site's real address.
 
 ## Test
 
@@ -67,6 +67,7 @@ All settings are in `appsettings.json`. Override any of them with user secrets o
 
 | Section | Purpose |
 |---|---|
+| `AllowedHosts` | Addresses the API answers to, separated by `;`. This computer's addresses by default; set the real address on the host (for example `AllowedHosts=nailsbyleyah.onrender.com`). Other addresses get 400 |
 | `ConnectionStrings:Default` | SQL Server connection (LocalDB by default) |
 | `Auth` | Lockout (5 attempts / 15 min), idle session timeout (30 min), reset link lifetime (15 min), bcrypt cost |
 | `Booking` | Deposit (PHP 150), minimum notice for rescheduling (24 h) |

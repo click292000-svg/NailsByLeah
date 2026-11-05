@@ -36,6 +36,22 @@ public static class StartupTasks
             throw new InvalidOperationException("Brevo:ApiKey (or Smtp:Host) must be configured outside Development; emails would otherwise only be logged.");
         if (services.GetRequiredService<IPaymentGateway>() is SimulatedPaymentGateway)
             throw new InvalidOperationException("The simulated payment gateway cannot be used outside Development. Register a real GCash/Maya gateway.");
+        if (AllowedHostsProblem(services.GetRequiredService<IConfiguration>()["AllowedHosts"]) is { } problem)
+            throw new InvalidOperationException(problem);
+    }
+
+    /// <summary>
+    /// Why this AllowedHosts value is not fit for the live site, or null if it is. It must name the site's real
+    /// addresses: no wildcards (any address would be accepted) and more than this computer's own addresses.
+    /// </summary>
+    public static string? AllowedHostsProblem(string? allowedHosts)
+    {
+        var hosts = (allowedHosts ?? "").Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        if (hosts.Any(h => h.Contains('*')))
+            return "AllowedHosts must list the site's real addresses outside Development, without wildcards.";
+        if (!hosts.Except(["localhost", "127.0.0.1", "[::1]"], StringComparer.OrdinalIgnoreCase).Any())
+            return "AllowedHosts must be set to the site's real address outside Development (for example nailsbyleyah.onrender.com).";
+        return null;
     }
 
     private static async Task SeedAdministratorAsync(IServiceProvider services, AppDbContext db, ILogger logger)

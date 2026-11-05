@@ -52,7 +52,7 @@ Hosting: ONE .NET service (API + the React website served together)
 ## Order
 1. Port the database code to Postgres; test against a Supabase dev project.
 2. Email API, photos in Supabase Storage, persisted login keys, forwarded headers, serve the website from the API.
-3. Deploy a test version; set the host's settings (database, email key, storage key, website address, admin account).
+3. Deploy a test version; set the host's settings (database, email key, storage key, website address, `AllowedHosts`, admin account). The app refuses to start without a real `AllowedHosts`.
 4. PayMongo in test mode; connect the webhook to the hosted address.
 5. Go live: PayMongo live keys (after business verification), domain, add the domain in Brevo.
 

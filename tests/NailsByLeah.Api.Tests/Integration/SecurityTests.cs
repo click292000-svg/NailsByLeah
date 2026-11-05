@@ -9,6 +9,17 @@ public sealed class SecurityTests(ApiFactory factory) : IClassFixture<ApiFactory
     private const string SqlInjection = "' OR 1=1 --";
     private const string ScriptTag = "<script>alert(1)</script>";
 
+    [Fact] // AllowedHosts: a request for an address that isn't this site is refused.
+    public async Task Request_for_another_address_is_refused()
+    {
+        var client = factory.NewClient();
+        using var forged = new HttpRequestMessage(HttpMethod.Get, "/api/health");
+        forged.Headers.Host = "evil.example";
+
+        await (await client.SendAsync(forged)).ShouldHaveStatus(HttpStatusCode.BadRequest);
+        await (await client.GetAsync("/api/health")).ShouldHaveStatus(HttpStatusCode.OK);
+    }
+
     [Fact] // 9.1.9
     public async Task Sql_injection_text_is_stored_as_plain_text()
     {
