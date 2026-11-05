@@ -943,3 +943,49 @@ select.input { appearance: auto; }
 
 /* Shown instead of a blank page when a page fails to display (components/ErrorBoundary.jsx). */
 .error-screen { display: flex; flex-direction: column; align-items: center; gap: 12px; padding: 24px 16px; text-align: center; }
+
+/* Admin navigation: Dashboard, Management and Insights groups, and the profile on the right (components/AdminNav.jsx).
+   One set of panels: they expand in place inside the hamburger menu, and float below their button from 640px. */
+.nav-trigger { display: inline-flex; align-items: center; justify-content: space-between; gap: 6px; width: 100%; border: 0; background: none; font: inherit; font-weight: 500; cursor: pointer; text-align: left; }
+.nav-trigger:focus-visible, .nav-panel-link:focus-visible, .site-nav-admin > .nav-link:focus-visible { outline: none; box-shadow: var(--focus); }
+.nav-chevron { width: 15px; height: 15px; flex: none; transition: transform .18s ease; }
+.nav-dropdown.open .nav-chevron { transform: rotate(180deg); }
+.nav-panel { display: grid; grid-template-rows: 0fr; visibility: hidden; transition: grid-template-rows .18s ease, visibility .18s; }
+/* Visible at once when opening (0s), or keyboard focus can't land on the first link; the fade is for closing. */
+.nav-dropdown.open .nav-panel { grid-template-rows: 1fr; visibility: visible; transition: grid-template-rows .18s ease, visibility 0s; }
+.nav-panel-inner { min-height: 0; overflow: hidden; display: flex; flex-direction: column; gap: 2px; padding-left: 12px; }
+.nav-panel-link { display: block; width: 100%; border: 0; background: none; font: inherit; font-size: 0.93rem; text-align: left; text-decoration: none; color: var(--ink-soft); padding: 9px 12px; border-radius: 8px; cursor: pointer; }
+.nav-panel-link:hover { background: var(--rose-50); color: var(--rose-700); }
+.nav-panel-link.active { background: var(--rose-100); color: var(--rose-700); font-weight: 600; }
+.nav-profile { border-top: 1px solid var(--line); margin-top: 6px; padding-top: 6px; }
+.nav-profile-trigger { justify-content: flex-start; }
+.nav-profile-trigger .nav-chevron { margin-left: auto; }
+.nav-avatar { display: inline-grid; place-items: center; width: 26px; height: 26px; flex: none; border-radius: 50%; background: var(--rose-100); color: var(--burgundy); font-size: 0.8rem; font-weight: 700; }
+.nav-profile-name { max-width: 110px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.nav-account { display: flex; flex-direction: column; gap: 1px; padding: 8px 12px; margin-bottom: 4px; border-bottom: 1px solid var(--line); font-size: 0.84rem; color: var(--muted); overflow-wrap: anywhere; }
+.nav-account strong { color: var(--burgundy); font-size: 0.95rem; }
+.nav-account-role { margin-top: 3px; color: var(--rose-700); font-weight: 600; font-size: 0.78rem; }
+.nav-signout { color: var(--rose-700); font-weight: 600; }
+
+@media (min-width: 640px) {
+  .header-admin .menu-toggle { display: none; }
+  .site-nav-admin, .site-nav-admin.open { display: flex; flex: 1; flex-direction: row; align-items: center; width: auto; padding: 0; gap: 2px; margin-left: 8px; }
+  .site-nav-admin .nav-link { padding: 8px 10px; }
+  .nav-dropdown { position: relative; }
+  .nav-trigger { width: auto; }
+  .nav-panel, .nav-dropdown.open .nav-panel { display: block; }
+  .nav-panel { position: absolute; z-index: 40; top: calc(100% + 6px); left: 0; min-width: 190px; max-width: min(280px, calc(100vw - 32px)); background: var(--white); border: 1px solid var(--line); border-radius: 12px;
+    box-shadow: var(--shadow-hover); opacity: 0; transform: translateY(-4px); transition: opacity .15s ease, transform .15s ease, visibility .15s; }
+  .nav-dropdown.open .nav-panel { opacity: 1; transform: none; transition: opacity .15s ease, transform .15s ease, visibility 0s; }
+  .nav-panel-end { left: auto; right: 0; min-width: 230px; }
+  .nav-panel-inner { overflow: visible; padding: 6px; }
+  .nav-profile { margin: 0 0 0 auto; padding: 0; border: 0; }
+  .nav-profile-trigger .nav-chevron { margin-left: 0; }
+}
+@media (min-width: 960px) {
+  .site-nav-admin, .site-nav-admin.open { gap: 4px; margin-left: 16px; }
+  .site-nav-admin .nav-link { padding: 8px 12px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .nav-chevron, .nav-panel, .nav-dropdown.open .nav-panel { transition: none; }
+}

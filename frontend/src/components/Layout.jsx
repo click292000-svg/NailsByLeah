@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router'
+import { AdminNav } from './AdminNav'
 import { ErrorBoundary } from './ErrorBoundary'
 import { useAuth } from '../auth/AuthContext'
 import { Alert } from './ui'
@@ -14,17 +15,6 @@ const clientLinks = [
   { to: '/book', label: 'Book now' },
   { to: '/bookings', label: 'My bookings' },
   { to: '/feedback', label: 'Rate us' },
-]
-
-const adminLinks = [
-  { to: '/admin', label: 'Dashboard', end: true },
-  { to: '/admin/bookings', label: 'Bookings' },
-  { to: '/admin/services', label: 'Services' },
-  { to: '/admin/schedule', label: 'Schedule' },
-  { to: '/admin/reports', label: 'Reports' },
-  { to: '/admin/feedback', label: 'Feedback' },
-  { to: '/admin/activity', label: 'Activity log' },
-  { to: '/admin/clients', label: 'Client data' },
 ]
 
 export function Layout() {
@@ -43,9 +33,9 @@ export function Layout() {
 
   const isAdmin = user?.role === 'Administrator'
   const isHome = location.pathname === '/'
-  const links = isAdmin ? adminLinks : user ? clientLinks : []
+  const links = user ? clientLinks : []
   // Explore and Pricing glide to their home page section (HomePage reads the hash).
-  const homeLinks = isAdmin ? [] : [{ to: '/#tour', label: 'Explore' }, { to: '/#prices', label: 'Pricing' }]
+  const homeLinks = [{ to: '/#tour', label: 'Explore' }, { to: '/#prices', label: 'Pricing' }]
 
   const signOut = async () => {
     await logout()
@@ -56,7 +46,7 @@ export function Layout() {
     <div className="app-shell">
       <a href="#main" className="skip-link">Skip to content</a>
       <header className="site-header">
-        <div className="header-inner">
+        <div className={isAdmin ? 'header-inner header-admin' : 'header-inner'}>
           <Link to={isAdmin ? '/admin' : '/'} className="brand">
             <img src="/img/logo-header.webp" width="360" height="164" alt={salon.name} />
           </Link>
@@ -65,27 +55,31 @@ export function Layout() {
             <span className="sr-only">Menu</span>
             <span className="menu-bars" aria-hidden="true" />
           </button>
-          <nav id="site-nav" className={menuOpen ? 'site-nav open' : 'site-nav'} aria-label="Main">
-            {homeLinks.map((link) => (
-              <Link key={link.to} to={link.to} className="nav-link">{link.label}</Link>
-            ))}
-            {links.map((link) => (
-              <NavLink key={link.to} to={link.to} end={link.end} className="nav-link">
-                {link.label}
-              </NavLink>
-            ))}
-            {user ? (
-              <div className="nav-user">
-                <span className="nav-greeting">Hi, {user.firstName}</span>
-                <button type="button" className="btn btn-ghost btn-sm" onClick={signOut}>Log out</button>
-              </div>
-            ) : (
-              <div className="nav-user">
-                <NavLink to="/login" className="nav-link">Log in</NavLink>
-                <Link to="/register" className="btn btn-primary btn-sm">Sign up</Link>
-              </div>
-            )}
-          </nav>
+          {isAdmin ? (
+            <AdminNav user={user} onSignOut={signOut} menuOpen={menuOpen} />
+          ) : (
+            <nav id="site-nav" className={menuOpen ? 'site-nav open' : 'site-nav'} aria-label="Main">
+              {homeLinks.map((link) => (
+                <Link key={link.to} to={link.to} className="nav-link">{link.label}</Link>
+              ))}
+              {links.map((link) => (
+                <NavLink key={link.to} to={link.to} end={link.end} className="nav-link">
+                  {link.label}
+                </NavLink>
+              ))}
+              {user ? (
+                <div className="nav-user">
+                  <span className="nav-greeting">Hi, {user.firstName}</span>
+                  <button type="button" className="btn btn-ghost btn-sm" onClick={signOut}>Log out</button>
+                </div>
+              ) : (
+                <div className="nav-user">
+                  <NavLink to="/login" className="nav-link">Log in</NavLink>
+                  <Link to="/register" className="btn btn-primary btn-sm">Sign up</Link>
+                </div>
+              )}
+            </nav>
+          )}
         </div>
       </header>
 
