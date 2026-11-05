@@ -19,18 +19,15 @@ public sealed class EndToEndTests(ApiFactory factory) : IClassFixture<ApiFactory
             new VerifyEmailRequest(signUp.Email, factory.Notifications.VerificationCodeFor(signUp.Email)))).ShouldHaveStatus(HttpStatusCode.OK);
         await (await browser.PostJsonAsync("/api/auth/login", new LoginRequest(signUp.Username, signUp.Password))).ShouldHaveStatus(HttpStatusCode.OK);
 
-        // Choose an open slot, check the quote, then book and pay.
+        // Choose an open slot, then book and pay.
         var date = ApiFactory.StartDate.AddDays(3);
         var day = await browser.GetAsync<DaySlotsResponse>($"/api/slots?date={date:yyyy-MM-dd}");
         var slot = day.Slots.First(s => s.Status == SlotStatuses.Open);
-        var quote = await (await browser.PostJsonAsync("/api/pricing/quote",
-            new QuoteRequest(3, [new AddOnSelection(5, 2)]))).ReadAsync<PriceQuoteResponse>();
-        Assert.Equal(280m, quote.Total); // BIAB 250 + Embossed Art 15 x 2
 
         var booked = await browser.BookAsync(new CreateBookingRequest(3, [new AddOnSelection(5, 2, NailHand.Right)], date, slot.StartTime,
             PaymentMethod.Maya, DepositAcknowledged: true, Guid.NewGuid(), Note: "I'll bring a reference photo"));
         Assert.Equal("Pending", booked.Booking.Status); // confirmed later by the administrator
-        Assert.Equal(quote.Total, booked.Booking.TotalPrice);
+        Assert.Equal(280m, booked.Booking.TotalPrice); // BIAB 250 + Embossed Art 15 x 2
         Assert.Equal("Maya", booked.Receipt.Method);
 
         // Cancel with a reason.

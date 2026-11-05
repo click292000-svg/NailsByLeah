@@ -59,13 +59,10 @@ public sealed record CatalogResponse(
 /// <summary>Hand is required when booking (Left or Right for up to 5 nails, Both for any number); price quotes ignore it.</summary>
 public sealed record AddOnSelection(int AddOnId, int NailCount, NailHand? Hand = null);
 
-public sealed record QuoteRequest(int ServiceId, IReadOnlyList<AddOnSelection>? AddOns);
 
 public sealed record QuoteLineResponse(
     int ItemId, string Name, string Category, string PricingUnit, decimal UnitPrice, int Quantity, decimal LineTotal);
 
-public sealed record PriceQuoteResponse(
-    IReadOnlyList<QuoteLineResponse> Lines, decimal Total, decimal Deposit, decimal BalanceDue, string Currency);
 
 public sealed record CreateServiceRequest(string Category, string Name, decimal Price, int DurationMinutes = CatalogService.DefaultDurationMinutes);
 

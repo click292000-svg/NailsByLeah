@@ -104,18 +104,6 @@ public sealed class BrevoOptions
     public bool IsConfigured => !string.IsNullOrWhiteSpace(ApiKey);
 }
 
-public sealed class SmtpOptions
-{
-    public const string Section = "Smtp";
-    public string? Host { get; set; }
-    public int Port { get; set; } = 587;
-    public bool EnableSsl { get; set; } = true;
-    public string? Username { get; set; }
-    public string? Password { get; set; }
-
-    public bool IsConfigured => !string.IsNullOrWhiteSpace(Host);
-}
-
 public sealed class NotificationOptions
 {
     public const string Section = "Notifications";

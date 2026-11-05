@@ -59,7 +59,7 @@ export const homeFor = (role) => (role === 'Administrator' ? '/admin' : '/bookin
 /** Whether a role may open a path; matches the guards in App.jsx. */
 export function canOpen(role, path) {
   if (path.startsWith('/admin')) return role === 'Administrator'
-  if (path.startsWith('/book') || path.startsWith('/messages')) return role === 'Client'
+  if (path.startsWith('/book')) return role === 'Client'
   return true
 }
 

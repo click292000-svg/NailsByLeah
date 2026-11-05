@@ -25,7 +25,6 @@ public interface IPriceService
 
     Task<ServiceSelection> ResolveSelectionAsync(int serviceId, IReadOnlyList<AddOnSelection>? addOns, CancellationToken ct = default);
 
-    Task<PriceQuote> QuoteAsync(QuoteRequest request, CancellationToken ct = default);
 }
 
 /// <summary>All price calculations. The server's total is the authoritative one (Ref 10.4).</summary>
@@ -70,9 +69,6 @@ public sealed class PriceService(IServiceCatalogRepository catalog, IOptions<Boo
 
         return new ServiceSelection(service, resolved);
     }
-
-    public async Task<PriceQuote> QuoteAsync(QuoteRequest request, CancellationToken ct = default) =>
-        Calculate(await ResolveSelectionAsync(request.ServiceId, request.AddOns, ct));
 }
 
 public interface IServiceCatalog

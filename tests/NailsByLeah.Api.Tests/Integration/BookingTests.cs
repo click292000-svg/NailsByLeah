@@ -56,13 +56,14 @@ public sealed class BookingTests(ApiFactory factory) : IClassFixture<ApiFactory>
     }
 
     [Fact] // Ref 10.4
-    public async Task Quote_endpoint_recalculates_with_add_ons()
+    public async Task Booking_total_includes_add_ons_and_the_balance_after_the_deposit()
     {
-        var quote = await (await factory.NewClient().PostJsonAsync("/api/pricing/quote",
-            new QuoteRequest(SoftGelPlain, [new AddOnSelection(FrenchTip, 3)]))).ReadAsync<PriceQuoteResponse>();
+        var user = await factory.CreateClientAsync();
 
-        Assert.Equal(345m, quote.Total);
-        Assert.Equal(195m, quote.BalanceDue);
+        var booked = await user.Client.BookAsync(TestHelpers.NewBooking(factory.NextSlot(), SoftGelPlain, addOns: new AddOnSelection(FrenchTip, 3, NailHand.Right)));
+
+        Assert.Equal(345m, booked.Booking.TotalPrice);
+        Assert.Equal(195m, booked.Booking.BalanceDue);
     }
 
     [Fact] // 9.1.6
@@ -267,8 +268,8 @@ public sealed class BookingTests(ApiFactory factory) : IClassFixture<ApiFactory>
 
         var after = await user.Client.GetAsync<BookingResponse>($"/api/bookings/{booking.Booking.Id}");
         Assert.Equal(500m, after.ServicePrice);
-        var quote = await (await user.Client.PostJsonAsync("/api/pricing/quote", new QuoteRequest(service.Id, null))).ReadAsync<PriceQuoteResponse>();
-        Assert.Equal(650m, quote.Total);
+        var next = await user.Client.BookAsync(TestHelpers.NewBooking(factory.NextSlot(), service.Id));
+        Assert.Equal(650m, next.Booking.TotalPrice);
     }
 
     [Fact] // Ref 11.1, 11.5, 11.6, 11.7

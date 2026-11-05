@@ -29,7 +29,6 @@ public static class ServiceRegistration
         services.AddOptions<FrontendOptions>().Bind(configuration.GetSection(FrontendOptions.Section));
         services.AddOptions<EmailOptions>().Bind(configuration.GetSection(EmailOptions.Section));
         services.AddOptions<BrevoOptions>().Bind(configuration.GetSection(BrevoOptions.Section));
-        services.AddOptions<SmtpOptions>().Bind(configuration.GetSection(SmtpOptions.Section));
         services.AddOptions<NotificationOptions>().Bind(configuration.GetSection(NotificationOptions.Section));
         services.AddOptions<DatabaseOptions>().Bind(configuration.GetSection(DatabaseOptions.Section));
         services.AddOptions<AdminSeedOptions>().Bind(configuration.GetSection(AdminSeedOptions.Section));
@@ -89,7 +88,7 @@ public static class ServiceRegistration
         // External integrations
         services.AddSingleton<IPaymentGateway, SimulatedPaymentGateway>();
         services.AddScoped<INotificationService, EmailNotificationService>();
-        // Email channel: Brevo's HTTPS API when a key is set, else SMTP (e.g. Gmail) when a host is set, else the log.
+        // Email channel: Brevo's HTTPS API when a key is set, else the log (the live site refuses to start without a key).
         services.AddHttpClient<BrevoEmailSender>((sp, client) =>
         {
             client.BaseAddress = new Uri(sp.GetRequiredService<IOptions<BrevoOptions>>().Value.BaseUrl);
@@ -97,7 +96,6 @@ public static class ServiceRegistration
         });
         services.AddScoped<IEmailSender>(sp =>
             sp.GetRequiredService<IOptions<BrevoOptions>>().Value.IsConfigured ? sp.GetRequiredService<BrevoEmailSender>()
-            : sp.GetRequiredService<IOptions<SmtpOptions>>().Value.IsConfigured ? ActivatorUtilities.CreateInstance<SmtpEmailSender>(sp)
             : ActivatorUtilities.CreateInstance<LoggingEmailSender>(sp));
         // Photos: Supabase Storage when configured (hosts wipe their disk), otherwise this computer's disk.
         services.AddSingleton<FileSystemReferenceImageStore>();

@@ -1,6 +1,4 @@
-using System.Net;
 using System.Net.Http.Json;
-using System.Net.Mail;
 using System.Text.RegularExpressions;
 using Microsoft.Extensions.Options;
 using NailsByLeah.Api.Configuration;
@@ -219,25 +217,6 @@ public sealed partial class BrevoEmailSender(HttpClient http, IOptions<BrevoOpti
             throw new InvalidOperationException(
                 $"Brevo rejected the email \"{subject}\" ({(int)response.StatusCode} {response.ReasonPhrase}): {reason[..Math.Min(reason.Length, 500)]}");
         }
-    }
-}
-
-public sealed class SmtpEmailSender(IOptions<SmtpOptions> options, IOptions<EmailOptions> email) : IEmailSender
-{
-    public async Task SendAsync(string toAddress, string toName, string subject, string textBody, CancellationToken ct = default)
-    {
-        var smtp = options.Value;
-        var from = email.Value;
-        using var message = new MailMessage(new MailAddress(from.FromAddress, from.FromName), new MailAddress(toAddress, toName))
-        {
-            Subject = subject,
-            Body = textBody,
-            IsBodyHtml = false,
-        };
-        using var client = new SmtpClient(smtp.Host, smtp.Port) { EnableSsl = smtp.EnableSsl };
-        if (!string.IsNullOrEmpty(smtp.Username))
-            client.Credentials = new NetworkCredential(smtp.Username, smtp.Password);
-        await client.SendMailAsync(message, ct);
     }
 }
 

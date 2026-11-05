@@ -54,7 +54,6 @@ export const api = {
   },
   catalog: {
     get: () => get('/services'),
-    quote: (body) => post('/pricing/quote', body),
     /** Start times for a date; with a serviceId each time also says whether that service fits there. */
     slots: (date, serviceId) => get('/slots', serviceId ? { date, serviceId } : { date }),
     hours: () => get('/salon-hours'),
@@ -86,7 +85,6 @@ export const api = {
   admin: {
     dashboard: () => get('/admin/dashboard'),
     searchBookings: (query) => get('/admin/bookings', query),
-    getBooking: (id) => get(`/admin/bookings/${id}`),
     confirm: (id) => post(`/admin/bookings/${id}/confirm`),
     complete: (id) => post(`/admin/bookings/${id}/complete`),
     reschedule: (id, body) => post(`/admin/bookings/${id}/reschedule`, body),

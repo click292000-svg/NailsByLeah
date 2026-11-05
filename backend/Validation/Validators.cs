@@ -69,28 +69,18 @@ public sealed class AddOnSelectionValidator : AbstractValidator<AddOnSelection>
     }
 }
 
-public sealed class QuoteRequestValidator : AbstractValidator<QuoteRequest>
-{
-    public QuoteRequestValidator()
-    {
-        RuleFor(x => x.ServiceId).GreaterThan(0).WithMessage("Select a service.");
-        RuleForEach(x => x.AddOns).SetValidator(new AddOnSelectionValidator());
-        RuleFor(x => x.AddOns).Must(BeDistinct).WithMessage("Each add-on can only be selected once.");
-    }
-
-    internal static bool BeDistinct(IReadOnlyList<AddOnSelection>? addOns) =>
-        addOns is null || addOns.Select(a => a.AddOnId).Distinct().Count() == addOns.Count;
-}
-
 public sealed class CreateBookingRequestValidator : AbstractValidator<CreateBookingRequest>
 {
+    private static bool BeDistinct(IReadOnlyList<AddOnSelection>? addOns) =>
+        addOns is null || addOns.Select(a => a.AddOnId).Distinct().Count() == addOns.Count;
+
     public const string DepositAcknowledgementMessage = "You must acknowledge that the booking deposit is non-refundable.";
 
     public CreateBookingRequestValidator()
     {
         RuleFor(x => x.ServiceId).GreaterThan(0).WithMessage("Select a service.");
         RuleForEach(x => x.AddOns).SetValidator(new AddOnSelectionValidator(requireHand: true));
-        RuleFor(x => x.AddOns).Must(QuoteRequestValidator.BeDistinct).WithMessage("Each add-on can only be selected once.");
+        RuleFor(x => x.AddOns).Must(BeDistinct).WithMessage("Each add-on can only be selected once.");
         RuleFor(x => x.BookingDate).NotEmpty().WithMessage("Select a booking date.");
         RuleFor(x => x.Note).MaximumLength(InputLimits.NoteMaxLength)
             .WithMessage($"Your note must be {InputLimits.NoteMaxLength} characters or fewer.");

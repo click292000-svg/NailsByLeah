@@ -48,7 +48,7 @@ dotnet run --project backend/NailsByLeah.Api.csproj --launch-profile https
 
 | Concern | Development | Before going live |
 |---|---|---|
-| Email | Logged to the console (look for `DEV EMAIL`), including verification codes and reset links. Only possible in Development | Set `Brevo:ApiKey` and `Email:FromAddress` (a sender verified in Brevo). Brevo's HTTPS API works on hosts that block SMTP ports. `Smtp:Host`, `Smtp:Username`, `Smtp:Password` (e.g. Gmail with an app password) also work where SMTP is allowed |
+| Email | Logged to the console (look for `DEV EMAIL`), including verification codes and reset links. Only possible in Development | Set `Brevo:ApiKey` and `Email:FromAddress` (a sender verified in Brevo). Brevo's HTTPS API works on hosts that block SMTP ports |
 | Design photos | Saved on this computer's disk unless `Supabase:Url` and `Supabase:SecretKey` are in user secrets | Set both on the host, with a private `reference-images` bucket. Hosts wipe their disk |
 | Payments | `SimulatedPaymentGateway` approves every GCash/Maya charge without moving money | Implement `IPaymentGateway` for a real provider and register it in `Infrastructure/ServiceRegistration.cs` |
 
@@ -93,7 +93,7 @@ All settings are in `appsettings.json`. Override any of them with user secrets o
 | `Supabase` | `Url`, `SecretKey` (user secrets or host settings only) and `ReferenceImageBucket`, for design photos. Empty uses `Uploads:ReferenceImagePath` on disk. The bucket must be private: only the API holds the key, and browsers get photos through its permission checks |
 | `Frontend:BaseUrl` | The site's address, used for every link in emails. On the host: the real `https://` address |
 | `Email` | Sender address and name shown on every email |
-| `Brevo`, `Smtp` | Email delivery: Brevo's API when `Brevo:ApiKey` is set, otherwise SMTP when `Smtp:Host` is set, otherwise the console |
+| `Brevo` | Email delivery: Brevo's API when `Brevo:ApiKey` is set, otherwise the console (Development only) |
 | `Notifications` | The 24-hour reminder job, and `SalonEmail`: where the salon's alerts go (new booking to confirm, client cancellation, client reschedule). Empty sends no alerts |
 | `AdminSeed` | First administrator (user secrets only) |
 | `ForwardedHeaders` | Reading the visitor's real address behind the host's proxy. On the host: `Enabled` true. `ForwardLimit` is how many `X-Forwarded-For` entries to believe, counted from the right (2 on Render) |
@@ -119,7 +119,7 @@ Controller → Service → Repository (Ref 14.1):
 | Area | Endpoints |
 |---|---|
 | Health | `GET /api/health` (is the app running: for the host), `GET /api/health/database` (can it read its database: 200 or 503, for the keep-awake ping) |
-| Public | `GET /api/services`, `POST /api/pricing/quote`, `GET /api/slots?date=`, `GET /api/lookups` |
+| Public | `GET /api/services`, `GET /api/slots?date=`, `GET /api/lookups` |
 | Account | `POST /api/auth/register`, `GET /api/auth/username-availability`, `POST /api/auth/verify-email`, `POST /api/auth/resend-verification`, `POST /api/auth/login`, `POST /api/auth/logout`, `GET /api/auth/me`, `POST /api/auth/forgot-password`, `POST /api/auth/reset-password/validate`, `POST /api/auth/reset-password` |
 | Client | `POST /api/bookings` (book and pay), `GET /api/bookings`, `GET /api/bookings/{id}`, `GET /api/bookings/{id}/receipt`, `POST /api/bookings/{id}/reschedule`, `POST /api/bookings/{id}/cancel` |
 | Administrator | `GET /api/admin/dashboard`, `GET /api/admin/bookings`, `POST /api/admin/bookings/{id}/confirm`, `…/complete`, `…/reschedule`, `…/cancel`, `/api/admin/services`, `/api/admin/addons`, `/api/admin/blocked-slots`, `/api/admin/reports/daily`, `/api/admin/reports/monthly`, `/api/admin/activity-logs`, `POST /api/admin/clients/find`, `POST /api/admin/clients/{id}/delete-data` |

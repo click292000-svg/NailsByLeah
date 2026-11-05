@@ -23,20 +23,6 @@ public sealed class ServicesController(IServiceCatalog catalog) : ControllerBase
 
 [ApiController]
 [AllowAnonymous]
-[Route("api/pricing")]
-public sealed class PricingController(IPriceService prices) : ControllerBase
-{
-    /// <summary>Recalculates the total as the client adds or removes add-ons (Ref 10.4).</summary>
-    [HttpPost("quote")]
-    public async Task<PriceQuoteResponse> Quote(QuoteRequest request, CancellationToken ct)
-    {
-        var quote = await prices.QuoteAsync(request, ct);
-        return new PriceQuoteResponse(quote.Lines, quote.Total, quote.Deposit, quote.BalanceDue, "PHP");
-    }
-}
-
-[ApiController]
-[AllowAnonymous]
 [Route("api/slots")]
 public sealed class SlotsController(ISlotAvailability slots) : ControllerBase
 {

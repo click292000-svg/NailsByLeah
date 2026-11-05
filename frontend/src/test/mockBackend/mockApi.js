@@ -644,7 +644,6 @@ const routes = [
 
   // Public catalog
   ['GET', '/services', (db) => catalog(db, false)],
-  ['POST', '/pricing/quote', (db, { body }) => ({ ...quoteFor(resolveSelection(db, body.serviceId, body.addOns ?? [])), currency: 'PHP' })],
   ['GET', '/slots', (db, { query }) => {
     if (!/^\d{4}-\d{2}-\d{2}$/.test(query.date ?? '')) invalid('date', 'Select a date.')
     return daySlots(db, query.date, query.serviceId)

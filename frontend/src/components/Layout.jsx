@@ -10,7 +10,6 @@ import { salon } from '../content/salon'
 
 const YEAR = new Date().getFullYear()
 
-// No Messages link: a chatbot will take its place.
 const clientLinks = [
   { to: '/book', label: 'Book now' },
   { to: '/bookings', label: 'My bookings' },
@@ -103,7 +102,6 @@ export function Layout() {
             <button type="button" onClick={() => setLegalDocument('terms')}>Terms of Service</button>
             <span aria-hidden="true">•</span>
             <button type="button" onClick={() => setLegalDocument('privacy')}>Privacy Policy</button>
-            {/* No Support link: a chatbot will take its place. */}
           </nav>
           <SocialLinks variant="plain" className="footer-social" />
         </div>
