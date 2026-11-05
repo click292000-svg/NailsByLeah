@@ -29,7 +29,7 @@ public sealed class GlobalExceptionHandler(IProblemDetailsService problemDetails
         };
 
         if (problem.Status >= 500)
-            logger.LogError(exception, "Unhandled exception for {Method} {Path}", httpContext.Request.Method, httpContext.Request.Path);
+            logger.LogCritical(exception, "Unhandled exception for {Method} {Path}", httpContext.Request.Method, httpContext.Request.Path);
         else
             logger.LogInformation("Request {Method} {Path} failed with {Status}: {Detail}",
                 httpContext.Request.Method, httpContext.Request.Path, problem.Status, problem.Detail);

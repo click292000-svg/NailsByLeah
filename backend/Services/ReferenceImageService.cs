@@ -80,7 +80,7 @@ public sealed class ReferenceImageService(
         // A timeout is also an OperationCanceledException; only the client giving up may pass through.
         catch (Exception ex) when (ex is not OperationCanceledException || !ct.IsCancellationRequested)
         {
-            logger.LogError(ex, "Could not save a reference photo");
+            logger.LogCritical(ex, "Could not save a reference photo");
             throw new ConflictException(StoreUnavailableMessage, "image_store_unavailable");
         }
 

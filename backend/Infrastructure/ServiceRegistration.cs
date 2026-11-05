@@ -35,6 +35,7 @@ public static class ServiceRegistration
         services.AddOptions<AdminSeedOptions>().Bind(configuration.GetSection(AdminSeedOptions.Section));
         services.AddOptions<UploadOptions>().Bind(configuration.GetSection(UploadOptions.Section));
         services.AddOptions<SupabaseOptions>().Bind(configuration.GetSection(SupabaseOptions.Section));
+        services.AddOptions<AlertOptions>().Bind(configuration.GetSection(AlertOptions.Section));
         services.AddOptions<RateLimitOptions>().Bind(configuration.GetSection(RateLimitOptions.Section));
         services.AddNailsByLeahRateLimiting();
         services.AddOptions<ProxyOptions>().Bind(configuration.GetSection(ProxyOptions.Section));
@@ -111,6 +112,10 @@ public static class ServiceRegistration
                 : sp.GetRequiredService<FileSystemReferenceImageStore>());
         services.AddScoped<IAppointmentReminderJob, AppointmentReminderJob>();
         services.AddHostedService<AppointmentReminderWorker>();
+        services.AddSingleton<ErrorAlertQueue>();
+        services.AddSingleton<ILoggerProvider, ErrorAlertLoggerProvider>();
+        services.AddSingleton<ErrorAlertSender>();
+        services.AddHostedService<ErrorAlertWorker>();
         services.AddSingleton<QueuedBackgroundNotifications>();
         services.AddSingleton<IBackgroundNotifications>(sp => sp.GetRequiredService<QueuedBackgroundNotifications>());
         services.AddHostedService(sp => sp.GetRequiredService<QueuedBackgroundNotifications>());

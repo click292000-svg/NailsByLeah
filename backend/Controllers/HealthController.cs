@@ -31,7 +31,7 @@ public class HealthController(AppDbContext db, TimeProvider time, ILogger<Health
         // A timeout is an OperationCanceledException too; only the caller giving up may pass through.
         catch (Exception ex) when (ex is not OperationCanceledException || !ct.IsCancellationRequested)
         {
-            logger.LogError(ex, "Health check could not read the database");
+            logger.LogCritical(ex, "Health check could not read the database");
             return StatusCode(StatusCodes.Status503ServiceUnavailable, new { status = "unavailable" });
         }
     }

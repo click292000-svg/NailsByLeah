@@ -53,6 +53,15 @@ public sealed class UploadOptions
     public string ReferenceImagePath { get; set; } = "App_Data/reference-images";
 }
 
+/// <summary>Emails about serious problems on the website (see Infrastructure/ErrorAlerts.cs). No address means no alerts.</summary>
+public sealed class AlertOptions
+{
+    public const string Section = "Alerts";
+    public string? Email { get; set; }
+    public int MinutesBetweenEmails { get; set; } = 60;
+    public int MaxEmailsPerDay { get; set; } = 3;
+}
+
 /// <summary>Supabase Storage for reference photos. The key is a secret: user secrets or host settings only.</summary>
 public sealed class SupabaseOptions
 {

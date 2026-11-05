@@ -95,7 +95,7 @@ What must change, whichever provider wins. **Today's `IPaymentGateway.ChargeAsyn
 ## Order
 1. Port the database code to Postgres; test against a Supabase dev project.
 2. Email API, photos in Supabase Storage, persisted login keys, forwarded headers, serve the website from the API.
-3. Deploy a test version; set the host's settings (database, email key, storage key, website address `Frontend__BaseUrl`, `AllowedHosts`, `ForwardedHeaders__Enabled=true`, `Supabase__Url`, `Supabase__SecretKey`, admin account). The app refuses to start without them. After deploying, check the visitor address in the Activity log (backend README, Security): Render doesn't document `X-Forwarded-For`, so `ForwardLimit` must be confirmed on the live site.
+3. Deploy a test version; set the host's settings (database, email key, storage key, website address `Frontend__BaseUrl`, `AllowedHosts`, `ForwardedHeaders__Enabled=true`, `Supabase__Url`, `Supabase__SecretKey`, `Alerts__Email`, admin account). The app refuses to start without them. After deploying, check the visitor address in the Activity log (backend README, Security): Render doesn't document `X-Forwarded-For`, so `ForwardLimit` must be confirmed on the live site.
 4. Build the provider-neutral payment flow against a fake gateway, then connect PayMongo in test mode. If PayMongo doesn't approve the business, connect HitPay instead: only the gateway class and settings differ.
 5. Go live: live keys (after business verification), domain, add the domain in Brevo.
 

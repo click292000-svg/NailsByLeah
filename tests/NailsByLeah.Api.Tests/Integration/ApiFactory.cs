@@ -55,6 +55,8 @@ public sealed class ApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
         // User secrets load in tests too: without this, tests would write to the developer's real bucket.
         builder.UseSetting("Supabase:Url", "");
         builder.UseSetting("Supabase:SecretKey", "");
+        // The same for alerts: test errors must not send real emails.
+        builder.UseSetting("Alerts:Email", "");
         // Many tests share one test client address; RateLimitTests turns the limits back on with small numbers.
         builder.UseSetting("RateLimits:Enabled", "false");
 

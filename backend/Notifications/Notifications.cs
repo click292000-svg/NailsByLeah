@@ -319,7 +319,7 @@ public sealed class AppointmentReminderWorker(
             // An exception leaving this loop would stop the whole API, so only a real shutdown may pass through.
             catch (Exception ex) when (ex is not OperationCanceledException || !stoppingToken.IsCancellationRequested)
             {
-                logger.LogError(ex, "Appointment reminder run failed");
+                logger.LogCritical(ex, "Appointment reminder run failed");
             }
         } while (await timer.WaitForNextTickAsync(stoppingToken));
     }
