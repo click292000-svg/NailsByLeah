@@ -36,6 +36,8 @@ public static class StartupTasks
             throw new InvalidOperationException("Brevo:ApiKey (or Smtp:Host) must be configured outside Development; emails would otherwise only be logged.");
         if (services.GetRequiredService<IPaymentGateway>() is SimulatedPaymentGateway)
             throw new InvalidOperationException("The simulated payment gateway cannot be used outside Development. Register a real GCash/Maya gateway.");
+        if (!services.GetRequiredService<IOptions<ProxyOptions>>().Value.Enabled)
+            throw new InvalidOperationException("ForwardedHeaders:Enabled must be true outside Development: behind the host's proxy, all visitors would otherwise share one rate limit.");
         if (AllowedHostsProblem(services.GetRequiredService<IConfiguration>()["AllowedHosts"]) is { } problem)
             throw new InvalidOperationException(problem);
         if (WebsiteAddressProblem(services.GetRequiredService<IOptions<FrontendOptions>>().Value.BaseUrl) is { } addressProblem)

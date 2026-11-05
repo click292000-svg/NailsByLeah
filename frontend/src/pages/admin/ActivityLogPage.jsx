@@ -72,7 +72,10 @@ export default function ActivityLogPage() {
                         {entry.entityType && <span className="activity-entity">{entry.entityType}{entry.entityId != null && ` #${entry.entityId}`}</span>}
                       </span>
                     </span>
-                    <span className="activity-details" data-label="Details">{entry.details ?? <span className="muted">—</span>}</span>
+                    <span className="activity-details" data-label="Details">
+                      {entry.details ?? <span className="muted">—</span>}
+                      {entry.ipAddress && <span className="activity-entity">From {entry.ipAddress}</span>}
+                    </span>
                   </div>
                 ))}
               </section>

@@ -51,7 +51,7 @@ dotnet run --project backend/NailsByLeah.Api.csproj --launch-profile https
 | Email | Logged to the console (look for `DEV EMAIL`), including verification codes and reset links. Only possible in Development | Set `Brevo:ApiKey` and `Email:FromAddress` (a sender verified in Brevo). Brevo's HTTPS API works on hosts that block SMTP ports. `Smtp:Host`, `Smtp:Username`, `Smtp:Password` (e.g. Gmail with an app password) also work where SMTP is allowed |
 | Payments | `SimulatedPaymentGateway` approves every GCash/Maya charge without moving money | Implement `IPaymentGateway` for a real provider and register it in `Infrastructure/ServiceRegistration.cs` |
 
-Outside Development the app refuses to start while either stand-in is still in use, or while `AllowedHosts` or `Frontend:BaseUrl` is not set to the site's real address.
+Outside Development the app refuses to start while either stand-in is still in use, or while `AllowedHosts` or `Frontend:BaseUrl` is not set to the site's real address, or `ForwardedHeaders:Enabled` is not true.
 
 ## Serving the website
 
@@ -90,6 +90,7 @@ All settings are in `appsettings.json`. Override any of them with user secrets o
 | `Brevo`, `Smtp` | Email delivery: Brevo's API when `Brevo:ApiKey` is set, otherwise SMTP when `Smtp:Host` is set, otherwise the console |
 | `Notifications` | The 24-hour reminder job, and `SalonEmail`: where the salon's alerts go (new booking to confirm, client cancellation, client reschedule). Empty sends no alerts |
 | `AdminSeed` | First administrator (user secrets only) |
+| `ForwardedHeaders` | Reading the visitor's real address behind the host's proxy. On the host: `Enabled` true. `ForwardLimit` is how many `X-Forwarded-For` entries to believe, counted from the right (2 on Render) |
 | `RateLimits` | How many requests one visitor or client may make per time window (see [Security](#security)). `Enabled: false` only in tests |
 
 ## Project layout
@@ -136,8 +137,16 @@ longest anyone waits.
 | Upload | 20 / 10 minutes | client account | design photos |
 | Feedback | 5 / 10 minutes | client account | feedback |
 
-Behind a hosting proxy the visitor's real address needs the forwarded-headers setting (go-live plan); until then every
-visitor shares one allowance there.
+Behind the host's proxy the visitor's real address comes from `X-Forwarded-For` (`Infrastructure/ProxyHeaders.cs`).
+Render's proxy only adds to that header, so a visitor can fake entries on the left, and only the rightmost
+`ForwardLimit` entries are believed. Render doesn't document how many it adds, so check after every change of host:
+sign in, then compare the address in the Activity log with your own, and repeat with a faked header:
+
+```bash
+curl -X POST https://YOUR-SITE/api/auth/login -H "Content-Type: application/json" -H "X-Forwarded-For: 203.0.113.9" -d "{\"usernameOrEmail\":\"qa\",\"password\":\"Wrong12345\"}"
+```
+
+A wrong login for a real account shows in the Activity log; it must show your own address, never `203.0.113.9`.
 
 ### Not revealing who has an account
 

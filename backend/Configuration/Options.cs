@@ -129,6 +129,21 @@ public sealed class AdminSeedOptions
         !string.IsNullOrWhiteSpace(Password) && !string.IsNullOrWhiteSpace(PhoneNumber);
 }
 
+/// <summary>Reading the visitor's real address behind the host's proxy (see Infrastructure/ProxyHeaders.cs).</summary>
+public sealed class ProxyOptions
+{
+    public const string Section = "ForwardedHeaders";
+
+    /// <summary>On only behind a proxy: without one, anyone could fake these headers.</summary>
+    public bool Enabled { get; set; }
+
+    /// <summary>
+    /// How many entries, counted from the right of X-Forwarded-For, to walk back to reach the visitor. On Render
+    /// ("visitor, Cloudflare") that is 2. Check it after deploying: too high lets visitors fake their address.
+    /// </summary>
+    public int ForwardLimit { get; set; } = 2;
+}
+
 /// <summary>How many requests one visitor or client may make in a time window (see Infrastructure/RateLimiting.cs).</summary>
 public sealed class RateLimitOptions
 {

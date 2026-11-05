@@ -6,6 +6,8 @@ builder.Services.AddNailsByLeah(builder.Configuration);
 var app = builder.Build();
 await app.RunStartupTasksAsync();
 
+// First, so everything after it sees the visitor's real address and the original https.
+app.UseProxyHeaders();
 app.UseExceptionHandler();
 if (!app.Environment.IsDevelopment())
     app.UseHsts();

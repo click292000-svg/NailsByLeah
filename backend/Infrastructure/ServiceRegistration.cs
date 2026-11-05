@@ -35,6 +35,8 @@ public static class ServiceRegistration
         services.AddOptions<UploadOptions>().Bind(configuration.GetSection(UploadOptions.Section));
         services.AddOptions<RateLimitOptions>().Bind(configuration.GetSection(RateLimitOptions.Section));
         services.AddNailsByLeahRateLimiting();
+        services.AddOptions<ProxyOptions>().Bind(configuration.GetSection(ProxyOptions.Section));
+        services.AddProxyHeaders();
 
         services.AddSingleton(TimeProvider.System);
         services.AddSingleton<ISalonClock, SalonClock>();
