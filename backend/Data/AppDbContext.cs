@@ -1,11 +1,15 @@
+using Microsoft.AspNetCore.DataProtection.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using NailsByLeah.Api.Domain;
 
 namespace NailsByLeah.Api.Data;
 
-public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(options)
+public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(options), IDataProtectionKeyContext
 {
+    /// <summary>The keys that sign login cookies. Without them here, every restart on a host signs everyone out.</summary>
+    public DbSet<DataProtectionKey> DataProtectionKeys => Set<DataProtectionKey>();
+
     public DbSet<User> Users => Set<User>();
     public DbSet<CatalogService> Services => Set<CatalogService>();
     public DbSet<StoneAddOn> AddOns => Set<StoneAddOn>();

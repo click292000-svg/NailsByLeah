@@ -121,6 +121,12 @@ Errors are returned as RFC 7807 ProblemDetails with a `code` field (for example 
 
 ## Security
 
+### Login keys
+
+The keys that sign login cookies are stored in the `data_protection_keys` table, so restarts and deploys don't sign
+anyone out. Anyone who can read that table could forge a sign-in, so it must never be exposed: on Supabase, keep the
+public Data API locked (go-live plan). The live site needs its migrations applied, or sign-in fails.
+
 ### Rate limits
 
 Set in `RateLimits` (`Infrastructure/RateLimiting.cs`). A refused request gets **429** with a `Retry-After` header and

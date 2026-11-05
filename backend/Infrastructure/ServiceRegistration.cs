@@ -1,6 +1,7 @@
 using System.Text.Encodings.Web;
 using System.Text.Json.Serialization;
 using FluentValidation;
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authorization;
@@ -48,6 +49,8 @@ public static class ServiceRegistration
             .UseSqlServer(sp.GetRequiredService<IConfiguration>().GetConnectionString("Default")
                           ?? throw new InvalidOperationException("ConnectionStrings:Default is not configured."))
             .UseSnakeCaseNamingConvention());
+        // Login cookies are signed with these keys; hosts wipe their disk, so they live in the database.
+        services.AddDataProtection().SetApplicationName("NailsByLeah").PersistKeysToDbContext<AppDbContext>();
         services.AddScoped<IUnitOfWork, EfUnitOfWork>();
         services.AddScoped<IUserRepository, UserRepository>();
         services.AddScoped<IUserTokenRepository, UserTokenRepository>();

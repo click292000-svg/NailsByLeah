@@ -12,8 +12,9 @@ public sealed record PaymentChargeResult(bool Succeeded, string? ReferenceNumber
 }
 
 /// <summary>
-/// Abstraction over GCash / Maya providers (Ref 12.1). Swap the registered implementation
-/// to connect a real provider; nothing else in the system changes.
+/// Abstraction over GCash / Maya providers (Ref 12.1). This one-step charge suits only the simulated gateway: PayMongo
+/// and HitPay both redirect the client to a hosted page and confirm later by webhook, so connecting either one changes
+/// this interface and the booking flow (docs/GO-LIVE-PLAN.md, "Payments").
 /// </summary>
 public interface IPaymentGateway
 {
