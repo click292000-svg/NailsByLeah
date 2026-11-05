@@ -2,12 +2,11 @@ import { useEffect, useRef, useState } from 'react'
 import { api } from '../../api'
 import { useAsync } from '../../hooks/useAsync'
 import { errorMessage } from '../../api/errors'
-import { formatDate, formatDateTime, formatTime } from '../../lib/format'
+import { formatDate, formatTime } from '../../lib/format'
 import { today } from '../../lib/dates'
 import { Alert, Button, EmptyState, Money, StatusBadge } from '../../components/ui'
 import { CancelBookingDialog, RescheduleDialog } from '../../components/BookingDialogs'
-import { Modal } from '../../components/Modal'
-import { ReferenceImageGallery } from '../../components/ReferenceImageGallery'
+import { BookingDetails } from './BookingDetails'
 
 const isActive = (b) => b.status === 'Pending' || b.status === 'Confirmed'
 
@@ -137,53 +136,6 @@ export function AdminBookingTable({ bookings, onChanged, emptyTitle = 'No bookin
       )}
       {dialog?.kind === 'details' && <BookingDetails booking={dialog.booking} onClose={() => setDialog(null)} />}
     </>
-  )
-}
-
-function BookingDetails({ booking: b, onClose }) {
-  return (
-    <Modal title={`Booking #${b.id}`} onClose={onClose} footer={<Button onClick={onClose}>Close</Button>}>
-      <dl className="detail-list">
-        <dt>Status</dt><dd><StatusBadge status={b.status} /></dd>
-        <dt>Appointment</dt><dd>{formatDate(b.bookingDate)}, {formatTime(b.startTime)} – {formatTime(b.endTime)}</dd>
-        <dt>Client</dt><dd>{b.client?.firstName} {b.client?.lastName} (@{b.client?.username})</dd>
-        <dt>Contact</dt><dd>{b.client?.email} · {b.client?.phoneNumber}</dd>
-        <dt>Service</dt><dd>{b.serviceName} — <Money amount={b.servicePrice} /></dd>
-        {b.addOns.map((a) => (
-          <div key={a.addOnId} className="detail-pair">
-            <dt>Add-on</dt><dd>{a.name} — {a.handLabel}, × {a.nailCount} {a.nailCount === 1 ? 'nail' : 'nails'} — <Money amount={a.linePrice} /></dd>
-          </div>
-        ))}
-        <dt>Total</dt><dd><Money amount={b.totalPrice} /></dd>
-        {/* What the client chose and paid, for checking before confirming (payment and confirmation are separate steps). */}
-        <dt>Payment option</dt><dd>{b.payment?.optionLabel ?? 'Booking deposit'} (<Money amount={b.depositAmount} /> deposit is non-refundable)</dd>
-        <dt>Amount paid</dt>
-        <dd>
-          <Money amount={b.payment?.amountPaid ?? b.depositAmount} />
-          {b.payment?.referenceNumber && <> via {b.payment.method} · <span className="mono">{b.payment.referenceNumber}</span></>}
-          {b.payment?.paidAt && <span className="muted"> · {formatDateTime(b.payment.paidAt)}</span>}
-        </dd>
-        <dt>Balance due</dt><dd><Money amount={b.balanceDue} /></dd>
-        <dt>Payment check</dt>
-        <dd>
-          {b.payment?.verified
-            ? <>Verified{b.payment.confirmedBy ? ` and confirmed by ${b.payment.confirmedBy}` : ''}{b.payment.confirmedAt ? `, ${formatDateTime(b.payment.confirmedAt)}` : ''}</>
-            : b.status === 'Pending' ? <span className="pay-check-waiting">Waiting for you to verify and confirm</span> : <span className="muted">Not recorded</span>}
-        </dd>
-        <dt>Note for Leyah</dt><dd className="summary-note">{b.note ?? 'No note'}</dd>
-        <dt>Design photos</dt>
-        <dd>{b.referenceImages?.length ? <ReferenceImageGallery images={b.referenceImages} /> : <span className="muted">None uploaded</span>}</dd>
-        <dt>Booked on</dt><dd>{formatDateTime(b.createdAt)}</dd>
-        {b.cancellation && (
-          <>
-            <dt>Cancelled</dt>
-            <dd>{formatDateTime(b.cancellation.cancelledAt)} by {b.cancellation.cancelledByRole === 'Administrator' ? 'the salon' : 'the client'}</dd>
-            <dt>Reason</dt><dd>{b.cancellation.reasonLabel}</dd>
-            <dt>Explanation</dt><dd>{b.cancellation.explanation ?? <span className="muted">None given</span>}</dd>
-          </>
-        )}
-      </dl>
-    </Modal>
   )
 }
 
