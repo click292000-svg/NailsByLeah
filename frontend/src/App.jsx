@@ -14,6 +14,7 @@ import BookingsPage from './pages/admin/BookingsPage'
 import ServicesPage from './pages/admin/ServicesPage'
 import SchedulePage from './pages/admin/SchedulePage'
 import ReportsPage from './pages/admin/ReportsPage'
+import ClientDataPage from './pages/admin/ClientDataPage'
 import ActivityLogPage from './pages/admin/ActivityLogPage'
 import AdminFeedbackPage from './pages/admin/FeedbackPage'
 import FeedbackPage from './pages/client/FeedbackPage'
@@ -45,6 +46,7 @@ export function AppRoutes() {
         <Route path="admin/reports" element={admin(<ReportsPage />)} />
         <Route path="admin/feedback" element={admin(<AdminFeedbackPage />)} />
         <Route path="admin/activity" element={admin(<ActivityLogPage />)} />
+        <Route path="admin/clients" element={admin(<ClientDataPage />)} />
 
         <Route path="*" element={<EmptyState title="Page not found"><Link to="/">Go to the home page</Link></EmptyState>} />
       </Route>

@@ -23,6 +23,7 @@ const adminLinks = [
   { to: '/admin/reports', label: 'Reports' },
   { to: '/admin/feedback', label: 'Feedback' },
   { to: '/admin/activity', label: 'Activity log' },
+  { to: '/admin/clients', label: 'Client data' },
 ]
 
 export function Layout() {

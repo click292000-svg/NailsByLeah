@@ -47,6 +47,25 @@ public sealed class AdminBookingsController(IAdminBookingService bookings) : Con
         bookings.CancelAsync(User.GetUserId(), id, request, ct);
 }
 
+/// <summary>A client's request to delete their personal data (Data Privacy Act of 2012).</summary>
+[ApiController]
+[Authorize(Roles = Roles.Administrator)]
+[Route("api/admin/clients")]
+public sealed class AdminClientDataController(IClientDataService clients) : ControllerBase
+{
+    /// <summary>POST so the client's email stays out of addresses, which web servers and proxies log.</summary>
+    [HttpPost("find")]
+    public Task<ClientDataResponse> Find(EmailRequest request, CancellationToken ct) => clients.FindByEmailAsync(request.Email, ct);
+
+    /// <summary>Permanently erases the client's personal data. Refused while they have an open booking.</summary>
+    [HttpPost("{id:int}/delete-data")]
+    public async Task<IActionResult> DeleteData(int id, CancellationToken ct)
+    {
+        await clients.EraseAsync(id, ct);
+        return NoContent();
+    }
+}
+
 /// <summary>Change prices and add-ons without code changes (Ref 11.3).</summary>
 [ApiController]
 [Authorize(Roles = Roles.Administrator)]

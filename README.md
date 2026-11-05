@@ -47,4 +47,5 @@ start" from a terminal, run them from Visual Studio instead (**Test → Run All 
 - Rate limits on sign-in, sign-up, password reset, code checks, bookings, uploads and feedback (`RateLimits` in `backend/appsettings.json`).
 - "Forgot password" and "resend code" answer identically, and equally fast, for registered and unknown emails.
 - Logs hold no client emails, phone numbers, passwords or reset links; reset links carry the token after `#`, which never reaches a server.
+- Leyah can erase a client's personal data on request (**Client data** in the admin menu); sales records stay correct.
 - Details: [backend/README.md](backend/README.md#security).

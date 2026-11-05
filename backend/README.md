@@ -72,7 +72,7 @@ All settings are in `appsettings.json`. Override any of them with user secrets o
 | `Auth` | Lockout (5 attempts / 15 min), idle session timeout (30 min), reset link lifetime (15 min), bcrypt cost |
 | `Booking` | Deposit (PHP 150), minimum notice for rescheduling (24 h) |
 | `Schedule` | Time zone (Asia/Manila), the 11:00 AM opening time, the 30-minute start-time grid, the 30-minute break after every appointment, the booking window (30 days ahead), closed weekdays. The closing time (default 9:00 PM) is set by administrators on the Schedule page and stored in `salon_settings` |
-| `Legal:TermsVersion` | Terms & Conditions version recorded at registration (currently 2.1; the text is in `frontend/src/content/legal.js`) |
+| `Legal:TermsVersion` | Terms & Conditions version recorded at registration (currently 2.2; the text is in `frontend/src/content/legal.js`) |
 | `Email` | Sender address and name shown on every email |
 | `Brevo`, `Smtp` | Email delivery: Brevo's API when `Brevo:ApiKey` is set, otherwise SMTP when `Smtp:Host` is set, otherwise the console |
 | `Notifications` | The 24-hour reminder job, and `SalonEmail`: where the salon's alerts go (new booking to confirm, client cancellation, client reschedule). Empty sends no alerts |
@@ -101,7 +101,7 @@ Controller → Service → Repository (Ref 14.1):
 | Public | `GET /api/services`, `POST /api/pricing/quote`, `GET /api/slots?date=`, `GET /api/lookups` |
 | Account | `POST /api/auth/register`, `GET /api/auth/username-availability`, `POST /api/auth/verify-email`, `POST /api/auth/resend-verification`, `POST /api/auth/login`, `POST /api/auth/logout`, `GET /api/auth/me`, `POST /api/auth/forgot-password`, `POST /api/auth/reset-password/validate`, `POST /api/auth/reset-password` |
 | Client | `POST /api/bookings` (book and pay), `GET /api/bookings`, `GET /api/bookings/{id}`, `GET /api/bookings/{id}/receipt`, `POST /api/bookings/{id}/reschedule`, `POST /api/bookings/{id}/cancel` |
-| Administrator | `GET /api/admin/dashboard`, `GET /api/admin/bookings`, `POST /api/admin/bookings/{id}/confirm`, `…/complete`, `…/reschedule`, `…/cancel`, `/api/admin/services`, `/api/admin/addons`, `/api/admin/blocked-slots`, `/api/admin/reports/daily`, `/api/admin/reports/monthly`, `/api/admin/activity-logs` |
+| Administrator | `GET /api/admin/dashboard`, `GET /api/admin/bookings`, `POST /api/admin/bookings/{id}/confirm`, `…/complete`, `…/reschedule`, `…/cancel`, `/api/admin/services`, `/api/admin/addons`, `/api/admin/blocked-slots`, `/api/admin/reports/daily`, `/api/admin/reports/monthly`, `/api/admin/activity-logs`, `POST /api/admin/clients/find`, `POST /api/admin/clients/{id}/delete-data` |
 
 Errors are returned as RFC 7807 ProblemDetails with a `code` field (for example `slot_unavailable`, `account_locked`, `token_expired`, `rate_limited`) and, for validation errors, an `errors` object keyed by camelCase field name.
 
@@ -144,6 +144,19 @@ Hosts keep logs, so they must not hold personal data:
 - Brevo error text has email addresses replaced with `[email]`.
 - EF Core's own save-error log (`Microsoft.EntityFrameworkCore.Update`) is off: it can repeat a duplicate value such as
   an email. The API turns duplicates into 409 answers and logs unexpected errors itself.
+
+### Deleting a client's data
+
+Administrators find a client by email on the **Client data** page and erase their data (`Services/ClientDataService.cs`).
+It is refused while the client has a Pending or Confirmed booking, and cannot be undone.
+
+| Erased | Kept, with no name attached |
+|---|---|
+| Name, username, email, phone (replaced with placeholders), password, sessions, email and reset tokens | Bookings and their prices |
+| Design photos (files too), booking notes, cancellation explanations, feedback comments, saved booking draft | Payment amounts and reference numbers |
+| IP addresses and details in the client's activity log entries | Star ratings |
+
+Not reached automatically: emails already sent (the salon's inbox, the client's inbox, Brevo's history) and database backups.
 
 ## Database backups (Ref 13.7)
 

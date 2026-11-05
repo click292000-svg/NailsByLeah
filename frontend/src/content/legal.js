@@ -14,7 +14,7 @@ const EMAIL = 'nailsbyleyah.bookings@gmail.com'
 
 export const termsAndConditions = {
   title: 'Terms & Conditions',
-  version: '2.1',
+  version: '2.2',
   updated: 'November 5, 2026',
   sections: [
     {
@@ -108,7 +108,7 @@ export const termsAndConditions = {
 
 export const privacyPolicy = {
   title: 'Privacy Policy',
-  version: '2.1',
+  version: '2.2',
   updated: 'November 5, 2026',
   sections: [
     {
@@ -168,15 +168,22 @@ export const privacyPolicy = {
       body: 'We keep your account and booking history while your account is active, so you can see past bookings and we can keep accurate records. Payment and sales records may be kept longer where needed for business and tax records. When information is no longer needed, we delete it or make it anonymous.',
     },
     {
-      heading: '8. Your rights',
+      heading: '8. Deleting your information',
+      body: [
+        'You can ask us to delete your information by contacting us. Please complete or cancel any open booking first. We remove your name, username, email address, mobile number, design photos, notes, feedback comments and security records, and you can no longer sign in. This cannot be undone.',
+        'We keep your bookings, payment amounts and reference numbers, and star ratings, with no name attached, because they are needed for accurate sales and tax records. Emails already sent to you or to the salon may remain in those inboxes until they are deleted.',
+      ],
+    },
+    {
+      heading: '9. Your rights',
       body: 'Under the Data Privacy Act of 2012 you have the right to be informed, to access your information, to correct it, to object to its use, to ask us to delete or block it, to receive a copy of it, and to complain to the National Privacy Commission (privacy.gov.ph). To make a request, contact us. We may need to confirm your identity first.',
     },
     {
-      heading: '9. Changes to this policy',
+      heading: '10. Changes to this policy',
       body: 'We may update this policy. The date and version number at the top show when it last changed. If the change is important, we will tell you by email or on the website.',
     },
     {
-      heading: '10. Contact',
+      heading: '11. Contact',
       body: `For privacy questions or requests, email ${EMAIL}.`,
     },
   ],

@@ -9,14 +9,14 @@ import { Alert, Card, EmptyState, PageHeader, PageLoader, Pager, SelectField } f
 const ACTIONS = [
   'BookingCreated', 'BookingConfirmed', 'BookingRescheduled', 'BookingCompleted', 'BookingCancelled',
   'PaymentSucceeded', 'PaymentFailed', 'ServiceCreated', 'ServiceUpdated', 'ServiceDeleted', 'SlotBlocked', 'SlotUnblocked',
-  'UserRegistered', 'EmailVerified', 'LoginSucceeded', 'LoginFailed', 'AccountLocked', 'PasswordResetRequested', 'PasswordReset',
+  'UserRegistered', 'EmailVerified', 'LoginSucceeded', 'LoginFailed', 'AccountLocked', 'PasswordResetRequested', 'PasswordReset', 'ClientDataDeleted',
 ].map((a) => ({ value: a, label: humanize(a) }))
 
 const PAGE_SIZE = 25
 
 /** The colour of an entry's dot: problems red, payments green, bookings rose, price list and schedule amber, accounts blue. */
 function tone(action) {
-  if (/Failed|Locked/.test(action)) return 'problem'
+  if (/Failed|Locked|Deleted$/.test(action) && action !== 'ServiceDeleted') return 'problem'
   if (action.startsWith('Payment')) return 'payment'
   if (action.startsWith('Booking')) return 'booking'
   if (action.startsWith('Service') || action.startsWith('Slot')) return 'catalog'

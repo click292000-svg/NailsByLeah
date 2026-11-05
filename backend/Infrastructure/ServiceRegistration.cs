@@ -58,6 +58,7 @@ public static class ServiceRegistration
         services.AddScoped<IReferenceImageRepository, ReferenceImageRepository>();
         services.AddScoped<IBookingDraftRepository, BookingDraftRepository>();
         services.AddScoped<IFeedbackRepository, FeedbackRepository>();
+        services.AddScoped<IClientDataRepository, ClientDataRepository>();
 
         // Application services
         services.AddSingleton<IPasswordHasher, BcryptPasswordHasher>();
@@ -72,6 +73,7 @@ public static class ServiceRegistration
         services.AddScoped<IDashboardService, DashboardService>();
         services.AddScoped<IReportService, ReportService>();
         services.AddScoped<IActivityLogService, ActivityLogService>();
+        services.AddScoped<IClientDataService, ClientDataService>();
         services.AddScopedFor<ServiceCatalogService, IServiceCatalog, IServiceManagement>();
         services.AddScopedFor<ScheduleService, ISlotAvailability, IScheduleManagement>();
         services.AddScopedFor<BookingService, IClientBookingService, IAdminBookingService>();

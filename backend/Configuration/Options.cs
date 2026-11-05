@@ -56,7 +56,7 @@ public sealed class UploadOptions
 public sealed class LegalOptions
 {
     public const string Section = "Legal";
-    public string TermsVersion { get; set; } = "2.1";
+    public string TermsVersion { get; set; } = "2.2";
 }
 
 public sealed class FrontendOptions

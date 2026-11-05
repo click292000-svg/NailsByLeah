@@ -107,5 +107,7 @@ export const api = {
     monthlyReport: (year, month) => get('/admin/reports/monthly', { year, month }),
     activityLogs: (query) => get('/admin/activity-logs', query),
     feedback: (query) => get('/admin/feedback', query),
+    findClient: (email) => post('/admin/clients/find', { email }),
+    deleteClientData: (id) => post(`/admin/clients/${id}/delete-data`),
   },
 }

@@ -147,4 +147,5 @@ public static class AuditActions
     public const string ReferenceImageUploaded = "ReferenceImageUploaded";
     public const string ReferenceImageRemoved = "ReferenceImageRemoved";
     public const string FeedbackSubmitted = "FeedbackSubmitted";
+    public const string ClientDataDeleted = "ClientDataDeleted";
 }

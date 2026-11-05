@@ -721,6 +721,40 @@ const routes = [
       page, pageSize, totalCount: all.length, averageRating, countsByRating }
   }],
 
+  // A client's request to delete their personal data (same rules as ClientDataService)
+  ['POST', '/admin/clients/find', (db, { body }) => {
+    requireUser(db, 'Administrator')
+    const email = String(body.email ?? '').trim().toLowerCase()
+    const client = db.users.find((u) => u.email?.toLowerCase() === email && u.role === 'Client' && !u.isDeleted)
+    if (!client) notFound('No client account was found with that email address.')
+    const bookings = db.bookings.filter((b) => b.clientId === client.id)
+    return { id: client.id, firstName: client.firstName, lastName: client.lastName, username: client.username, email: client.email,
+      phoneNumber: client.phoneNumber, bookingCount: bookings.length,
+      activeBookingCount: bookings.filter((b) => ['Pending', 'Confirmed'].includes(b.status)).length,
+      photoCount: db.referenceImages.filter((r) => r.clientId === client.id && !r.isDeleted).length,
+      feedbackCount: db.feedback.filter((f) => f.clientId === client.id).length }
+  }],
+  ['POST', '/admin/clients/:id/delete-data', (db, { params }) => {
+    const admin = requireUser(db, 'Administrator')
+    const client = db.users.find((u) => u.id === Number(params.id) && u.role === 'Client' && !u.isDeleted)
+    if (!client) notFound('No client account was found with that email address.')
+    const bookings = db.bookings.filter((b) => b.clientId === client.id)
+    if (bookings.some((b) => ['Pending', 'Confirmed'].includes(b.status)))
+      conflict('This client still has an open booking. Complete or cancel it first.', 'client_has_active_bookings')
+    Object.assign(client, { firstName: 'Deleted', lastName: 'Client', username: `deleted-${client.id}`, email: `deleted-${client.id}@deleted.invalid`,
+      phoneNumber: `00${String(client.id).padStart(9, '0')}`, password: randomHex(16), securityStamp: randomHex(8), isDeleted: true, updatedAt: nowIso() })
+    bookings.forEach((b) => { b.note = null })
+    db.cancellations.filter((c) => bookings.some((b) => b.id === c.bookingId)).forEach((c) => { c.explanation = null })
+    db.referenceImages.filter((r) => r.clientId === client.id).forEach((r) => { r.isDeleted = true })
+    db.feedback.filter((f) => f.clientId === client.id).forEach((f) => { f.comment = null })
+    db.userTokens = db.userTokens.filter((t) => t.userId !== client.id)
+    db.bookingDrafts = db.bookingDrafts.filter((d) => d.clientId !== client.id)
+    db.auditLogs.filter((a) => a.userId === client.id).forEach((a) => { a.details = null; a.ipAddress = null })
+    audit(db, admin.id, 'ClientDataDeleted', 'User', client.id)
+    saveDb()
+    return { status: 204, data: null }
+  }],
+
   // Nail design reference photos
   ['POST', '/reference-images', (db, { file }) => uploadReferenceImage(db, requireUser(db, 'Client'), file)],
   ['GET', '/reference-images/pending', (db) => {

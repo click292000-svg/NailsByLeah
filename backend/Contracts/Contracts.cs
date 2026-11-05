@@ -35,6 +35,11 @@ public sealed record LoginRequest(string UsernameOrEmail, string Password);
 public sealed record ResetPasswordRequest(string Token, string NewPassword);
 public sealed record TokenRequest(string Token);
 
+/// <summary>What the salon holds about one client, shown before erasing it at the client's request.</summary>
+public sealed record ClientDataResponse(
+    int Id, string FirstName, string LastName, string Username, string Email, string PhoneNumber,
+    int BookingCount, int ActiveBookingCount, int PhotoCount, int FeedbackCount);
+
 public sealed record UserProfileResponse(
     int Id, string FirstName, string LastName, string Username, string Email, string PhoneNumber, string Role);
 
