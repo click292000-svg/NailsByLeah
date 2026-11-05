@@ -99,7 +99,7 @@ export function Layout() {
         <div className="footer-inner">
           <p className="footer-copy">© {YEAR} {salon.name}</p>
           <nav className="footer-links" aria-label="Footer">
-            <button type="button" onClick={() => setLegalDocument('terms')}>Terms of Service</button>
+            <button type="button" onClick={() => setLegalDocument('terms')}>Terms &amp; Conditions</button>
             <span aria-hidden="true">•</span>
             <button type="button" onClick={() => setLegalDocument('privacy')}>Privacy Policy</button>
           </nav>

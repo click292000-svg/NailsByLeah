@@ -28,7 +28,7 @@ export const lookups = {
     { value: 'Completed', label: 'Completed' },
     { value: 'Cancelled', label: 'Cancelled' },
   ],
-  termsVersion: '2.2',
+  termsVersion: '2.3',
 }
 
 const allReasons = [...lookups.clientCancellationReasons, ...lookups.adminCancellationReasons]

@@ -88,7 +88,7 @@ All settings are in `appsettings.json`. Override any of them with user secrets o
 | `Auth` | Lockout (5 attempts / 15 min), idle session timeout (30 min), reset link lifetime (15 min), bcrypt cost |
 | `Booking` | Deposit (PHP 150), minimum notice for rescheduling (24 h) |
 | `Schedule` | Time zone (Asia/Manila), the 11:00 AM opening time, the 30-minute start-time grid, the 30-minute break after every appointment, the booking window (30 days ahead), closed weekdays. The closing time (default 9:00 PM) is set by administrators on the Schedule page and stored in `salon_settings` |
-| `Legal:TermsVersion` | Terms & Conditions version recorded at registration (currently 2.2; the text is in `frontend/src/content/legal.js`) |
+| `Legal:TermsVersion` | Terms & Conditions version recorded at registration and with each booking (currently 2.3; the text is in `frontend/src/content/legal.js`) |
 | `Alerts` | `Email`: who is told about serious problems (empty sends none): a page crashing, the database unreachable, reminders failing, photos failing to save. At most 3 emails a day, an hour apart (`MaxEmailsPerDay`, `MinutesBetweenEmails`). Other errors stay in the server log |
 | `Supabase` | `Url`, `SecretKey` (user secrets or host settings only) and `ReferenceImageBucket`, for design photos. Empty uses `Uploads:ReferenceImagePath` on disk. The bucket must be private: only the API holds the key, and browsers get photos through its permission checks |
 | `Frontend:BaseUrl` | The site's address, used for every link in emails. On the host: the real `https://` address |

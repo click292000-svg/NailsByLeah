@@ -1,19 +1,27 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { api } from '../api'
 import { useAsync } from '../hooks/useAsync'
-import { addDays, today } from '../lib/dates'
+import { addDays, daysInMonth, toIsoDate, today } from '../lib/dates'
 import { formatDate, formatDuration, formatTime } from '../lib/format'
 import { errorMessage } from '../api/errors'
 import { Alert, Spinner } from './ui'
 import { schedule } from '../content/salon'
 
 const STATUS_TEXT = { Open: 'Available', Booked: 'Booked', Break: 'Break', Closed: 'Closed', Past: 'Past', TooShort: 'Not enough time' }
+// Fits one line on a time button, so every button stays the same size. The exact reason is in its title and accessible name.
+const BUTTON_TEXT = { ...STATUS_TEXT, TooShort: 'Unavailable' }
 const STATUS_TITLE = {
   Booked: 'Another appointment is at this time',
   Break: 'The 30-minute break after an appointment',
   Closed: 'Closed by the salon',
   TooShort: 'This service would run past closing time or into another appointment and its 30-minute break.',
 }
+
+const SLOT_GROUPS = [
+  { name: 'Morning', from: '00:00', to: '12:00' },
+  { name: 'Afternoon', from: '12:00', to: '17:00' },
+  { name: 'Evening', from: '17:00', to: '24:00' },
+]
 
 /** "Taken: 11:30 AM – 1:00 PM (break until 1:30 PM)": the appointments already on the day, times only. */
 function TakenTimes({ taken }) {
@@ -37,120 +45,152 @@ function TakenTimes({ taken }) {
  */
 export function SlotPicker({ date, onDateChange, selectedTime, onTimeChange, serviceId, maxDaysAhead = schedule.maxDaysAhead, error, keepTime }) {
   const slots = useAsync(() => (date ? api.catalog.slots(date, serviceId) : Promise.resolve(null)), [date, serviceId])
+  const chosen = selectedTime && slots.data?.slots.find((s) => s.startTime === selectedTime)
 
   return (
     <div className="slot-picker">
-      <DateStrip value={date} maxDaysAhead={maxDaysAhead} error={error}
+      <div className="slot-layout">
+      <DateCalendar value={date} maxDaysAhead={maxDaysAhead} error={error}
         onChange={(value) => {
           onDateChange(value)
           onTimeChange('')
         }} />
 
-      {!date && <p className="muted">Choose a date to see available times.</p>}
-      {date && slots.loading && <div className="inline-loader"><Spinner small /> Loading times…</div>}
-      {date && slots.error && <Alert kind="error">{errorMessage(slots.error)}</Alert>}
-      {date && slots.data && (
-        <fieldset className="slot-fieldset">
-          <legend>Time {slots.data.isClosed && <span className="muted">— {slots.data.closedReason}</span>}</legend>
-          {!slots.data.isClosed && (
-            <p className="muted small slot-hours">
-              Open {formatTime(slots.data.openingTime)} – {formatTime(slots.data.closingTime)}
-              {serviceId ? <> · this service takes {formatDuration(slots.data.durationMinutes)}</> : null}
-              {` · each appointment is followed by a ${slots.data.bufferMinutes}-minute break`}
-            </p>
+      <div className="pick-column">
+        <span className="field-label pick-title" id="time-label">Choose a time <span className="required" aria-hidden="true">*</span></span>
+        <div className="pick-card" role="group" aria-labelledby="time-label">
+          {date && <div className="pick-card-head"><span className="pick-card-title">{longDate(date)}</span></div>}
+          {!date && <p className="muted pick-empty">Choose a date to see available times.</p>}
+          {date && slots.loading && <div className="inline-loader"><Spinner small /> Loading times…</div>}
+          {date && slots.error && <Alert kind="error">{errorMessage(slots.error)}</Alert>}
+          {date && slots.data?.isClosed && <p className="muted pick-empty">{slots.data.closedReason}. Please choose another date.</p>}
+          {date && slots.data && !slots.data.isClosed && (
+            <>
+              <TakenTimes taken={slots.data.taken} />
+              <div className="slot-groups">
+                {SLOT_GROUPS.map(({ name, from, to }) => {
+                  const group = slots.data.slots.filter((s) => s.startTime >= from && s.startTime < to)
+                  if (!group.length) return null
+                  return (
+                    <div key={name} role="group" aria-label={name}>
+                      <div className="slot-group-title">{name}</div>
+                      <div className="slot-grid">
+                        {group.map((slot) => {
+                          const isCurrent = keepTime && slot.startTime === keepTime
+                          const open = slot.status === 'Open'
+                          const selected = selectedTime === slot.startTime
+                          const range = `${formatTime(slot.startTime)} – ${formatTime(slot.endTime)}`
+                          // The exact reason when there is one ("Break until 1:30 PM", "Too close to the 11:30 AM appointment").
+                          const reason = isCurrent ? 'Current' : slot.note ?? STATUS_TEXT[slot.status]
+                          return (
+                            <button key={slot.startTime} type="button" disabled={!open} aria-label={`${range} ${reason}`}
+                              className={`slot slot-${slot.status.toLowerCase()}${selected ? ' slot-selected' : ''}`}
+                              aria-pressed={selected} onClick={() => onTimeChange(slot.startTime)}
+                              title={open ? `Ends at ${formatTime(slot.endTime)}` : isCurrent ? 'Your current time' : slot.note ?? STATUS_TITLE[slot.status] ?? STATUS_TEXT[slot.status]}>
+                              <span className="slot-time">{formatTime(slot.startTime)}</span>
+                              {!open && <span className="slot-status">{isCurrent ? 'Current' : BUTTON_TEXT[slot.status]}</span>}
+                            </button>
+                          )
+                        })}
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+              <p className="pick-hint">
+                Open {formatTime(slots.data.openingTime)} – {formatTime(slots.data.closingTime)}
+                {serviceId ? <> · This service takes {formatDuration(slots.data.durationMinutes)}</> : null}
+                {` · ${slots.data.bufferMinutes}-minute break after each appointment`}
+              </p>
+            </>
           )}
-          {!slots.data.isClosed && <TakenTimes taken={slots.data.taken} />}
-          <div className="slot-grid">
-            {slots.data.slots.map((slot) => {
-              const isCurrent = keepTime && slot.startTime === keepTime
-              const open = slot.status === 'Open'
-              const selected = selectedTime === slot.startTime
-              return (
-                <button key={slot.startTime} type="button" disabled={!open}
-                  className={`slot slot-${slot.status.toLowerCase()}${selected ? ' slot-selected' : ''}`}
-                  aria-pressed={selected} onClick={() => onTimeChange(slot.startTime)}
-                  title={open ? undefined : isCurrent ? 'Your current time' : STATUS_TITLE[slot.status] ?? STATUS_TEXT[slot.status]}>
-                  <span className="slot-time">{formatTime(slot.startTime)} – {formatTime(slot.endTime)}</span>
-                  {/* The exact reason when there is one ("Break until 1:30 PM", "Too close to the 11:30 AM appointment"). */}
-                  <span className="slot-status">{isCurrent ? 'Current' : slot.note ?? STATUS_TEXT[slot.status]}</span>
-                </button>
-              )
-            })}
-          </div>
-          <div className="slot-legend" aria-hidden="true">
-            <span><i className="legend legend-open" /> Available</span>
-            <span><i className="legend legend-booked" /> Booked</span>
-            <span><i className="legend legend-break" /> Break after an appointment</span>
-            <span><i className="legend legend-tooshort" /> Not enough time</span>
-            <span><i className="legend legend-closed" /> Closed</span>
-          </div>
-        </fieldset>
-      )}
+        </div>
+      </div>
+
+      <div className={chosen ? 'slot-chosen is-set' : 'slot-chosen'} aria-live="polite">
+        <span className="slot-chosen-label">Your appointment</span>
+        {date && <span className="slot-chosen-date">{longDate(date)}</span>}
+        <span className="slot-chosen-time">
+          {chosen ? `${formatTime(chosen.startTime)} – ${formatTime(chosen.endTime)}` : date ? 'Now choose a time' : 'Choose a date and a time'}
+        </span>
+      </div>
+      </div>
     </div>
   )
 }
 
-const parse = (iso) => {
+const longDate = (iso) => {
   const [y, m, d] = iso.split('-').map(Number)
-  return new Date(y, m - 1, d)
+  return new Date(y, m - 1, d).toLocaleDateString('en-PH', { weekday: 'long', month: 'long', day: 'numeric' })
 }
-const monthLabel = (iso) => parse(iso).toLocaleDateString('en-PH', { month: 'long', year: 'numeric' })
+
+const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+const ARROW_STEPS = { ArrowLeft: -1, ArrowRight: 1, ArrowUp: -7, ArrowDown: 7 }
 
 /**
- * The next days as a row of cards (Today, Tomorrow, then weekday and date), scrolled with the arrows or by swiping.
- * The month above follows the cards in view. Each card is a radio button named by its full date, e.g. "Thu, Nov 5, 2026".
+ * A month calendar: every date is in view with no sideways scrolling, and dates that can't be booked are grayed out.
+ * Each day is a radio button named by its full date, e.g. "Thu, Nov 5, 2026". Arrow keys move between days and months.
  */
-function DateStrip({ value, onChange, maxDaysAhead, error }) {
+export function DateCalendar({ value, onChange, maxDaysAhead, error }) {
   const first = today()
-  const days = useMemo(() => Array.from({ length: maxDaysAhead + 1 }, (_, i) => addDays(first, i)), [first, maxDaysAhead])
-  const stripRef = useRef(null)
-  const [shownMonth, setShownMonth] = useState(() => monthLabel(value && value >= first ? value : first))
-  const [edges, setEdges] = useState({ start: true, end: false })
+  const last = addDays(first, maxDaysAhead)
+  const [month, setMonth] = useState(() => (value && value >= first && value <= last ? value : first).slice(0, 7))
+  const gridRef = useRef(null)
+  const focusNext = useRef(null)
 
-  // Keeps the month label and arrow buttons in step with the scroll position.
-  const sync = () => {
-    const strip = stripRef.current
-    if (!strip) return
-    const firstVisible = [...strip.children].find((card) => card.offsetLeft + card.offsetWidth / 2 >= strip.scrollLeft)
-    if (firstVisible) setShownMonth(monthLabel(firstVisible.dataset.date))
-    setEdges({ start: strip.scrollLeft <= 2, end: strip.scrollLeft + strip.clientWidth >= strip.scrollWidth - 2 })
+  // After an arrow key, which may have changed the month, focus lands on the new day.
+  useEffect(() => {
+    if (!focusNext.current) return
+    gridRef.current?.querySelector(`[data-date="${focusNext.current}"]`)?.focus()
+    focusNext.current = null
+  }, [month, value])
+
+  const [year, monthNumber] = month.split('-').map(Number)
+  const days = Array.from({ length: daysInMonth(year, monthNumber) }, (_, i) => toIsoDate(new Date(year, monthNumber - 1, i + 1)))
+  const leadingBlanks = new Date(year, monthNumber - 1, 1).getDay()
+  const bookable = (day) => day >= first && day <= last
+  const tabStop = days.includes(value) && bookable(value) ? value : days.find(bookable)
+
+  const changeMonth = (step) => setMonth(toIsoDate(new Date(year, monthNumber - 1 + step, 1)).slice(0, 7))
+
+  const onKeyDown = (e) => {
+    const step = ARROW_STEPS[e.key]
+    const from = e.target.dataset.date
+    if (!step || !from) return
+    e.preventDefault()
+    const next = addDays(from, step)
+    if (!bookable(next)) return
+    focusNext.current = next
+    setMonth(next.slice(0, 7))
+    onChange(next)
   }
 
-  // A chosen date (a restored draft, or the booking being rescheduled) is brought into view.
-  useEffect(() => {
-    const strip = stripRef.current
-    const card = value && strip?.querySelector(`[data-date="${value}"]`)
-    if (card) strip.scrollLeft = card.offsetLeft - strip.clientWidth / 2 + card.offsetWidth / 2
-    sync()
-  }, []) // eslint-disable-line react-hooks/exhaustive-deps
-
-  const page = (direction) => stripRef.current?.scrollBy({ left: direction * stripRef.current.clientWidth * 0.85, behavior: 'smooth' })
-
   return (
-    <div className={error ? 'date-strip-field field-invalid' : 'date-strip-field'}>
-      <div className="date-strip-head">
-        <span className="field-label" id="date-strip-label">Date <span className="required" aria-hidden="true">*</span></span>
-        <span className="date-strip-month" aria-hidden="true">{shownMonth}</span>
-        <span className="date-strip-arrows">
-          <button type="button" onClick={() => page(-1)} disabled={edges.start} aria-label="Earlier dates">‹</button>
-          <button type="button" onClick={() => page(1)} disabled={edges.end} aria-label="Later dates">›</button>
-        </span>
-      </div>
-      <div className="date-strip" ref={stripRef} onScroll={sync} role="radiogroup" aria-labelledby="date-strip-label">
-        {days.map((day, i) => {
-          const date = parse(day)
-          const selected = day === value
-          const top = i === 0 ? 'Today' : i === 1 ? 'Tomorrow' : date.toLocaleDateString('en-PH', { weekday: 'short' })
-          return (
-            <button key={day} type="button" role="radio" aria-checked={selected} aria-label={formatDate(day)} data-date={day}
-              className={`date-card${selected ? ' selected' : ''}${date.getDay() === 0 || date.getDay() === 6 ? ' weekend' : ''}`}
+    <div className={error ? 'pick-column field-invalid' : 'pick-column'}>
+      <span className="field-label pick-title" id="book-cal-label">Choose a date <span className="required" aria-hidden="true">*</span></span>
+      <div className="pick-card">
+        <div className="pick-card-head">
+          <button type="button" onClick={() => changeMonth(-1)} disabled={month <= first.slice(0, 7)} aria-label="Previous month">‹</button>
+          <span className="pick-card-title" aria-live="polite">
+            {new Date(year, monthNumber - 1, 1).toLocaleDateString('en-PH', { month: 'long', year: 'numeric' })}
+          </span>
+          <button type="button" onClick={() => changeMonth(1)} disabled={month >= last.slice(0, 7)} aria-label="Next month">›</button>
+        </div>
+        <div className="book-cal-weekdays" aria-hidden="true">
+          {WEEKDAYS.map((day) => <span key={day}>{day}</span>)}
+        </div>
+        <div className="book-cal-days" ref={gridRef} role="radiogroup" aria-labelledby="book-cal-label" onKeyDown={onKeyDown}>
+          {Array.from({ length: leadingBlanks }, (_, i) => <span key={i} />)}
+          {days.map((day) => (
+            <button key={day} type="button" role="radio" aria-checked={day === value} aria-label={formatDate(day)}
+              aria-current={day === first ? 'date' : undefined} data-date={day} disabled={!bookable(day)} tabIndex={day === tabStop ? 0 : -1}
+              className={`book-cal-day${day === value ? ' selected' : ''}${day === first ? ' is-today' : ''}`}
               onClick={() => onChange(day)}>
-              <span className="date-card-day">{top}</span>
-              <span className="date-card-num">{date.getDate()}</span>
-              <span className="date-card-month">{date.toLocaleDateString('en-PH', { month: 'short' })}</span>
+              {Number(day.slice(8))}
             </button>
-          )
-        })}
+          ))}
+        </div>
+        <p className="pick-hint"><i aria-hidden="true" /> Today · You can book up to {maxDaysAhead} days ahead</p>
       </div>
       {error && <div className="field-error">{error}</div>}
     </div>

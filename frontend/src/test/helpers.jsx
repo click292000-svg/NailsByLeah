@@ -24,5 +24,9 @@ export function renderApp(route = '/') {
   )
 }
 
-/** Chooses a day in the booking date picker (a card per day, named by its full date). */
-export const pickDate = (isoDate) => fireEvent.click(screen.getByRole('radio', { name: formatDate(isoDate) }))
+/** Chooses a day in the booking calendar (named by its full date), turning to next month if the day falls there. */
+export const pickDate = (isoDate) => {
+  const name = formatDate(isoDate)
+  if (!screen.queryByRole('radio', { name })) fireEvent.click(screen.getByRole('button', { name: 'Next month' }))
+  fireEvent.click(screen.getByRole('radio', { name }))
+}

@@ -3,7 +3,8 @@ import { api, referenceImageUrl } from '../api'
 import { errorMessage } from '../api/errors'
 import { LIMITS, REFERENCE_IMAGE_ACCEPT, REFERENCE_IMAGE_MESSAGES, validateReferenceImage } from '../validation/rules'
 import { shrinkImage } from '../lib/shrinkImage'
-import { Spinner } from './ui'
+import { Modal } from './Modal'
+import { Button, Spinner } from './ui'
 
 /**
  * Upload up to 3 photos of the nail design the client wants. Each photo is checked (JPG/PNG/WebP), shrunk if it is
@@ -16,6 +17,7 @@ export function ReferenceImagePicker({ images, onChange }) {
   const [error, setError] = useState(null)
   const [dragging, setDragging] = useState(false)
   const [removing, setRemoving] = useState(null)
+  const [viewing, setViewing] = useState(null) // the photo shown full size
   const slotsLeft = LIMITS.referenceImagesPerBooking - images.length - uploading.length
 
   const addFiles = async (fileList) => {
@@ -67,17 +69,18 @@ export function ReferenceImagePicker({ images, onChange }) {
   }
 
   return (
-    <div className="reference-picker">
-      <div className="field-top">
-        <span className="field-label" id={`${inputId}-label`}>Design reference photos <span className="muted">(optional)</span></span>
+    <div className="pick-column reference-picker">
+      <div className="pick-title-row">
+        <span className="field-label pick-title" id={`${inputId}-label`}>Design reference photos <span className="pick-optional">(optional)</span></span>
         <span className="field-counter">{images.length + uploading.length}/{LIMITS.referenceImagesPerBooking}</span>
       </div>
-      <p className="field-hint">Show Leyah the look you want. JPG, PNG or WebP. Large photos are shrunk for you.</p>
-
+      <div className="pick-card">
       <ul className="reference-grid" aria-label="Your reference photos">
         {images.map((image, i) => (
           <li key={image.id} className="reference-tile">
-            <img src={referenceImageUrl(image)} alt={`Design reference ${i + 1}${image.name ? ` (${image.name})` : ''}`} />
+            <button type="button" className="reference-view" onClick={() => setViewing(i)} aria-label={`View design reference ${i + 1} full size`}>
+              <img src={referenceImageUrl(image)} alt={`Design reference ${i + 1}${image.name ? ` (${image.name})` : ''}`} />
+            </button>
             <button type="button" className="reference-remove" onClick={() => remove(image)} disabled={removing === image.id}
               aria-label={`Remove design reference ${i + 1}`}>×</button>
           </li>
@@ -99,11 +102,21 @@ export function ReferenceImagePicker({ images, onChange }) {
             </label>
           </li>
         )}
+        {/* The unused places stay marked, so the row keeps its shape and shows how many more can be added. */}
+        {Array.from({ length: Math.max(0, slotsLeft - 1) }, (_, i) => <li key={i} className="reference-empty" aria-hidden="true" />)}
       </ul>
       <input id={inputId} className="sr-only" type="file" accept={REFERENCE_IMAGE_ACCEPT} multiple
         aria-labelledby={`${inputId}-label`} aria-describedby={error ? `${inputId}-error` : undefined}
         onChange={(e) => { addFiles(e.target.files); e.target.value = '' }} />
-      {error && <div id={`${inputId}-error`} className="field-error" role="alert">{error}</div>}
+      {error && <div id={`${inputId}-error`} className="field-error reference-error" role="alert">{error}</div>}
+      <p className="pick-hint">Show Leyah the look you want · JPG, PNG or WebP · Large photos are shrunk for you</p>
+      </div>
+      {viewing !== null && images[viewing] && (
+        <Modal title={`Design reference ${viewing + 1} of ${images.length}`} onClose={() => setViewing(null)} wide
+          footer={<Button onClick={() => setViewing(null)}>Close</Button>}>
+          <img className="reference-full" src={referenceImageUrl(images[viewing])} alt={`Design reference ${viewing + 1}, full size`} />
+        </Modal>
+      )}
     </div>
   )
 }

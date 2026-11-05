@@ -43,13 +43,29 @@ describe('Design reference photos', () => {
 
     await user.click(screen.getByRole('button', { name: 'Continue' }))
     expect(within(screen.getByRole('list', { name: 'Design reference photos' })).getAllByRole('img')).toHaveLength(1)
-    await user.click(screen.getByRole('checkbox', { name: 'I understand' }))
+    await user.click(screen.getByRole('checkbox', { name: /I agree to the booking policy/ }))
     await user.click(screen.getByRole('button', { name: /Pay/ }))
 
     expect(await screen.findByRole('heading', { name: 'Booking received!' })).toBeInTheDocument()
     const booking = getDb().bookings.at(-1)
     expect(getDb().referenceImages.filter((r) => r.bookingId === booking.id)).toHaveLength(1)
     expect(getDb().bookingDrafts.filter((d) => d.clientId === 2)).toHaveLength(0) // the draft became the booking
+  })
+
+  it('opens a chosen photo full size, and fills the three places as photos are added', async () => {
+    const user = userEvent.setup()
+    await signIn(CLIENT)
+    renderApp('/book')
+    await goToDesignStep(user)
+
+    const list = screen.getByRole('list', { name: 'Your reference photos' })
+    expect(list.querySelectorAll('.reference-empty')).toHaveLength(2)
+    await user.upload(screen.getByLabelText(/Design reference photos/), png('glitter.png'))
+    await screen.findByRole('img', { name: /glitter.png/ })
+    expect(list.querySelectorAll('.reference-empty')).toHaveLength(1)
+
+    await user.click(screen.getByRole('button', { name: 'View design reference 1 full size' }))
+    expect(within(screen.getByRole('dialog', { name: 'Design reference 1 of 1' })).getByRole('img', { name: 'Design reference 1, full size' })).toBeInTheDocument()
   })
 
   it('a file renamed to .png is refused because its content is not an image', async () => {

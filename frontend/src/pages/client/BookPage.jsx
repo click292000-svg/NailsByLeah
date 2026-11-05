@@ -9,7 +9,7 @@ import { calculateQuote } from '../../lib/pricing'
 import { formatDate, formatDuration, formatTime } from '../../lib/format'
 import { ApiError, errorMessage } from '../../api/errors'
 import { LIMITS, validateHand } from '../../validation/rules'
-import { Alert, Button, Card, Field, Money, PageHeader, PageLoader } from '../../components/ui'
+import { Alert, Button, Card, Money, PageHeader, PageLoader } from '../../components/ui'
 import { SlotPicker } from '../../components/SlotPicker'
 import { PaymentPanel, amountNow, balanceAfter } from '../../components/PaymentPanel'
 import { Receipt } from '../../components/Receipt'
@@ -24,6 +24,22 @@ const isRemoval = (service) => service?.category === 'Removal'
 // Photos for the Soft Gel services, matched by name (public/img). Services without one show as text only.
 const SERVICE_PHOTOS = { plain: '/img/service-plain.jpg', 'with design': '/img/service-with-design.jpg', biab: '/img/service-biab.jpg' }
 const photoFor = (service) => service.category === 'SoftGel' ? SERVICE_PHOTOS[service.name.trim().toLowerCase()] : undefined
+
+// An add-on added later on the Services page, without a photo here yet, shows a plain tile rather than the wrong nails.
+const ADD_ON_PHOTOS = {
+  'french tip': '/img/addon-french-tip.jpg',
+  chrome: '/img/addon-chrome.jpg',
+  'cat eye polish': '/img/addon-cat-eye.jpg',
+  'blooming gel': '/img/addon-blooming-gel.jpg',
+  'embossed art': '/img/addon-embossed-art.jpg',
+}
+const addOnPhotoFor = (addOn) => ADD_ON_PHOTOS[addOn.name.trim().toLowerCase()]
+
+const SparkleIcon = () => (
+  <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+    <path d="M12 3l1.9 5.6a3 3 0 0 0 1.9 1.9L21.4 12l-5.6 1.5a3 3 0 0 0-1.9 1.9L12 21l-1.9-5.6a3 3 0 0 0-1.9-1.9L2.6 12l5.6-1.5a3 3 0 0 0 1.9-1.9z" />
+  </svg>
+)
 
 export default function BookPage() {
   // A saved draft is checked against what is offered now: photos removed or used elsewhere, add-ons no longer
@@ -200,7 +216,7 @@ function BookingWizard({ catalog, lookups, draft, onStartOver }) {
       </ol>
 
       <div className="booking-layout">
-        <Card className="booking-main">
+        <Card className={step === 3 ? 'booking-main booking-main-wide' : 'booking-main'}>
           {step > 0 && (
             <button type="button" className="step-back" onClick={back}>
               <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M15 18l-6-6 6-6" /></svg>
@@ -216,17 +232,24 @@ function BookingWizard({ catalog, lookups, draft, onStartOver }) {
             <SlotPicker date={date} onDateChange={setDate} selectedTime={time} onTimeChange={setTime} serviceId={serviceId} />
           )}
           {step === 2 && (
-            <div className="stack-lg">
+            <div className="design-step">
               <ReferenceImagePicker images={referenceImages} onChange={setReferenceImages} />
               <NoteStep suggestions={lookups.noteSuggestions} value={note} onChange={setNote} />
             </div>
           )}
           {step === 3 && (
-            <div className="stack review-step">
-              <h2>Booking summary</h2>
-              <Review quote={quote} option={paymentOption} hands={hands} service={service} date={date} time={time} note={note.trim()}
-                referenceImages={referenceImages} onEdit={(target) => { setStepError(null); setStep(target) }} />
-              <PaymentPanel quote={quote} option={paymentOption} onOptionChange={setPaymentOption} onPay={pay} error={payError} />
+            <div className="review-step">
+              <div className="pick-column">
+                <h2 className="pick-title">Booking summary</h2>
+                <Review quote={quote} option={paymentOption} hands={hands} service={service} date={date} time={time} note={note.trim()}
+                  referenceImages={referenceImages} onEdit={(target) => { setStepError(null); setStep(target) }} />
+              </div>
+              <div className="pick-column">
+                <h2 className="pick-title">Payment</h2>
+                <div className="pick-card">
+                  <PaymentPanel quote={quote} option={paymentOption} onOptionChange={setPaymentOption} onPay={pay} error={payError} />
+                </div>
+              </div>
             </div>
           )}
           {/* Going back is the "← Back to…" link at the top of each step. */}
@@ -251,8 +274,8 @@ function BookingWizard({ catalog, lookups, draft, onStartOver }) {
 
 function ServiceStep({ catalog, serviceId, onService, nails, onNails, hands, onHands }) {
   const groups = [
-    ['Soft Gel', catalog.services.filter((s) => s.category === 'SoftGel')],
-    ['Removal', catalog.services.filter((s) => s.category === 'Removal')],
+    ['Soft Gel', catalog.services.filter((s) => s.category === 'SoftGel'), true],
+    ['Removal', catalog.services.filter((s) => s.category === 'Removal'), false],
   ]
   const removal = isRemoval(catalog.services.find((s) => s.id === serviceId))
   const setCount = (id, count) => {
@@ -267,22 +290,28 @@ function ServiceStep({ catalog, serviceId, onService, nails, onNails, hands, onH
   const setHand = (id, hand) => onHands((current) => ({ ...current, [id]: hand }))
   // One hand has five nails, so Left or Right stops the counter at 5.
   const maxFor = (id) => (hands[id] === 'Left' || hands[id] === 'Right' ? LIMITS.maxNailsPerHand : LIMITS.maxNailsPerAddOn)
+  const chosen = catalog.addOns.filter((a) => nails[a.id] > 0)
 
   return (
     <div className="stack">
       <fieldset className="choice-fieldset">
-        <legend><h2>Choose a service</h2></legend>
-        {groups.map(([title, items]) => (
-          <div key={title}>
+        <legend className="step-heading">
+          <span className="step-badge" aria-hidden="true">1</span>
+          <span><h2>Choose a service</h2><span className="step-hint">Pick one to continue.</span></span>
+        </legend>
+        {groups.map(([title, items, withPhotos]) => (
+          <div key={title} className="service-group">
             <h3 className="group-title">{title}</h3>
-            <div className="choice-grid">
+            <div className={withPhotos ? 'choice-grid service-photos' : 'choice-grid service-compact'}>
               {items.map((s) => (
                 <label key={s.id} className={`${serviceId === s.id ? 'choice selected' : 'choice'}${photoFor(s) ? ' has-photo' : ''}`}>
                   {photoFor(s) && <img className="choice-photo" src={photoFor(s)} alt="" width="640" height="640" loading="lazy" />}
                   <input type="radio" name="service" checked={serviceId === s.id} onChange={() => onService(s.id)} />
                   <span className="choice-name">{s.name}</span>
-                  {s.durationMinutes && <span className="choice-meta muted">{formatDuration(s.durationMinutes)}</span>}
-                  <Money amount={s.price} />
+                  <span className="choice-facts">
+                    <Money amount={s.price} />
+                    {s.durationMinutes && <span className="choice-meta muted">{formatDuration(s.durationMinutes)}</span>}
+                  </span>
                 </label>
               ))}
             </div>
@@ -291,28 +320,51 @@ function ServiceStep({ catalog, serviceId, onService, nails, onNails, hands, onH
       </fieldset>
 
       <fieldset className="choice-fieldset" disabled={removal}>
-        <legend><h2>Add Stone add-ons <span className="muted small">(optional, priced per nail)</span></h2></legend>
+        <legend className="step-heading">
+          <span className="step-badge" aria-hidden="true">2</span>
+          <span><h2>Add Stone add-ons</h2><span className="step-hint">Optional. Priced per nail, so choose as many as you like.</span></span>
+        </legend>
         {removal && <p className="muted small addon-note">Stone add-ons aren&apos;t available with a removal. Choose a Soft Gel service to add them.</p>}
         <div className={removal ? 'addon-list is-disabled' : 'addon-list'}>
           {catalog.addOns.map((a) => {
+            const photo = addOnPhotoFor(a)
             const count = nails[a.id] ?? 0
-            const hand = hands[a.id]
             return (
-              <div key={a.id} className={count ? 'addon selected' : 'addon'}>
-                <label className="addon-check">
-                  <input type="checkbox" checked={count > 0} onChange={(e) => setCount(a.id, e.target.checked ? 1 : 0)} />
-                  <span>{a.name}</span>
-                  <span className="muted"><Money amount={a.price} /> / nail</span>
-                </label>
-                {count > 0 && (
-                  <>
-                    <div className="hand-choice" role="radiogroup" aria-label={`Which hand for ${a.name}`}>
+              <label key={a.id} className={count ? 'addon addon-check selected' : 'addon addon-check'}>
+                {photo
+                  ? <img className="addon-photo" src={photo} alt="" width="640" height="640" loading="lazy" />
+                  : <span className="addon-photo addon-photo-empty"><SparkleIcon /></span>}
+                <input type="checkbox" checked={count > 0} onChange={(e) => setCount(a.id, e.target.checked ? 1 : 0)} />
+                <span className="addon-name">{a.name}</span>
+                <span className="muted small"><Money amount={a.price} /> / nail</span>
+              </label>
+            )
+          })}
+        </div>
+
+        {chosen.length > 0 && (
+          <div className="addon-panel">
+            <h3>Your add-ons</h3>
+            <ul>
+              {chosen.map((a) => {
+                const count = nails[a.id]
+                const hand = hands[a.id]
+                const photo = addOnPhotoFor(a)
+                return (
+                  <li key={a.id} className="addon-row">
+                    <div className="addon-row-title">
+                      {photo
+                        ? <img src={photo} alt="" width="640" height="640" loading="lazy" />
+                        : <span className="addon-row-empty"><SparkleIcon /></span>}
+                      <strong>{a.name}</strong>
+                    </div>
+                    <div className={hand ? 'hand-choice' : 'hand-choice needs-choice'} role="radiogroup" aria-label={`Which hand for ${a.name}`}>
                       {HANDS.map((h) => {
                         const tooMany = h.value !== 'Both' && count > LIMITS.maxNailsPerHand
                         return (
                           <button key={h.value} type="button" role="radio" aria-checked={hand === h.value} disabled={tooMany}
                             title={tooMany ? 'One hand has 5 nails' : undefined}
-                            className={hand === h.value ? 'chip chip-sm selected' : 'chip chip-sm'} onClick={() => setHand(a.id, h.value)}>
+                            className={hand === h.value ? 'hand-option selected' : 'hand-option'} onClick={() => setHand(a.id, h.value)}>
                             {h.label}
                           </button>
                         )
@@ -324,12 +376,14 @@ function ServiceStep({ catalog, serviceId, onService, nails, onNails, hands, onH
                       <button type="button" onClick={() => setCount(a.id, count + 1)} disabled={count >= maxFor(a.id)}
                         aria-label={`More nails for ${a.name}`}>+</button>
                     </div>
-                  </>
-                )}
-              </div>
-            )
-          })}
-        </div>
+                    <Money amount={a.price * count} />
+                    <button type="button" className="addon-remove" onClick={() => setCount(a.id, 0)} aria-label={`Remove ${a.name}`}>×</button>
+                  </li>
+                )
+              })}
+            </ul>
+          </div>
+        )}
       </fieldset>
     </div>
   )
@@ -345,24 +399,24 @@ function NoteStep({ suggestions, value, onChange }) {
     onChange(joined.slice(0, LIMITS.noteMax))
   }
   return (
-    <div className="stack note-step">
-      <Field label="Note for Leyah (optional)" counter={`${value.length}/${LIMITS.noteMax}`}
-        hint="Nail shape or length, allergies, a special occasion, anything that helps Leyah prepare.">
-        {(aria) => (
-          <textarea className="input textarea" rows={3} maxLength={LIMITS.noteMax} value={value}
-            placeholder="e.g. Short almond nails please, it's my first visit." onChange={(e) => onChange(e.target.value)} {...aria} />
-        )}
-      </Field>
-      <div className="note-suggestions">
-        <span className="muted small">Quick add:</span>
-        <div className="chips">
+    <div className="pick-column">
+      <div className="pick-title-row">
+        <label htmlFor="booking-note" className="field-label pick-title">Note for Leyah <span className="pick-optional">(optional)</span></label>
+        <span className="field-counter" aria-live="polite">{value.length}/{LIMITS.noteMax}</span>
+      </div>
+      <div className="pick-card">
+        <textarea id="booking-note" className="input textarea" rows={3} maxLength={LIMITS.noteMax} value={value} aria-describedby="booking-note-hint"
+          placeholder="e.g. Short almond nails please, it's my first visit." onChange={(e) => onChange(e.target.value)} />
+        <div className="slot-group-title note-quick-title">Quick add</div>
+        <div className="note-chips">
           {suggestions.map((text) => (
-            <button key={text} type="button" className={has(text) ? 'chip chip-sm selected' : 'chip chip-sm'}
+            <button key={text} type="button" className={has(text) ? 'chip selected' : 'chip'}
               aria-pressed={has(text)} onClick={() => add(text)}>
               {has(text) ? '✓ ' : '+ '}{text}
             </button>
           ))}
         </div>
+        <p className="pick-hint" id="booking-note-hint">Nail shape or length, allergies, a special occasion, anything that helps Leyah prepare</p>
       </div>
     </div>
   )
@@ -398,27 +452,26 @@ function Summary({ quote, hands = {}, date, time }) {
  * has a Change link back to the step where it was chosen, so nothing has to be redone from the start.
  */
 function Review({ quote, option, hands, service, date, time, note, referenceImages, onEdit }) {
-  const day = date ? new Date(`${date}T00:00:00`) : null
   const ends = time && service?.durationMinutes ? addMinutesToTime(time, service.durationMinutes) : null
   const change = (step, what) => (
     <button type="button" className="review-change" onClick={() => onEdit(step)} aria-label={`Change ${what}`}>Change</button>
   )
   return (
     <div className="review">
-      <section className="review-when" aria-label="Appointment">
-        {day && (
-          <div className="review-date" aria-hidden="true">
-            <span>{day.toLocaleDateString('en-PH', { month: 'short' })}</span>
-            <strong>{day.getDate()}</strong>
-            <span>{day.toLocaleDateString('en-PH', { weekday: 'short' })}</span>
-          </div>
-        )}
-        <div className="review-when-text">
-          <span className="review-label">Appointment</span>
-          <strong>{date ? formatDate(date) : 'No date chosen'}</strong>
-          <span>{time ? `${formatTime(time)}${ends ? ` – ${formatTime(ends)}` : ''}` : ''}{service?.durationMinutes ? ` · ${formatDuration(service.durationMinutes)}` : ''}</span>
-        </div>
-        {change(1, 'date and time')}
+      <section className="review-section" aria-label="Appointment">
+        <div className="review-head"><h3>Appointment</h3>{change(1, 'date and time')}</div>
+        <dl className="review-details">
+          <dt>Date</dt>
+          <dd>{date ? formatDate(date) : 'No date chosen'}</dd>
+          <dt>Time</dt>
+          <dd>{time ? `${formatTime(time)}${ends ? ` – ${formatTime(ends)}` : ''}` : ''}</dd>
+          {service?.durationMinutes && (
+            <>
+              <dt>Duration</dt>
+              <dd>{formatDuration(service.durationMinutes)}</dd>
+            </>
+          )}
+        </dl>
       </section>
 
       <section className="review-section" aria-label="Services">
@@ -438,8 +491,8 @@ function Review({ quote, option, hands, service, date, time, note, referenceImag
         <div className="summary-total"><span>Total</span><Money amount={quote.total} /></div>
         {/* Follows the payment option chosen below. */}
         <div className="review-split" aria-live="polite">
-          <div className="review-split-now"><span>{option === 'Full' ? 'Full payment now' : 'Deposit due now'}</span><Money amount={amountNow(quote, option)} /></div>
-          <div><span>Balance at the salon</span><Money amount={balanceAfter(quote, option)} /></div>
+          <div className="summary-row review-now"><span>{option === 'Full' ? 'Full payment now' : 'Deposit due now'}</span><Money amount={amountNow(quote, option)} /></div>
+          <div className="summary-row muted"><span>Balance at the salon</span><Money amount={balanceAfter(quote, option)} /></div>
         </div>
       </section>
 
@@ -459,6 +512,16 @@ function Review({ quote, option, hands, service, date, time, note, referenceImag
             )}
           </dd>
         </dl>
+      </section>
+
+      {/* The rules most likely to matter later, in the same words as the Terms & Conditions (sections 6 to 8). The deposit rule is beside the Pay button. */}
+      <section className="review-section" aria-label="Booking policy">
+        <div className="review-head"><h3>Booking policy</h3></div>
+        <ul className="policy-list">
+          <li>You can reschedule online up to 24 hours before your appointment.</li>
+          <li>Cancelling less than 24 hours before, or not showing up, may incur a fee.</li>
+          <li>Please arrive on time and come alone, with clean, bare nails unless you booked a removal.</li>
+        </ul>
       </section>
     </div>
   )

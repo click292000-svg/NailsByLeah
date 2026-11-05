@@ -106,7 +106,7 @@ public sealed class AuthTests(ApiFactory factory) : IClassFixture<ApiFactory>
 
         Assert.StartsWith("$2", stored.PasswordHash);
         Assert.DoesNotContain(ApiFactory.DefaultPassword, stored.PasswordHash);
-        Assert.Equal("2.2", stored.TermsVersion);
+        Assert.Equal("2.3", stored.TermsVersion);
         Assert.NotNull(stored.TermsAcceptedAt);
     }
 

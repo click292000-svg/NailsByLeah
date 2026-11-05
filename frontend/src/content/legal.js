@@ -14,14 +14,14 @@ const EMAIL = 'nailsbyleyah.bookings@gmail.com'
 
 export const termsAndConditions = {
   title: 'Terms & Conditions',
-  version: '2.2',
-  updated: 'November 5, 2026',
+  version: '2.3',
+  updated: 'November 6, 2026',
   sections: [
     {
       heading: '1. About these terms',
       body: [
-        `These terms apply when you create an account and book an appointment with ${SALON}, a home-based nail salon at 201 Mabuhay Compound, Sauyo Road, Quezon City. By creating an account you agree to these terms and to our Privacy Policy.`,
-        'We record which version of these terms you accepted and when.',
+        `These terms apply when you create an account and book an appointment with ${SALON}, a home-based nail salon at 201 Mabuhay Compound, Sauyo Road, Quezon City. By creating an account you agree to these terms and to our Privacy Policy. You agree to these terms again each time you pay for a booking.`,
+        'We record which version of these terms you accepted and when, at sign-up and with each booking.',
       ],
     },
     {

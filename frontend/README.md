@@ -105,7 +105,7 @@ Conventions:
 
 ## Terms & Privacy Policy
 
-The text is in `src/content/legal.js` (version 2.2), written from how the system works and Leyah's salon rules. When a
+The text is in `src/content/legal.js` (Terms 2.3, Privacy Policy 2.2), written from how the system works and Leyah's salon rules. When a
 rule changes, update the text and raise the version there and in `Legal:TermsVersion` (`backend/appsettings.json`), so
 new sign-ups record the version they accepted. Still to confirm with Leyah (marked in the file): refunds of cancelled
 full payments, bookings the salon cancels, and the amounts of the late-cancellation, no-show and late-payment fees.

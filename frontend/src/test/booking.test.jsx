@@ -12,26 +12,37 @@ const QUOTE = { total: 420, deposit: 150, fullAmount: 420, balanceDue: 270, line
 const panel = (props) => <PaymentPanel quote={QUOTE} option="Deposit" onOptionChange={() => {}} {...props} />
 
 describe('Payment step', () => {
-  it('keeps Pay disabled until "I understand" is checked (7.6)', async () => {
+  it('keeps Pay disabled until the booking policy is accepted (7.6)', async () => {
     const user = userEvent.setup()
     const onPay = vi.fn()
     render(panel({ onPay }))
 
-    expect(screen.getByRole('note')).toHaveTextContent('The ₱150.00 booking deposit is non-refundable.')
+    expect(screen.getByRole('note')).toHaveTextContent('The ₱150.00 booking deposit is non-refundable, including if you cancel or do not show up.')
+    expect(screen.getByText('Please accept the booking policy to continue.')).toBeInTheDocument()
     const pay = screen.getByRole('button', { name: /Pay/ })
     expect(pay).toBeDisabled()
     await user.click(pay)
     expect(onPay).not.toHaveBeenCalled()
 
-    await user.click(screen.getByRole('checkbox', { name: 'I understand' }))
+    await user.click(screen.getByRole('checkbox', { name: /I agree to the booking policy/ }))
     expect(pay).toBeEnabled()
+  })
+
+  it('opens the Terms & Conditions without ticking the box or leaving the page', async () => {
+    const user = userEvent.setup()
+    render(panel({ onPay: vi.fn() }))
+
+    await user.click(screen.getByRole('button', { name: 'Terms & Conditions' }))
+
+    expect(screen.getByRole('dialog', { name: 'Terms & Conditions' })).toBeInTheDocument()
+    expect(screen.getByRole('checkbox', { name: /I agree to the booking policy/ })).not.toBeChecked()
   })
 
   it('sends only one payment when Pay is clicked several times quickly (7.7)', async () => {
     let finish
     const onPay = vi.fn(() => new Promise((resolve) => { finish = resolve }))
     render(panel({ onPay }))
-    fireEvent.click(screen.getByRole('checkbox', { name: 'I understand' }))
+    fireEvent.click(screen.getByRole('checkbox', { name: /I agree to the booking policy/ }))
     const pay = screen.getByRole('button', { name: /Pay/ })
 
     fireEvent.click(pay)
@@ -139,13 +150,14 @@ describe('Booking flow', () => {
 
     // Step 4: summary and payment.
     expect(screen.getByRole('heading', { name: 'Booking summary' })).toBeInTheDocument()
+    expect(within(screen.getByRole('region', { name: 'Booking policy' })).getByText(/reschedule online up to 24 hours before/)).toBeInTheDocument()
     expect(screen.getByText(/French Tip — Right hand/)).toBeInTheDocument()
     expect(screen.getByText("Short almond nails please. I'll bring a reference photo")).toBeInTheDocument()
     // Paying in full: the summary and the Pay button switch to the whole amount (₱400 + French Tip × 3 = ₱445).
     await user.click(screen.getByRole('radio', { name: 'Full payment' }))
     expect(screen.getByText('Full payment now').nextSibling).toHaveTextContent('₱445.00')
     await user.click(screen.getByRole('radio', { name: 'Maya' }))
-    await user.click(screen.getByRole('checkbox', { name: 'I understand' }))
+    await user.click(screen.getByRole('checkbox', { name: /I agree to the booking policy/ }))
     await user.click(screen.getByRole('button', { name: /Pay ₱445.00 in full/ }))
 
     // Paid, but waiting for Leyah to confirm.

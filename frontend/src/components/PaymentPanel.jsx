@@ -1,4 +1,5 @@
 import { useRef, useState } from 'react'
+import { LegalDocumentModal } from './Modal'
 import { Alert, Button, Money, StatusBadge } from './ui'
 
 const METHODS = [
@@ -11,14 +12,15 @@ export const amountNow = (quote, option) => (option === 'Full' ? quote.fullAmoun
 export const balanceAfter = (quote, option) => Math.max(0, quote.total - amountNow(quote, option))
 
 /**
- * Payment step: deposit or full payment, then GCash or Maya. The Pay button stays disabled until the client checks
- * "I understand" (Ref 2.3), for either option, and is disabled with a loading state from the first click until the
+ * Payment step: deposit or full payment, then GCash or Maya. The Pay button stays disabled until the client agrees
+ * to the booking policy and Terms & Conditions (Ref 2.3), for either option, and is disabled with a loading state from the first click until the
  * server answers, so only one request is ever sent (Ref 12.4). The booking then waits for Leyah's confirmation.
  */
 export function PaymentPanel({ quote, option, onOptionChange, onPay, error }) {
   const [method, setMethod] = useState('GCash')
   const [understood, setUnderstood] = useState(false)
   const [paying, setPaying] = useState(false)
+  const [showTerms, setShowTerms] = useState(false)
   const inFlight = useRef(false)
 
   const pay = async () => {
@@ -39,9 +41,9 @@ export function PaymentPanel({ quote, option, onOptionChange, onPay, error }) {
   ]
 
   return (
-    <div className="payment-panel stack">
+    <div className="payment-panel">
       <fieldset className="method-fieldset" disabled={paying}>
-        <legend>How much would you like to pay now?</legend>
+        <legend className="pay-step-title"><i aria-hidden="true">1</i> How much would you like to pay now?</legend>
         <div className="pay-options">
           {options.map((o) => (
             <label key={o.value} className={option === o.value ? 'pay-option selected' : 'pay-option'}>
@@ -56,7 +58,7 @@ export function PaymentPanel({ quote, option, onOptionChange, onPay, error }) {
       </fieldset>
 
       <fieldset className="method-fieldset" disabled={paying}>
-        <legend>Pay with</legend>
+        <legend className="pay-step-title"><i aria-hidden="true">2</i> Pay with</legend>
         <div className="method-options">
           {METHODS.map((m) => (
             <label key={m.value} className={method === m.value ? 'method-option selected' : 'method-option'}>
@@ -71,15 +73,21 @@ export function PaymentPanel({ quote, option, onOptionChange, onPay, error }) {
         </div>
       </fieldset>
 
-      <div className={understood ? 'deposit-warning agreed' : 'deposit-warning'} role="note">
-        <div className="deposit-warning-text">
-          <strong>The <Money amount={quote.deposit} /> booking deposit is non-refundable.</strong>
-          <span>{option === 'Full' ? 'It is included in your full payment, not charged on top.' : 'It counts toward your total; you pay the rest at the salon.'}</span>
+      <div>
+        <div className="pay-step-title"><i aria-hidden="true">3</i> Review and agree</div>
+        <div className={understood ? 'deposit-warning agreed' : 'deposit-warning'} role="note">
+          <p className="deposit-notice">
+            <strong>The <Money amount={quote.deposit} /> booking deposit is non-refundable, including if you cancel or do not show up.</strong>
+            {' '}{option === 'Full' ? 'It is included in your full payment, not charged on top.' : 'It counts toward your total.'}
+          </p>
+          <label className="checkbox-inline">
+            <input type="checkbox" checked={understood} disabled={paying} onChange={(e) => setUnderstood(e.target.checked)} />
+            <span>
+              I agree to the booking policy and the{' '}
+              <button type="button" className="link-button" onClick={() => setShowTerms(true)}>Terms &amp; Conditions</button>
+            </span>
+          </label>
         </div>
-        <label className="checkbox-inline">
-          <input type="checkbox" checked={understood} disabled={paying} onChange={(e) => setUnderstood(e.target.checked)} />
-          <span>I understand</span>
-        </label>
       </div>
 
       {error && <Alert kind="error">{error}</Alert>}
@@ -94,8 +102,9 @@ export function PaymentPanel({ quote, option, onOptionChange, onPay, error }) {
         Pay <Money amount={amountNow(quote, option)} />{option === 'Full' ? ' in full' : ' deposit'}
       </Button>
       <p className="pay-note muted small">
-        {understood ? 'You get a receipt right away. Leyah then checks the payment and confirms your appointment.' : 'Tick "I understand" to continue.'}
+        {understood ? 'You get a receipt right away. Leyah then checks the payment and confirms your appointment.' : 'Please accept the booking policy to continue.'}
       </p>
+      {showTerms && <LegalDocumentModal document="terms" onClose={() => setShowTerms(false)} />}
     </div>
   )
 }

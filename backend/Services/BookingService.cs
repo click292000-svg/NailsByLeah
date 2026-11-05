@@ -48,7 +48,8 @@ public sealed class BookingService(
     IUnitOfWork unitOfWork,
     IAuditLogger audit,
     ISalonClock clock,
-    IOptions<BookingOptions> bookingOptions) : IClientBookingService, IAdminBookingService
+    IOptions<BookingOptions> bookingOptions,
+    IOptions<LegalOptions> legalOptions) : IClientBookingService, IAdminBookingService
 {
     private const string SlotTakenMessage = "This time slot has just been booked by someone else. Please choose another slot.";
 
@@ -129,7 +130,7 @@ public sealed class BookingService(
 
                 var payment = await paymentService.CollectAsync(booking, request.PaymentOption, request.PaymentMethod, request.IdempotencyKey, tx);
                 audit.Record(AuditActions.BookingCreated, nameof(Booking), booking.Id,
-                    $"{selection.Service.Name} on {Describe(booking.BookingDate, booking.StartTime)}, total PHP {booking.TotalPrice:0.00}");
+                    $"{selection.Service.Name} on {Describe(booking.BookingDate, booking.StartTime)}, total PHP {booking.TotalPrice:0.00}. Booking policy and Terms v{legalOptions.Value.TermsVersion} accepted");
                 return new CreateOutcome(payment, booking);
             }, ct);
         }

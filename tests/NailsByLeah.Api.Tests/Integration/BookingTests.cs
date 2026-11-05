@@ -80,6 +80,18 @@ public sealed class BookingTests(ApiFactory factory) : IClassFixture<ApiFactory>
         Assert.Equal(0, factory.Gateway.ChargeCount(request.IdempotencyKey));
     }
 
+    [Fact]
+    public async Task Booking_records_that_the_client_accepted_the_policy_and_which_terms_version()
+    {
+        var user = await factory.CreateClientAsync();
+
+        var booked = await user.Client.BookAsync(TestHelpers.NewBooking(factory.NextSlot(), SoftGelPlain));
+
+        var details = factory.WithDb(db => db.AuditLogs
+            .Single(a => a.Action == "BookingCreated" && a.EntityId == booked.Booking.Id.ToString()).Details);
+        Assert.Contains("Booking policy and Terms v2.3 accepted", details);
+    }
+
     [Fact] // 9.1.7
     public async Task Two_clients_booking_the_same_slot_at_the_same_time_only_one_succeeds()
     {

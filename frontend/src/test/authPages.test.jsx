@@ -37,12 +37,12 @@ describe('Registration', () => {
     expect(screen.getByRole('dialog', { name: 'Privacy Policy' })).toBeInTheDocument()
   })
 
-  it('the footer opens the Terms of Service and Privacy Policy on every page', async () => {
+  it('the footer opens the Terms & Conditions and Privacy Policy on every page', async () => {
     const user = userEvent.setup()
     renderApp('/login')
     const footer = await screen.findByRole('navigation', { name: 'Footer' })
 
-    await user.click(within(footer).getByRole('button', { name: 'Terms of Service' }))
+    await user.click(within(footer).getByRole('button', { name: 'Terms & Conditions' }))
     expect(screen.getByRole('dialog', { name: 'Terms & Conditions' })).toBeInTheDocument()
     await user.click(screen.getAllByRole('button', { name: 'Close' })[0])
     await user.click(within(footer).getByRole('button', { name: 'Privacy Policy' }))
