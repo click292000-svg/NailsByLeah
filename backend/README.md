@@ -66,6 +66,9 @@ npm run build
 
 Copy the contents of `frontend/dist` to `backend/wwwroot`. In development you normally skip this and use `npm run dev`.
 
+For hosting, the `Dockerfile` at the repository root does all of this in one image, listening on port 10000. It holds no
+settings or secrets: the host supplies them, and the app refuses to start until the required ones are set.
+
 ## Test
 
 ```bash

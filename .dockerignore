@@ -1,0 +1,20 @@
+# Never copied into the image: secrets, real data and things the image builds itself.
+.git
+.vs
+.claude
+.vscode
+**/bin
+**/obj
+**/node_modules
+**/dist
+**/*.user
+**/.env
+**/.env.*
+!**/.env.example
+**/*.log
+backend/App_Data
+backend/wwwroot
+backups
+tests
+docs
+design-originals

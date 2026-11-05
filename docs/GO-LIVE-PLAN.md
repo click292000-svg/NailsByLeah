@@ -60,7 +60,8 @@ Status of how the parts fit together. Nothing here has run on Postgres, Render o
 
 **Hosting:**
 - The test deployment depends on Postgres: there is no database to run against on Render until then.
-- Render must get `Frontend__BaseUrl`, `AllowedHosts`, `ForwardedHeaders__Enabled`, `Brevo__ApiKey`, `Email__FromAddress`, `Notifications__SalonEmail`, the connection string and `AdminSeed__*`, plus the port the Dockerfile listens on.
+- The repository's `Dockerfile` builds the site and API together on port 10000 (`ASPNETCORE_HTTP_PORTS`). The first real image build happens on the test deployment unless Docker is installed locally.
+- Render must get `Frontend__BaseUrl`, `AllowedHosts`, `ForwardedHeaders__Enabled`, `Brevo__ApiKey`, `Email__FromAddress`, `Notifications__SalonEmail`, the connection string and `AdminSeed__*`.
 - On Render, set the health check path to `/api/health` (a brief database problem must not restart the app), and point the keep-awake ping (every 10 minutes) at `/api/health/database`, which also keeps the free database active.
 - Check on the live site: `ForwardLimit` (see backend README), Render's health check against `AllowedHosts`, and the `Asia/Manila` time zone in the Docker image.
 - A sleeping free service delays webhooks. PayMongo retries failed deliveries; confirm the same for HitPay, and keep the keep-awake ping.
