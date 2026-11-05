@@ -24,7 +24,6 @@ public sealed class RegistrationService(
     IUserTokenRepository tokens,
     IUnitOfWork unitOfWork,
     IPasswordHasher hasher,
-    INotificationService notifications,
     IBackgroundNotifications background,
     IAuditLogger audit,
     ISalonClock clock,
@@ -98,7 +97,8 @@ public sealed class RegistrationService(
             };
         }
 
-        await notifications.SendEmailVerificationAsync(user, code, ct);
+        // The account is saved, so a failed email must not look like a failed sign-up: "resend code" recovers it.
+        await background.EnqueueAsync((n, stop) => n.SendEmailVerificationAsync(user, code, stop), "verification code email");
         return user;
     }
 

@@ -42,14 +42,13 @@ public sealed class BookingService(
     IPriceService prices,
     IPaymentService paymentService,
     ISlotAvailability slots,
-    INotificationService notifications,
+    IBackgroundNotifications background,
     IReferenceImageAttacher referenceImages,
     IBookingDraftRepository drafts,
     IUnitOfWork unitOfWork,
     IAuditLogger audit,
     ISalonClock clock,
-    IOptions<BookingOptions> bookingOptions,
-    ILogger<BookingService> logger) : IClientBookingService, IAdminBookingService
+    IOptions<BookingOptions> bookingOptions) : IClientBookingService, IAdminBookingService
 {
     private const string SlotTakenMessage = "This time slot has just been booked by someone else. Please choose another slot.";
 
@@ -157,7 +156,7 @@ public sealed class BookingService(
             return (await BuildCreateResponseAsync(clientId, outcome.Payment, ct), false);
 
         var details = await bookings.GetDetailsAsync(outcome.NewBooking.Id, ct) ?? outcome.NewBooking;
-        await NotifyConfirmedAsync(details, outcome.Payment, ct);
+        await NotifyConfirmedAsync(details, outcome.Payment);
         return (new CreateBookingResponse(Map(details, includeClient: false), BookingMapper.ToReceipt(outcome.Payment, details)), true);
     }
 
@@ -185,7 +184,7 @@ public sealed class BookingService(
 
         var (fromDate, fromTime) = (booking.BookingDate, booking.StartTime);
         var moved = await MoveAsync(booking, request, ct);
-        await TryNotifyAsync(() => notifications.SendSalonRescheduleAsync(booking, fromDate, fromTime, ct), "reschedule alert", booking.Id);
+        await background.EnqueueAsync((n, stop) => n.SendSalonRescheduleAsync(booking, fromDate, fromTime, stop), $"reschedule alert for booking {booking.Id}");
         return moved;
     }
 
@@ -197,8 +196,8 @@ public sealed class BookingService(
 
         await CancelCoreAsync(booking, clientId, request.Reason.ToString(), explanation: null, ct);
         var cancelled = await ReloadAsync(booking.Id, ct);
-        await TryNotifyAsync(() => notifications.SendSalonCancellationAsync(cancelled, Labels.ForCancellationReason(request.Reason.ToString()), ct),
-            "cancellation alert", booking.Id);
+        var reasonLabel = Labels.ForCancellationReason(request.Reason.ToString());
+        await background.EnqueueAsync((n, stop) => n.SendSalonCancellationAsync(cancelled, reasonLabel, stop), $"cancellation alert for booking {booking.Id}");
         return Map(cancelled, includeClient: false);
     }
 
@@ -231,15 +230,7 @@ public sealed class BookingService(
         await unitOfWork.SaveChangesAsync(ct);
 
         var confirmed = await ReloadAsync(bookingId, ct);
-        try
-        {
-            await notifications.SendBookingApprovedAsync(confirmed, ct);
-        }
-        catch (Exception ex)
-        {
-            // The booking is already confirmed; a failed email must not undo it.
-            logger.LogWarning(ex, "Could not send the confirmed email for booking {BookingId}", bookingId);
-        }
+        await background.EnqueueAsync((n, stop) => n.SendBookingApprovedAsync(confirmed, stop), $"confirmed email for booking {bookingId}");
         return Map(confirmed, includeClient: true);
     }
 
@@ -336,23 +327,11 @@ public sealed class BookingService(
         return new CreateBookingResponse(Map(booking, includeClient: false), BookingMapper.ToReceipt(payment, booking));
     }
 
-    private async Task NotifyConfirmedAsync(Booking booking, Payment payment, CancellationToken ct)
+    /// <summary>The booking is already committed: emails go out after the answer, and a failed one is only logged.</summary>
+    private async Task NotifyConfirmedAsync(Booking booking, Payment payment)
     {
-        await TryNotifyAsync(() => notifications.SendBookingConfirmationAsync(booking, payment, ct), "confirmation", booking.Id);
-        await TryNotifyAsync(() => notifications.SendSalonNewBookingAsync(booking, payment, ct), "new booking alert", booking.Id);
-    }
-
-    /// <summary>The change is already committed; a failed email is logged and must not undo it.</summary>
-    private async Task TryNotifyAsync(Func<Task> send, string what, int bookingId)
-    {
-        try
-        {
-            await send();
-        }
-        catch (Exception ex)
-        {
-            logger.LogWarning(ex, "Could not send the {What} for booking {BookingId}", what, bookingId);
-        }
+        await background.EnqueueAsync((n, stop) => n.SendBookingConfirmationAsync(booking, payment, stop), $"confirmation for booking {booking.Id}");
+        await background.EnqueueAsync((n, stop) => n.SendSalonNewBookingAsync(booking, payment, stop), $"new booking alert for booking {booking.Id}");
     }
 
     private static BookingResponse Map(Booking booking, bool includeClient) => BookingMapper.ToResponse(booking, includeClient);

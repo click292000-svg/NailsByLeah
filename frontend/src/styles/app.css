@@ -940,3 +940,6 @@ select.input { appearance: auto; }
 .status-chip.selected { background: var(--burgundy); border-color: var(--burgundy); color: var(--white); }
 .status-chip.selected::before { background: var(--white); }
 .status-chip:focus-visible { outline: none; box-shadow: var(--focus); }
+
+/* Shown instead of a blank page when a page fails to display (components/ErrorBoundary.jsx). */
+.error-screen { display: flex; flex-direction: column; align-items: center; gap: 12px; padding: 24px 16px; text-align: center; }

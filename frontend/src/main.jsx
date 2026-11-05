@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client'
 import { BrowserRouter } from 'react-router'
 import './styles/app.css'
 import App from './App.jsx'
+import { ErrorBoundary } from './components/ErrorBoundary'
 
 // Production pages are always served over HTTPS (Ref 8.5). Local development stays on http://localhost.
 const isLocalhost = ['localhost', '127.0.0.1', '[::1]'].includes(window.location.hostname)
@@ -11,9 +12,11 @@ if (import.meta.env.PROD && window.location.protocol === 'http:' && !isLocalhost
 } else {
   createRoot(document.getElementById('root')).render(
     <StrictMode>
-      <BrowserRouter>
-        <App />
-      </BrowserRouter>
+      <ErrorBoundary>
+        <BrowserRouter>
+          <App />
+        </BrowserRouter>
+      </ErrorBoundary>
     </StrictMode>,
   )
 }

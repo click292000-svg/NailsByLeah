@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router'
+import { ErrorBoundary } from './ErrorBoundary'
 import { useAuth } from '../auth/AuthContext'
 import { Alert } from './ui'
 import { SocialLinks } from './SocialLinks'
@@ -94,7 +95,10 @@ export function Layout() {
             You don&apos;t have access to that page, so we brought you here instead.
           </Alert>
         )}
-        <Outlet />
+        {/* Keyed by page, so moving to another page clears the error. */}
+        <ErrorBoundary key={location.pathname}>
+          <Outlet />
+        </ErrorBoundary>
       </main>
 
       <footer className="site-footer">

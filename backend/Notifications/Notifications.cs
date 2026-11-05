@@ -284,7 +284,8 @@ public sealed class AppointmentReminderJob(
                 await unitOfWork.SaveChangesAsync(ct);
                 sent++;
             }
-            catch (Exception ex) when (ex is not OperationCanceledException)
+            // An email timeout is also an OperationCanceledException; only a real shutdown may pass through.
+            catch (Exception ex) when (ex is not OperationCanceledException || !ct.IsCancellationRequested)
             {
                 logger.LogWarning(ex, "Could not send the reminder for booking {BookingId}; it will be retried", booking.Id);
             }
@@ -315,7 +316,8 @@ public sealed class AppointmentReminderWorker(
                 if (sent > 0)
                     logger.LogInformation("Sent {Count} appointment reminder(s)", sent);
             }
-            catch (Exception ex) when (ex is not OperationCanceledException)
+            // An exception leaving this loop would stop the whole API, so only a real shutdown may pass through.
+            catch (Exception ex) when (ex is not OperationCanceledException || !stoppingToken.IsCancellationRequested)
             {
                 logger.LogError(ex, "Appointment reminder run failed");
             }

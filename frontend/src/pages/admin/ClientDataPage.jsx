@@ -74,7 +74,9 @@ export default function ClientDataPage() {
           </dl>
           {client.activeBookingCount > 0 ? (
             <Alert kind="warning" title="This client still has an open booking.">
-              Complete or cancel {client.activeBookingCount === 1 ? 'it' : `all ${client.activeBookingCount}`} on the Bookings page first.
+              A pending or confirmed booking stays open until it is completed or cancelled. Complete or cancel{' '}
+              {client.activeBookingCount === 1 ? 'it' : `all ${client.activeBookingCount}`} on the Bookings page first.
+              A booking can be completed from its appointment date.
             </Alert>
           ) : (
             <div><Button variant="danger-ghost" onClick={() => setConfirming(true)}>Delete this client's data</Button></div>

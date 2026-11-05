@@ -130,6 +130,11 @@ public sealed class CapturingNotificationService : INotificationService
     /// <summary>The next verification or password reset email throws, like Brevo being down.</summary>
     public void FailNextEmail() => Interlocked.Exchange(ref _failNext, 1);
 
+    private int _timeOutNextReminder;
+
+    /// <summary>The next reminder times out the way HttpClient does when Brevo takes too long.</summary>
+    public void TimeOutNextReminder() => Interlocked.Exchange(ref _timeOutNextReminder, 1);
+
     private void ThrowIfFailing()
     {
         if (Interlocked.Exchange(ref _failNext, 0) == 1)
@@ -169,6 +174,7 @@ public sealed class CapturingNotificationService : INotificationService
 
     public Task SendBookingConfirmationAsync(Booking booking, Payment payment, CancellationToken ct = default)
     {
+        ThrowIfFailing();
         ConfirmedBookingIds.Add(booking.Id);
         return Task.CompletedTask;
     }
@@ -181,6 +187,8 @@ public sealed class CapturingNotificationService : INotificationService
 
     public Task SendAppointmentReminderAsync(Booking booking, CancellationToken ct = default)
     {
+        if (Interlocked.Exchange(ref _timeOutNextReminder, 0) == 1)
+            throw new TaskCanceledException("The request was canceled due to the configured HttpClient.Timeout of 20 seconds elapsing.");
         RemindedBookingIds.Add(booking.Id);
         return Task.CompletedTask;
     }
