@@ -39,7 +39,7 @@ so the browser only ever talks to one origin and the session cookie just works (
 | `npm run build` | Production build into `dist/` |
 | `npm run lint` | Lints with oxlint |
 
-## Configuration (`.env`, `.env.local`)
+## Configuration (`.env.local`, optional)
 
 | Variable | Default | Purpose |
 |---|---|---|
