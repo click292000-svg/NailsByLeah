@@ -119,6 +119,7 @@ public static class ServiceRegistration
         });
 
         services.AddNailsByLeahAuthentication();
+        services.AddWebsiteHosting();
         return services;
     }
 

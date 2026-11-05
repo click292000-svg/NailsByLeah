@@ -38,6 +38,16 @@ public static class StartupTasks
             throw new InvalidOperationException("The simulated payment gateway cannot be used outside Development. Register a real GCash/Maya gateway.");
         if (AllowedHostsProblem(services.GetRequiredService<IConfiguration>()["AllowedHosts"]) is { } problem)
             throw new InvalidOperationException(problem);
+        if (WebsiteAddressProblem(services.GetRequiredService<IOptions<FrontendOptions>>().Value.BaseUrl) is { } addressProblem)
+            throw new InvalidOperationException(addressProblem);
+    }
+
+    /// <summary>Why this address can't be used in emailed links on the live site, or null if it can.</summary>
+    public static string? WebsiteAddressProblem(string? baseUrl)
+    {
+        if (!Uri.TryCreate(baseUrl, UriKind.Absolute, out var address) || address.Scheme != Uri.UriSchemeHttps || address.IsLoopback)
+            return "Frontend:BaseUrl must be the site's real https:// address outside Development; every link in emails is built from it.";
+        return null;
     }
 
     /// <summary>
@@ -92,14 +102,16 @@ public static class StartupTasks
         logger.LogInformation("Administrator account created"); // no username: logs are kept by the host
     }
 
-    /// <summary>Basic hardening headers for every API response.</summary>
+    /// <summary>Basic hardening headers for every response; pages and API answers each get their own security rule.</summary>
     public static IApplicationBuilder UseSecurityHeaders(this IApplicationBuilder app) => app.Use(async (context, next) =>
     {
         var headers = context.Response.Headers;
         headers.XContentTypeOptions = "nosniff";
         headers.XFrameOptions = "DENY";
         headers["Referrer-Policy"] = "no-referrer";
-        headers.ContentSecurityPolicy = "default-src 'none'; frame-ancestors 'none'";
+        headers.ContentSecurityPolicy = WebsiteHosting.IsApiRequest(context)
+            ? WebsiteHosting.ApiContentSecurityPolicy
+            : WebsiteHosting.WebsiteContentSecurityPolicy;
         await next();
     });
 }

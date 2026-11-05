@@ -20,4 +20,18 @@ public sealed class AllowedHostsTests
     [InlineData("nailsbyleyah.com;www.nailsbyleyah.com")]
     public void Real_addresses_are_accepted(string allowedHosts) =>
         Assert.Null(StartupTasks.AllowedHostsProblem(allowedHosts));
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("nailsbyleyah.com")]
+    [InlineData("http://nailsbyleyah.com")]
+    [InlineData("https://localhost:5173")]
+    [InlineData("https://127.0.0.1")]
+    public void Emailed_links_need_the_real_https_address(string? baseUrl) =>
+        Assert.NotNull(StartupTasks.WebsiteAddressProblem(baseUrl));
+
+    [Fact]
+    public void A_real_https_address_works_for_emailed_links() =>
+        Assert.Null(StartupTasks.WebsiteAddressProblem("https://nailsbyleyah.onrender.com"));
 }

@@ -12,6 +12,8 @@ obj/
 TestResults/
 node_modules/
 dist/
+# The built website, copied from frontend/dist
+backend/wwwroot/
 
 # Personal and machine-specific settings (passwords live in dotnet user-secrets, outside this folder)
 *.user
