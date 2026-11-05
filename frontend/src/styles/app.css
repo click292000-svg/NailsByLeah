@@ -487,7 +487,10 @@ select.input { appearance: auto; }
 .block-list { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 6px; }
 .block-list li { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 5px 6px 5px 10px; font-size: 0.9rem; border: 1px solid var(--line); border-radius: var(--radius-sm); flex-wrap: wrap; }
 .hours-form { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px; }
-.hours-form .field { min-width: 180px; margin: 0; }
+.hours-form .field { width: 180px; margin: 0; }
+/* A setting shown but not changed here: the same size as the box beside it, without looking editable. */
+.input-readonly { display: flex; align-items: center; height: var(--control-h); background: var(--rose-50); color: var(--ink); cursor: default; }
+@media (max-width: 559px) { .hours-form .field, .hours-form .btn { width: 100%; } }
 .block-period { display: grid; gap: 10px; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); align-items: end; }
 
 .report-head { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 12px; padding-bottom: 14px; border-bottom: 1px solid var(--line); }
@@ -989,3 +992,21 @@ select.input { appearance: auto; }
 @media (prefers-reduced-motion: reduce) {
   .nav-chevron, .nav-panel, .nav-dropdown.open .nav-panel { transition: none; }
 }
+
+/* Time chooser (components/TimeSelect.jsx): looks like a form box, opens a grid grouped by part of the day. */
+.time-select { display: flex; align-items: center; gap: 8px; height: var(--control-h); text-align: left; font: inherit; color: var(--ink); cursor: pointer; }
+.time-select svg:first-child { width: 17px; height: 17px; flex: none; color: var(--rose-600); }
+.time-select span { flex: 1; }
+.time-select-chevron { width: 15px; height: 15px; flex: none; color: var(--muted); transition: transform .18s ease; }
+.time-select.is-open { border-color: var(--rose-600); box-shadow: var(--focus); }
+.time-select.is-open .time-select-chevron { transform: rotate(180deg); }
+.time-select:focus-visible { outline: none; border-color: var(--rose-600); box-shadow: var(--focus); }
+.time-pop { width: min(300px, calc(100vw - 32px)); max-height: min(420px, 70vh); overflow-y: auto; display: flex; flex-direction: column; gap: 12px; }
+.time-pop-title { margin: 0 0 6px; font-family: inherit; font-size: 0.72rem; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; color: var(--muted); }
+.time-pop-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; }
+.time-pop-time { padding: 8px 2px; border: 1px solid transparent; border-radius: 8px; background: none; font: inherit; font-size: 0.86rem; color: var(--ink); white-space: nowrap; cursor: pointer; transition: background .15s, color .15s; }
+.time-pop-time:hover { background: var(--rose-50); color: var(--rose-700); }
+.time-pop-time:focus-visible { outline: none; box-shadow: var(--focus); }
+.time-pop-time.selected { background: var(--rose-600); color: var(--white); font-weight: 700; }
+@media (prefers-reduced-motion: reduce) { .time-select-chevron { transition: none; } }
+

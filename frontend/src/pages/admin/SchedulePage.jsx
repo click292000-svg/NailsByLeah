@@ -6,6 +6,7 @@ import { addDays, addMinutesToTime, daysInMonth, today, toIsoDate } from '../../
 import { formatDate, formatTime } from '../../lib/format'
 import { LIMITS } from '../../validation/rules'
 import { schedule } from '../../content/salon'
+import { TimeSelect } from '../../components/TimeSelect'
 import { Alert, Button, Card, PageHeader, PageLoader, SelectField, Spinner, TextField } from '../../components/ui'
 
 const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
@@ -131,10 +132,10 @@ function OpeningHoursCard({ onSaved }) {
       {error && <Alert kind="error" onClose={() => setError(null)}>{error}</Alert>}
       <form className="hours-form" onSubmit={save}>
         <div className="field">
-          <span className="field-label">Opening time</span>
-          <strong>{formatTime(openingTime)}</strong>
+          <div className="field-top"><span className="field-label">Opening time</span></div>
+          <div className="input input-readonly">{formatTime(openingTime)}</div>
         </div>
-        <SelectField label="Closing time" value={chosen} onChange={(e) => setClosing(e.target.value)} options={closingOptions(openingTime)} />
+        <TimeSelect label="Closing time" value={chosen} onChange={setClosing} options={closingOptions(openingTime)} />
         <Button type="submit" loading={saving} disabled={chosen === closingTime}>Save closing time</Button>
       </form>
       <p className="muted small">
