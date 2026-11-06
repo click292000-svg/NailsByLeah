@@ -131,7 +131,7 @@ function BookingCard({ booking: b, onAction }) {
       <div className="booking-card-meta">
         <span>Total <Money amount={b.totalPrice} /></span>
         <span>Paid <Money amount={b.payment?.amountPaid ?? b.depositAmount} />{b.payment?.option === 'Full' ? ' (full)' : ' (deposit)'}</span>
-        <span>Balance <Money amount={b.balanceDue} /></span>
+        {b.status !== 'NoShow' && <span>Balance <Money amount={b.balanceDue} /></span>}
         <span>Note: {b.note ?? 'No note'}</span>
       </div>
       <ReferenceImageGallery images={b.referenceImages} />

@@ -35,7 +35,8 @@ export function BookingDetails({ booking: b, onClose }) {
   const client = b.client
   const paid = b.payment?.amountPaid ?? b.depositAmount
   const paidInFull = b.balanceDue === 0
-  const cancelled = b.status === 'Cancelled'
+  const closed = b.status === 'Cancelled' || b.status === 'NoShow'
+  const balanceReceived = b.payment?.balanceReceived > 0
 
   return (
     <Modal wide title={`Booking #${b.id}`} onClose={onClose} footer={<Button onClick={onClose}>Close</Button>}>
@@ -85,14 +86,20 @@ export function BookingDetails({ booking: b, onClose }) {
                   <strong><Money amount={paid} /></strong>
                   <small>{b.payment?.method ? `${b.payment.optionLabel ?? 'Booking deposit'} by ${b.payment.method}` : b.payment?.optionLabel ?? 'Booking deposit'}</small>
                 </div>
-                <div className={!cancelled && !paidInFull ? 'bd-tile bd-tile-due' : 'bd-tile'}>
+                <div className={!closed && !paidInFull ? 'bd-tile bd-tile-due' : 'bd-tile'}>
                   <span>Balance due</span>
                   <strong><Money amount={b.balanceDue} /></strong>
-                  <small>{paidInFull ? 'Paid in full' : 'At the salon'}</small>
+                  <small>{closed && !paidInFull ? 'Not collected' : paidInFull ? 'Paid in full' : b.status === 'Completed' ? 'Not recorded yet' : 'At the salon'}</small>
                 </div>
               </div>
               <PaymentCheck booking={b} />
               {b.payment?.referenceNumber && <p className="bd-reference">Reference <span className="mono">{b.payment.referenceNumber}</span></p>}
+              {balanceReceived && (
+                <p className="bd-reference">
+                  Balance of <Money amount={b.payment.balanceReceived} /> received
+                  {b.payment.balanceReference && <>, reference <span className="mono">{b.payment.balanceReference}</span></>}
+                </p>
+              )}
               <p className="muted small">The <Money amount={b.depositAmount} /> deposit is non-refundable.</p>
             </div>
           </Section>
@@ -110,6 +117,7 @@ export function BookingDetails({ booking: b, onClose }) {
               <li><span>Booked</span><time>{formatDateTime(b.createdAt)}</time></li>
               {b.payment?.paidAt && <li><span>Paid</span><time>{formatDateTime(b.payment.paidAt)}</time></li>}
               {b.payment?.confirmedAt && <li><span>Confirmed</span><time>{formatDateTime(b.payment.confirmedAt)}</time></li>}
+              {balanceReceived && <li><span>Balance received</span><time>{formatDateTime(b.payment.balanceReceivedAt)}</time></li>}
               {b.cancellation && <li><span>Cancelled</span><time>{formatDateTime(b.cancellation.cancelledAt)}</time></li>}
             </ol>
           </Section>

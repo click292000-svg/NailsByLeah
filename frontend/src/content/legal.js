@@ -108,8 +108,8 @@ export const termsAndConditions = {
 
 export const privacyPolicy = {
   title: 'Privacy Policy',
-  version: '2.2',
-  updated: 'November 5, 2026',
+  version: '2.3',
+  updated: 'November 6, 2026',
   sections: [
     {
       heading: '1. Who we are',
@@ -120,7 +120,7 @@ export const privacyPolicy = {
       points: [
         'Account details: first and last name, username, email address, mobile number, and your password (stored only in a scrambled, one-way form we cannot read).',
         'Booking details: the service and add-ons you choose, the date and time, your note for Leyah, the design reference photos you upload, and any changes or cancellations with the reason you give.',
-        'Payment records: the amount, whether you paid the deposit or in full, GCash or Maya, the payment reference number and when it was paid. We never see or store your GCash or Maya PIN, password or card details.',
+        'Payment records: the amount, whether you paid the deposit or in full, GCash or Maya, the payment reference number and when it was paid, and the same for any balance you pay after your service. We never see or store your GCash or Maya PIN, password or card details.',
         'Feedback: your star rating and comment.',
         'Security records: when you agreed to our terms, failed sign-in attempts, and a log of important actions on your account with the internet (IP) address they came from.',
       ],

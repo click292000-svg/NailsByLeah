@@ -167,6 +167,20 @@ namespace NailsByLeah.Api.Data.Migrations
                         .HasColumnType("decimal(10,2)")
                         .HasColumnName("amount_paid");
 
+                    b.Property<decimal>("BalanceReceived")
+                        .HasPrecision(10, 2)
+                        .HasColumnType("decimal(10,2)")
+                        .HasColumnName("balance_received");
+
+                    b.Property<DateTime?>("BalanceReceivedAt")
+                        .HasColumnType("datetime2")
+                        .HasColumnName("balance_received_at");
+
+                    b.Property<string>("BalanceReference")
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)")
+                        .HasColumnName("balance_reference");
+
                     b.Property<DateOnly>("BookingDate")
                         .HasColumnType("date")
                         .HasColumnName("booking_date");
@@ -271,6 +285,8 @@ namespace NailsByLeah.Api.Data.Migrations
                     b.ToTable("bookings", null, t =>
                         {
                             t.HasCheckConstraint("ck_bookings_amount_paid_non_negative", "[amount_paid] >= 0");
+
+                            t.HasCheckConstraint("ck_bookings_balance_received_non_negative", "[balance_received] >= 0");
 
                             t.HasCheckConstraint("ck_bookings_deposit_non_negative", "[deposit_amount] >= 0");
 

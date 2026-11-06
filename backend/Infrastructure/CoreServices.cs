@@ -136,6 +136,8 @@ public static class AuditActions
     public const string BookingRescheduled = "BookingRescheduled";
     public const string BookingCompleted = "BookingCompleted";
     public const string BookingCancelled = "BookingCancelled";
+    public const string BookingNoShow = "BookingNoShow";
+    public const string BalanceReceived = "BalanceReceived";
     public const string PaymentSucceeded = "PaymentSucceeded";
     public const string PaymentFailed = "PaymentFailed";
     public const string ServiceCreated = "ServiceCreated";

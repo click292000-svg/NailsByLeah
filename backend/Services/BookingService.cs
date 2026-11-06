@@ -30,7 +30,13 @@ public interface IAdminBookingService
     Task<BookingResponse> GetAsync(int bookingId, CancellationToken ct = default);
     /// <summary>The administrator checks the payment and confirms the booking (a separate step from paying).</summary>
     Task<BookingResponse> ConfirmAsync(int adminId, int bookingId, CancellationToken ct = default);
-    Task<BookingResponse> CompleteAsync(int bookingId, CancellationToken ct = default);
+    Task<BookingResponse> CompleteAsync(int bookingId, CompleteBookingRequest? request = null, CancellationToken ct = default);
+
+    /// <summary>The balance of an already completed booking was paid later.</summary>
+    Task<BookingResponse> RecordBalanceAsync(int bookingId, RecordBalanceRequest request, CancellationToken ct = default);
+
+    /// <summary>The client did not come; only possible once the appointment time has arrived.</summary>
+    Task<BookingResponse> MarkNoShowAsync(int bookingId, CancellationToken ct = default);
     Task<BookingResponse> RescheduleAsync(int bookingId, RescheduleRequest request, CancellationToken ct = default);
     Task<BookingResponse> CancelAsync(int adminId, int bookingId, AdminCancelRequest request, CancellationToken ct = default);
 }
@@ -235,16 +241,55 @@ public sealed class BookingService(
         return Map(confirmed, includeClient: true);
     }
 
-    public async Task<BookingResponse> CompleteAsync(int bookingId, CancellationToken ct = default)
+    public async Task<BookingResponse> CompleteAsync(int bookingId, CompleteBookingRequest? request = null, CancellationToken ct = default)
     {
+        var reference = CleanBalanceReference(request?.BalanceReference);
         var booking = await ReloadAsync(bookingId, ct);
         if (booking.BookingDate > clock.Today)
             throw new ConflictException("A booking can only be completed on or after its appointment date.", "invalid_status");
 
-        booking.MarkCompleted(clock.UtcNow);
+        var now = clock.UtcNow;
+        booking.MarkCompleted(now);
         audit.Record(AuditActions.BookingCompleted, nameof(Booking), booking.Id);
+        if (request?.BalanceReceived == true && booking.BalanceDue > 0)
+            RecordBalance(booking, reference, now);
         await unitOfWork.SaveChangesAsync(ct);
         return Map(booking, includeClient: true);
+    }
+
+    public async Task<BookingResponse> RecordBalanceAsync(int bookingId, RecordBalanceRequest request, CancellationToken ct = default)
+    {
+        var reference = CleanBalanceReference(request.BalanceReference);
+        var booking = await ReloadAsync(bookingId, ct);
+        RecordBalance(booking, reference, clock.UtcNow);
+        await unitOfWork.SaveChangesAsync(ct);
+        return Map(booking, includeClient: true);
+    }
+
+    public async Task<BookingResponse> MarkNoShowAsync(int bookingId, CancellationToken ct = default)
+    {
+        var booking = await ReloadAsync(bookingId, ct);
+        booking.MarkNoShow(clock.LocalNow, clock.UtcNow);
+        audit.Record(AuditActions.BookingNoShow, nameof(Booking), booking.Id, $"Deposit of PHP {booking.AmountPaid:0.00} kept");
+        await unitOfWork.SaveChangesAsync(ct);
+        return Map(booking, includeClient: true);
+    }
+
+    private void RecordBalance(Booking booking, string? reference, DateTime utcNow)
+    {
+        var amount = booking.RecordBalance(reference, utcNow);
+        audit.Record(AuditActions.BalanceReceived, nameof(Booking), booking.Id,
+            $"PHP {amount:0.00}{(reference is null ? "" : $" (reference {reference})")}");
+    }
+
+    private static string? CleanBalanceReference(string? reference)
+    {
+        if (string.IsNullOrWhiteSpace(reference))
+            return null;
+        var cleaned = InputNormalizer.Text(reference);
+        if (cleaned.Length > InputLimits.BalanceReferenceMaxLength)
+            throw new ValidationAppException("balanceReference", $"The reference must be {InputLimits.BalanceReferenceMaxLength} characters or fewer.");
+        return cleaned;
     }
 
     public async Task<BookingResponse> RescheduleAsync(int bookingId, RescheduleRequest request, CancellationToken ct = default) =>
@@ -377,7 +422,8 @@ public static class BookingMapper
         var p = b.Payments.Where(x => x.Status == PaymentStatus.Succeeded).OrderBy(x => x.PaidAt).FirstOrDefault();
         return new BookingPaymentResponse(
             b.PaymentOption.ToString(), Labels.For(b.PaymentOption), b.AmountPaid, p?.ReferenceNumber, p?.Method.ToString(), p?.PaidAt,
-            Verified: p?.VerifiedAt is not null, b.ConfirmedAt, b.ConfirmedBy is { } admin ? $"{admin.FirstName} {admin.LastName}" : null);
+            Verified: p?.VerifiedAt is not null, b.ConfirmedAt, b.ConfirmedBy is { } admin ? $"{admin.FirstName} {admin.LastName}" : null,
+            b.BalanceReceived, b.BalanceReceivedAt, b.BalanceReference);
     }
 
     public static ReceiptResponse ToReceipt(Payment p, Booking b) => new(

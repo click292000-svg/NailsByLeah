@@ -17,6 +17,7 @@ export const LIMITS = {
   maxNailsPerHand: 5,
   feedbackCommentMax: 1000,
   noteMax: 300,
+  balanceReferenceMax: 50,
   bookingDraftMax: 4000,
   referenceImageMaxBytes: 5 * 1024 * 1024,
   referenceImagesPerBooking: 3,

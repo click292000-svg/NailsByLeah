@@ -45,8 +45,10 @@ export function Alert({ kind = 'info', title, children, onClose }) {
   )
 }
 
+const STATUS_LABELS = { NoShow: 'No-show' }
+
 export function StatusBadge({ status }) {
-  return <span className={`badge badge-${String(status).toLowerCase()}`}>{status}</span>
+  return <span className={`badge badge-${String(status).toLowerCase()}`}>{STATUS_LABELS[status] ?? status}</span>
 }
 
 export const Money = ({ amount }) => <span className="money">{formatMoney(amount)}</span>

@@ -19,6 +19,8 @@ public enum BookingStatus
     Confirmed,
     Completed,
     Cancelled,
+    /// <summary>The client did not come. The time has passed, so it holds no slot; the deposit is kept.</summary>
+    NoShow,
 }
 
 public enum PaymentMethod

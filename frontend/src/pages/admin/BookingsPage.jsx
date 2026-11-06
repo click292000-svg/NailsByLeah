@@ -8,7 +8,11 @@ import { DateFilter } from '../../components/DateFilter'
 import { AdminBookingTable } from './AdminBookingTable'
 
 // Quick filters shown as chips; "Pending" is where new paid bookings wait for confirmation.
-const STATUSES = [{ value: '', label: 'All' }, ...['Pending', 'Confirmed', 'Completed', 'Cancelled'].map((s) => ({ value: s, label: s }))]
+const STATUSES = [
+  { value: '', label: 'All' },
+  ...['Pending', 'Confirmed', 'Completed', 'Cancelled'].map((s) => ({ value: s, label: s })),
+  { value: 'NoShow', label: 'No-show' },
+]
 const PAGE_SIZE = 20
 
 /** Search and filter bookings by date, status or client name (Ref 11.5). Filters live in the URL. */

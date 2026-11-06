@@ -79,10 +79,12 @@ internal sealed class BookingConfiguration : IEntityTypeConfiguration<Booking>
             t.HasCheckConstraint("ck_bookings_deposit_non_negative", "[deposit_amount] >= 0");
             t.HasCheckConstraint("ck_bookings_duration_positive", "[duration_minutes] > 0");
             t.HasCheckConstraint("ck_bookings_amount_paid_non_negative", "[amount_paid] >= 0");
+            t.HasCheckConstraint("ck_bookings_balance_received_non_negative", "[balance_received] >= 0");
         });
 
         b.Property(x => x.RowVersion).IsRowVersion();
         b.Property(x => x.Note).HasMaxLength(InputLimits.NoteMaxLength);
+        b.Property(x => x.BalanceReference).HasMaxLength(InputLimits.BalanceReferenceMaxLength);
         b.HasOne(x => x.ConfirmedBy).WithMany().HasForeignKey(x => x.ConfirmedByUserId);
         b.HasOne(x => x.Client).WithMany().HasForeignKey(x => x.ClientId);
         b.HasOne(x => x.Service).WithMany().HasForeignKey(x => x.ServiceId);

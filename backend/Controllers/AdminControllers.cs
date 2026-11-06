@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc.ModelBinding;
 using NailsByLeah.Api.Contracts;
 using NailsByLeah.Api.Domain;
 using NailsByLeah.Api.Infrastructure;
@@ -34,8 +35,17 @@ public sealed class AdminBookingsController(IAdminBookingService bookings) : Con
     [HttpPost("{id:int}/confirm")]
     public Task<BookingResponse> Confirm(int id, CancellationToken ct) => bookings.ConfirmAsync(User.GetUserId(), id, ct);
 
+    /// <summary>The body is optional: send it when the balance was paid at the same time.</summary>
     [HttpPost("{id:int}/complete")]
-    public Task<BookingResponse> Complete(int id, CancellationToken ct) => bookings.CompleteAsync(id, ct);
+    public Task<BookingResponse> Complete(int id, [FromBody(EmptyBodyBehavior = EmptyBodyBehavior.Allow)] CompleteBookingRequest? request, CancellationToken ct) =>
+        bookings.CompleteAsync(id, request, ct);
+
+    [HttpPost("{id:int}/balance")]
+    public Task<BookingResponse> RecordBalance(int id, RecordBalanceRequest request, CancellationToken ct) =>
+        bookings.RecordBalanceAsync(id, request, ct);
+
+    [HttpPost("{id:int}/no-show")]
+    public Task<BookingResponse> NoShow(int id, CancellationToken ct) => bookings.MarkNoShowAsync(id, ct);
 
     [HttpPost("{id:int}/reschedule")]
     public Task<BookingResponse> Reschedule(int id, RescheduleRequest request, CancellationToken ct) =>

@@ -56,6 +56,13 @@ public class Booking : IPayable, ICancellable, ISoftDeletable
     /// <summary>Verified amount paid online. The deposit is part of it; prices are those stored when the booking was made.</summary>
     public decimal AmountPaid { get; set; }
 
+    /// <summary>The rest of the price, received by the salon after the service (not through the website).</summary>
+    public decimal BalanceReceived { get; set; }
+    public DateTime? BalanceReceivedAt { get; set; }
+
+    /// <summary>The GCash reference for the balance, if the administrator entered one.</summary>
+    public string? BalanceReference { get; set; }
+
     /// <summary>When and by whom the administrator confirmed the booking after checking its payment.</summary>
     public DateTime? ConfirmedAt { get; set; }
     public int? ConfirmedByUserId { get; set; }
@@ -63,8 +70,8 @@ public class Booking : IPayable, ICancellable, ISoftDeletable
 
     public decimal TotalPrice => ServicePrice + AddOns.Sum(a => a.LinePrice);
 
-    /// <summary>Amount still to be paid at the salon: nothing after a full payment.</summary>
-    public decimal BalanceDue => Math.Max(0, TotalPrice - AmountPaid);
+    /// <summary>Amount still to be paid at the salon: nothing after a full payment or once the balance is received.</summary>
+    public decimal BalanceDue => Math.Max(0, TotalPrice - AmountPaid - BalanceReceived);
 
     public DateTime StartsAtLocal => BookingDate.ToDateTime(StartTime);
 
@@ -110,6 +117,32 @@ public class Booking : IPayable, ICancellable, ISoftDeletable
             throw new ConflictException("Only confirmed bookings can be completed.", "invalid_status");
         Status = BookingStatus.Completed;
         UpdatedAt = utcNow;
+    }
+
+    /// <summary>The client did not come. Only possible once the appointment time has arrived.</summary>
+    public void MarkNoShow(DateTime localNow, DateTime utcNow)
+    {
+        if (!IsActive)
+            throw new ConflictException($"A {Status} booking cannot be marked as a no-show.", "invalid_status");
+        if (StartsAtLocal > localNow)
+            throw new ConflictException("A booking can only be marked as a no-show once its appointment time has arrived.", "invalid_status");
+        Status = BookingStatus.NoShow;
+        UpdatedAt = utcNow;
+    }
+
+    /// <summary>The client paid the rest after the service. Always the whole balance, so it can only happen once.</summary>
+    public decimal RecordBalance(string? reference, DateTime utcNow)
+    {
+        if (Status != BookingStatus.Completed)
+            throw new ConflictException("A balance can only be recorded on a completed booking.", "invalid_status");
+        var amount = BalanceDue;
+        if (amount <= 0)
+            throw new ConflictException("This booking has no balance left to record.", "no_balance_due");
+        BalanceReceived = amount;
+        BalanceReceivedAt = utcNow;
+        BalanceReference = reference;
+        UpdatedAt = utcNow;
+        return amount;
     }
 
     public void MoveTo(DateOnly date, TimeOnly startTime, DateTime utcNow)

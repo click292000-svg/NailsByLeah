@@ -4,7 +4,8 @@ import { useAsync } from '../../hooks/useAsync'
 import { errorMessage } from '../../api/errors'
 import { today } from '../../lib/dates'
 import { formatDate } from '../../lib/format'
-import { Alert, Card, Money, PageHeader, PageLoader, StatCard } from '../../components/ui'
+import { downloadSalesReport, totalReceived } from '../../lib/reportPdf'
+import { Alert, Button, Card, Money, PageHeader, PageLoader, StatCard } from '../../components/ui'
 import { DayPicker, MonthPicker } from '../../components/DateFilter'
 
 /** Daily and monthly sales reports (Ref 11.6). */
@@ -28,30 +29,57 @@ function Totals({ report }) {
     <div className="report-totals">
       <section aria-label="Sales">
         <h3 className="report-section-title">Sales</h3>
-        <div className="stat-row stat-row-2">
-          <StatCard label="Paid online" value={<Money amount={report.depositsCollected} />} hint="Deposits and full payments received" />
+        <div className="stat-row stat-row-3">
+          <StatCard label="Total received" value={<Money amount={totalReceived(report)} />} hint="Online payments plus balances" />
+          <StatCard label="Paid online" value={<Money amount={report.depositsCollected} />} hint="Deposits and full payments" />
+          <StatCard label="Balances received" value={<Money amount={report.balancesReceived} />} hint="Paid after the service" />
+        </div>
+        <div className="stat-row stat-row-2 stat-row-next">
           <StatCard label="Completed services" value={<Money amount={report.completedServicesValue} />} hint="Full price of appointments completed" />
+          <StatCard label="Balances unpaid" value={<Money amount={report.balancesUnpaid} />} hint="Completed, balance not recorded yet" />
         </div>
       </section>
       <section aria-label="Bookings">
         <h3 className="report-section-title">Bookings</h3>
-        <div className="stat-row stat-row-3">
+        <div className="stat-row stat-row-4">
           <StatCard label="Made" value={report.bookingsMade} hint="New bookings placed" dot="made" />
           <StatCard label="Completed" value={report.bookingsCompleted} hint="Appointments finished" dot="completed" />
           <StatCard label="Cancelled" value={report.bookingsCancelled} hint="By clients or the salon" dot="cancelled" />
+          <StatCard label="No-show" value={report.bookingsNoShow} hint="Client did not come" dot="noshow" />
         </div>
       </section>
     </div>
   )
 }
 
-/** The period's title on the left and its picker on the right, so the report reads top to bottom. */
-function ReportHeader({ title, children }) {
+/** The period's title on the left, its picker and the PDF download on the right, so the report reads top to bottom. */
+function ReportHeader({ title, report, fileName, children }) {
+  const [downloading, setDownloading] = useState(false)
+  const [error, setError] = useState(null)
+
+  const download = async () => {
+    setDownloading(true)
+    setError(null)
+    try {
+      await downloadSalesReport({ period: title, report, fileName })
+    } catch {
+      setError('The PDF could not be made. Please try again.')
+    } finally {
+      setDownloading(false)
+    }
+  }
+
   return (
-    <div className="report-head">
-      <h2>{title}</h2>
-      <div className="report-controls">{children}</div>
-    </div>
+    <>
+      <div className="report-head">
+        <h2>{title}</h2>
+        <div className="report-controls">
+          {children}
+          <Button variant="secondary" className="report-download" loading={downloading} disabled={!report} onClick={download}>Download PDF</Button>
+        </div>
+      </div>
+      {error && <Alert kind="error" onClose={() => setError(null)}>{error}</Alert>}
+    </>
   )
 }
 
@@ -60,7 +88,7 @@ function DailyReport() {
   const report = useAsync(() => api.admin.dailyReport(date), [date])
   return (
     <Card>
-      <ReportHeader title={formatDate(date)}>
+      <ReportHeader title={formatDate(date)} report={report.loading ? null : report.data} fileName={`nails-by-leyah-sales-${date}.pdf`}>
         <DayPicker label="Day" value={date} onChange={(value) => value && setDate(value)} align="end" />
       </ReportHeader>
       {report.loading && <PageLoader label="Building report…" />}
@@ -78,7 +106,8 @@ function MonthlyReport() {
 
   return (
     <Card>
-      <ReportHeader title={new Date(year, month - 1, 1).toLocaleDateString('en-PH', { month: 'long', year: 'numeric' })}>
+      <ReportHeader title={new Date(year, month - 1, 1).toLocaleDateString('en-PH', { month: 'long', year: 'numeric' })}
+        report={report.loading ? null : report.data} fileName={`nails-by-leyah-sales-${value}.pdf`}>
         <MonthPicker label="Month" value={value} onChange={setValue} align="end" />
       </ReportHeader>
       {report.loading && <PageLoader label="Building report…" />}
@@ -92,8 +121,8 @@ function MonthlyReport() {
 function ReportNotes() {
   return (
     <p className="muted small report-notes">
-      Online payments (deposits and full payments) are counted on the day they were paid. Completed services value is the full price of appointments
-      completed that day. Bookings made and cancelled are counted on the day it happened.
+      Online payments and balances are counted on the day they were paid. Completed services, no-shows and unpaid balances are counted on the
+      appointment date. Bookings made and cancelled are counted on the day it happened.
     </p>
   )
 }

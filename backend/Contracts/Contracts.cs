@@ -133,6 +133,12 @@ public sealed record ClientCancelRequest(ClientCancellationReason Reason);
 
 public sealed record AdminCancelRequest(AdminCancellationReason Reason, string? Explanation);
 
+/// <summary>Optional when completing: whether the balance was paid at the same time, and its reference.</summary>
+public sealed record CompleteBookingRequest(bool BalanceReceived, string? BalanceReference);
+
+/// <summary>The balance of a completed booking was paid later.</summary>
+public sealed record RecordBalanceRequest(string? BalanceReference);
+
 public sealed record ClientSummaryResponse(int Id, string FirstName, string LastName, string Username, string Email, string PhoneNumber);
 
 public sealed record BookingAddOnResponse(int AddOnId, string Name, int NailCount, decimal LinePrice, string Hand, string HandLabel);
@@ -164,11 +170,13 @@ public sealed record BookingResponse(
 
 /// <summary>
 /// How the booking was paid. AmountPaid includes the deposit; BalanceDue on the booking is what is left for the salon.
-/// Verified means an administrator checked the payment when confirming the booking.
+/// Verified means an administrator checked the payment when confirming the booking. BalanceReceived is the rest,
+/// paid after the service and recorded by the administrator.
 /// </summary>
 public sealed record BookingPaymentResponse(
     string Option, string OptionLabel, decimal AmountPaid, string? ReferenceNumber, string? Method, DateTime? PaidAt,
-    bool Verified, DateTime? ConfirmedAt, string? ConfirmedBy);
+    bool Verified, DateTime? ConfirmedAt, string? ConfirmedBy,
+    decimal BalanceReceived = 0, DateTime? BalanceReceivedAt = null, string? BalanceReference = null);
 
 /// <summary>An uploaded design photo. The file is at GET /api/reference-images/{id}.</summary>
 public sealed record ReferenceImageResponse(int Id, string ContentType, long SizeBytes, DateTime CreatedAt);
@@ -229,14 +237,18 @@ public sealed record DashboardResponse(
     IReadOnlyList<BookingResponse> TodaysBookings,
     int PendingBookingCount,
     decimal DepositsCollectedToday,
-    decimal TotalDepositsCollected);
+    decimal TotalDepositsCollected,
+    IReadOnlyList<BookingResponse> UpcomingBookings);
 
 public sealed record DailySalesReport(
     DateOnly Date,
     int BookingsMade,
     int BookingsCompleted,
     int BookingsCancelled,
+    int BookingsNoShow,
     decimal DepositsCollected,
+    decimal BalancesReceived,
+    decimal BalancesUnpaid,
     decimal CompletedServicesValue);
 
 public sealed record MonthlySalesReport(
@@ -245,7 +257,10 @@ public sealed record MonthlySalesReport(
     int BookingsMade,
     int BookingsCompleted,
     int BookingsCancelled,
+    int BookingsNoShow,
     decimal DepositsCollected,
+    decimal BalancesReceived,
+    decimal BalancesUnpaid,
     decimal CompletedServicesValue,
     IReadOnlyList<DailySalesReport> Days);
 

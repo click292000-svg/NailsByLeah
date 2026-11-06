@@ -26,6 +26,7 @@ public static class InputLimits
     public const int BlockReasonMaxLength = 200;
     public const int FeedbackCommentMaxLength = 1000;
     public const int NoteMaxLength = 300;
+    public const int BalanceReferenceMaxLength = 50;
 
     /// <summary>A saved booking draft (JSON): ample for a service, add-ons, a time, a note and three photo ids.</summary>
     public const int BookingDraftMaxLength = 4000;

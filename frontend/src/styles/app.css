@@ -197,6 +197,7 @@ select.input { cursor: pointer; }
 .badge-confirmed { background: var(--blue-100); color: var(--blue-700); }
 .badge-completed { background: var(--green-100); color: var(--green-700); }
 .badge-cancelled { background: var(--gray-100); color: var(--ink-soft); }
+.badge-noshow { background: var(--red-100); color: var(--red-700); }
 /* Drafts are unfinished bookings, not appointments: dashed outline instead of a filled status colour. */
 .badge-draft { background: var(--white); color: var(--rose-700); border: 1px dashed var(--rose-500); }
 .draft-card { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; padding: 12px 14px;
@@ -515,6 +516,17 @@ select.input { appearance: auto; }
 .stat-dot-made { background: var(--rose-500); }
 .stat-dot-completed { background: var(--green-700); }
 .stat-dot-cancelled { background: #a59aa0; }
+.stat-dot-noshow { background: var(--red-700); }
+.stat-row-next { margin-top: 10px; }
+@media (min-width: 560px) { .stat-row-4 { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (min-width: 900px) { .stat-row-4 { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+.stat-row-4 .stat-value { font-size: 1.5rem; }
+.report-controls { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 10px; }
+/* The balance choice when completing a booking, with the same selected look as the booking cards. */
+.balance-options { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin: 0; padding: 0; border: 0; }
+.balance-option { display: flex; align-items: center; gap: 8px; padding: 10px 12px; border: 1px solid var(--nude-200); border-radius: 12px; font-size: 0.9rem; font-weight: 600; cursor: pointer; }
+.balance-option.selected { border-color: var(--rose-600); background: var(--rose-50); box-shadow: 0 0 0 1px var(--rose-600) inset; }
+.balance-option input { width: 18px; height: 18px; margin: 0; accent-color: var(--rose-600); }
 .report-notes { margin: 0; padding-top: 12px; border-top: 1px solid var(--line); }
 
 /* Services & prices. Every list and add form shares one column template, so the columns line up from card to card. */
@@ -945,10 +957,10 @@ select.input { appearance: auto; }
 .bookings-table .row-actions { flex-wrap: nowrap; align-items: center; gap: 6px; }
 /* Pending bookings need Leyah's attention: a rose edge. Cancelled ones fade back. */
 .booking-row-pending td:first-child { box-shadow: inset 3px 0 0 var(--dusty-rose); }
-.booking-row-cancelled td { color: var(--muted); }
-.booking-row-cancelled .cell-main, .booking-row-cancelled .mini-date b { color: var(--ink-soft); }
-.booking-row-cancelled .mini-date { background: var(--gray-100); border-color: var(--gray-100); }
-.booking-row-cancelled .mini-date small { color: var(--muted); }
+.booking-row-cancelled td, .booking-row-noshow td { color: var(--muted); }
+.booking-row-cancelled .cell-main, .booking-row-cancelled .mini-date b, .booking-row-noshow .cell-main, .booking-row-noshow .mini-date b { color: var(--ink-soft); }
+.booking-row-cancelled .mini-date, .booking-row-noshow .mini-date { background: var(--gray-100); border-color: var(--gray-100); }
+.booking-row-cancelled .mini-date small, .booking-row-noshow .mini-date small { color: var(--muted); }
 .row-menu-button { display: inline-grid; place-items: center; width: 32px; height: 32px; border-radius: 50%; border: 1px solid transparent;
   background: none; color: var(--ink-soft); cursor: pointer; transition: background .15s, border-color .15s; }
 .row-menu-button svg { width: 18px; height: 18px; fill: currentColor; }
@@ -982,6 +994,7 @@ select.input { appearance: auto; }
 .status-chip-confirmed::before { background: var(--blue-700); }
 .status-chip-completed::before { background: var(--green-700); }
 .status-chip-cancelled::before { background: #a59aa0; }
+.status-chip-noshow::before { background: var(--red-700); }
 .status-chip:hover { border-color: var(--rose-500); color: var(--ink); }
 .status-chip.selected { background: var(--burgundy); border-color: var(--burgundy); color: var(--white); }
 .status-chip.selected::before { background: var(--white); }

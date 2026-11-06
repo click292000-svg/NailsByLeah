@@ -17,6 +17,8 @@ public sealed class DashboardService(
     IPaymentRepository payments,
     ISalonClock clock) : IDashboardService
 {
+    private const int UpcomingDays = 7;
+
     public async Task<DashboardResponse> GetAsync(CancellationToken ct = default)
     {
         var today = clock.Today;
@@ -29,7 +31,9 @@ public sealed class DashboardService(
             todays.Select(b => BookingMapper.ToResponse(b, includeClient: true)).ToList(),
             await bookings.CountByStatusAsync(BookingStatus.Pending, ct),
             await payments.SumSucceededAsync(fromUtc, toUtc, ct),
-            await payments.SumSucceededAsync(null, null, ct));
+            await payments.SumSucceededAsync(null, null, ct),
+            (await bookings.GetUpcomingAsync(today.AddDays(1), today.AddDays(UpcomingDays), ct))
+                .Select(b => BookingMapper.ToResponse(b, includeClient: true)).ToList());
     }
 }
 
@@ -57,14 +61,17 @@ public sealed class ReportService(IBookingRepository bookings, IPaymentRepositor
             days.Sum(d => d.BookingsMade),
             days.Sum(d => d.BookingsCompleted),
             days.Sum(d => d.BookingsCancelled),
+            days.Sum(d => d.BookingsNoShow),
             days.Sum(d => d.DepositsCollected),
+            days.Sum(d => d.BalancesReceived),
+            days.Sum(d => d.BalancesUnpaid),
             days.Sum(d => d.CompletedServicesValue),
             days);
     }
 
     /// <summary>
-    /// "Made" and "cancelled" count by the day it happened; deposits by the day they were paid;
-    /// completed services by appointment date. All days are salon-local.
+    /// "Made" and "cancelled" count by the day it happened; deposits and balances by the day they were paid;
+    /// completed services, no-shows and unpaid balances by appointment date. All days are salon-local.
     /// </summary>
     private async Task<List<DailySalesReport>> BuildAsync(DateOnly from, DateOnly to, CancellationToken ct)
     {
@@ -83,7 +90,10 @@ public sealed class ReportService(IBookingRepository bookings, IPaymentRepositor
                 await bookings.CountCreatedBetweenAsync(dayFrom, dayTo, ct),
                 completed.Count,
                 cancelled.Count(b => b.Cancellation!.CancelledAt >= dayFrom && b.Cancellation.CancelledAt < dayTo),
+                appointments.Count(b => b.BookingDate == day && b.Status == BookingStatus.NoShow),
                 paid.Where(p => p.PaidAt >= dayFrom && p.PaidAt < dayTo).Sum(p => p.Amount),
+                await bookings.SumBalancesReceivedAsync(dayFrom, dayTo, ct),
+                completed.Sum(b => b.BalanceDue),
                 completed.Sum(b => b.TotalPrice)));
         }
         return reports;

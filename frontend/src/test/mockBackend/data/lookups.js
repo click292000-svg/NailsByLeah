@@ -27,6 +27,7 @@ export const lookups = {
     { value: 'Confirmed', label: 'Confirmed' },
     { value: 'Completed', label: 'Completed' },
     { value: 'Cancelled', label: 'Cancelled' },
+    { value: 'NoShow', label: 'No-show' },
   ],
   termsVersion: '2.3',
 }

@@ -56,6 +56,6 @@ public sealed class LookupsController(IOptions<LegalOptions> legal) : Controller
         Labels.ClientCancellationReasons.Select(p => new LookupItem(p.Key.ToString(), p.Value)).ToList(),
         Labels.AdminCancellationReasons.Select(p => new LookupItem(p.Key.ToString(), p.Value)).ToList(),
         Enum.GetValues<PaymentMethod>().Select(m => new LookupItem(m.ToString(), m.ToString())).ToList(),
-        Enum.GetValues<BookingStatus>().Select(s => new LookupItem(s.ToString(), s.ToString())).ToList(),
+        Enum.GetValues<BookingStatus>().Select(s => new LookupItem(s.ToString(), s == BookingStatus.NoShow ? "No-show" : s.ToString())).ToList(),
         legal.Value.TermsVersion);
 }

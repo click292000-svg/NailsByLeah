@@ -266,8 +266,8 @@ function bookingResponse(db, b, includeClient) {
     endTime: addMinutesToTime(b.startTime, b.durationMinutes), durationMinutes: b.durationMinutes,
     serviceId: b.serviceId, serviceName: service?.name ?? 'Service', serviceCategory: service?.category ?? '',
     servicePrice: b.servicePrice, addOns: addOnLines, totalPrice, depositAmount: b.depositAmount,
-    balanceDue: Math.max(0, totalPrice - (b.amountPaid ?? b.depositAmount)),
-    payment: paymentInfo(db, b),
+    balanceDue: Math.max(0, totalPrice - (b.amountPaid ?? b.depositAmount) - (b.balanceReceived ?? 0)),
+    payment: { ...paymentInfo(db, b), balanceReceived: b.balanceReceived ?? 0, balanceReceivedAt: b.balanceReceivedAt ?? null, balanceReference: b.balanceReference ?? null },
     note: b.note ?? null, createdAt: b.createdAt,
     cancellation: cancellation ? {
       reason: cancellation.reason, reasonLabel: reasonLabel(cancellation.reason), explanation: cancellation.explanation,
@@ -362,6 +362,18 @@ function ownedBooking(db, user, id) {
 }
 
 const describe = (date, time) => `${date} ${time.slice(0, 5)}`
+
+function balanceReference(value) {
+  const reference = String(value ?? '').trim()
+  if (reference.length > rules.LIMITS.balanceReferenceMax) invalid('balanceReference', `The reference must be ${rules.LIMITS.balanceReferenceMax} characters or fewer.`)
+  return reference || null
+}
+
+function recordBalance(db, admin, booking, reference) {
+  const amount = bookingResponse(db, booking, false).balanceDue
+  Object.assign(booking, { balanceReceived: amount, balanceReceivedAt: nowIso(), balanceReference: reference })
+  audit(db, admin.id, 'BalanceReceived', 'Booking', booking.id, `PHP ${amount.toFixed(2)}`)
+}
 
 function createBooking(db, user, body) {
   if (!body.depositAcknowledged)
@@ -465,7 +477,10 @@ function dailyReport(db, date) {
     bookingsMade: live.filter((b) => b.createdAt >= from && b.createdAt < to).length,
     bookingsCompleted: completed.length,
     bookingsCancelled: db.cancellations.filter((c) => c.cancelledAt >= from && c.cancelledAt < to).length,
+    bookingsNoShow: live.filter((b) => b.bookingDate === date && b.status === 'NoShow').length,
     depositsCollected: db.payments.filter((p) => p.status === 'Succeeded' && p.paidAt >= from && p.paidAt < to).reduce((s, p) => s + p.amount, 0),
+    balancesReceived: live.filter((b) => b.balanceReceivedAt >= from && b.balanceReceivedAt < to).reduce((s, b) => s + b.balanceReceived, 0),
+    balancesUnpaid: completed.reduce((s, b) => s + bookingResponse(db, b, false).balanceDue, 0),
     completedServicesValue: completed.reduce((s, b) => s + bookingResponse(db, b, false).totalPrice, 0),
   }
 }
@@ -808,6 +823,9 @@ const routes = [
       pendingBookingCount: db.bookings.filter((b) => !b.isDeleted && b.status === 'Pending').length,
       depositsCollectedToday: paid.filter((p) => p.paidAt >= from && p.paidAt < to).reduce((s, p) => s + p.amount, 0),
       totalDepositsCollected: paid.reduce((s, p) => s + p.amount, 0),
+      upcomingBookings: db.bookings.filter((b) => !b.isDeleted && ['Pending', 'Confirmed'].includes(b.status) && b.bookingDate > day && b.bookingDate <= addDays(day, 7))
+        .sort((a, b) => (a.bookingDate + a.startTime).localeCompare(b.bookingDate + b.startTime))
+        .map((b) => bookingResponse(db, b, true)),
     }
   }],
   ['GET', '/admin/bookings', (db, { query }) => {
@@ -844,13 +862,35 @@ const routes = [
     saveDb()
     return bookingResponse(db, booking, true)
   }],
-  ['POST', '/admin/bookings/:id/complete', (db, { params }) => {
+  ['POST', '/admin/bookings/:id/complete', (db, { params, body }) => {
     const admin = requireUser(db, 'Administrator')
+    const reference = balanceReference(body?.balanceReference)
     const booking = findBooking(db, params.id)
     if (booking.bookingDate > today()) conflict('A booking can only be completed on or after its appointment date.', 'invalid_status')
     if (booking.status !== 'Confirmed') conflict('Only confirmed bookings can be completed.', 'invalid_status')
     booking.status = 'Completed'
     audit(db, admin.id, 'BookingCompleted', 'Booking', booking.id)
+    if (body?.balanceReceived && bookingResponse(db, booking, false).balanceDue > 0) recordBalance(db, admin, booking, reference)
+    saveDb()
+    return bookingResponse(db, booking, true)
+  }],
+  ['POST', '/admin/bookings/:id/balance', (db, { params, body }) => {
+    const admin = requireUser(db, 'Administrator')
+    const reference = balanceReference(body?.balanceReference)
+    const booking = findBooking(db, params.id)
+    if (booking.status !== 'Completed') conflict('A balance can only be recorded on a completed booking.', 'invalid_status')
+    if (bookingResponse(db, booking, false).balanceDue <= 0) conflict('This booking has no balance left to record.', 'no_balance_due')
+    recordBalance(db, admin, booking, reference)
+    saveDb()
+    return bookingResponse(db, booking, true)
+  }],
+  ['POST', '/admin/bookings/:id/no-show', (db, { params }) => {
+    const admin = requireUser(db, 'Administrator')
+    const booking = findBooking(db, params.id)
+    if (!['Pending', 'Confirmed'].includes(booking.status)) conflict(`A ${booking.status} booking cannot be marked as a no-show.`, 'invalid_status')
+    if (startsAt(booking.bookingDate, booking.startTime) > new Date()) conflict('A booking can only be marked as a no-show once its appointment time has arrived.', 'invalid_status')
+    booking.status = 'NoShow'
+    audit(db, admin.id, 'BookingNoShow', 'Booking', booking.id)
     saveDb()
     return bookingResponse(db, booking, true)
   }],
@@ -1006,7 +1046,8 @@ const routes = [
     const days = Array.from({ length: daysInMonth(year, month) }, (_, i) => dailyReport(db, toIsoDate(new Date(year, month - 1, i + 1))))
     const sum = (key) => days.reduce((s, d) => s + d[key], 0)
     return { year, month, bookingsMade: sum('bookingsMade'), bookingsCompleted: sum('bookingsCompleted'), bookingsCancelled: sum('bookingsCancelled'),
-      depositsCollected: sum('depositsCollected'), completedServicesValue: sum('completedServicesValue'), days }
+      bookingsNoShow: sum('bookingsNoShow'), depositsCollected: sum('depositsCollected'), balancesReceived: sum('balancesReceived'),
+      balancesUnpaid: sum('balancesUnpaid'), completedServicesValue: sum('completedServicesValue'), days }
   }],
   ['GET', '/admin/activity-logs', (db, { query }) => {
     requireUser(db, 'Administrator')

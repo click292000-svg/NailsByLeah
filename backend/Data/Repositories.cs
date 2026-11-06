@@ -63,6 +63,10 @@ public interface IBookingRepository
     Task<int> CountByStatusAsync(BookingStatus status, CancellationToken ct = default);
     Task<int> CountCreatedBetweenAsync(DateTime fromUtc, DateTime toUtc, CancellationToken ct = default);
     Task<List<Booking>> GetCancelledBetweenAsync(DateTime fromUtc, DateTime toUtc, CancellationToken ct = default);
+    Task<decimal> SumBalancesReceivedAsync(DateTime fromUtc, DateTime toUtc, CancellationToken ct = default);
+
+    /// <summary>Pending or Confirmed bookings between the dates, soonest first, with their details.</summary>
+    Task<List<Booking>> GetUpcomingAsync(DateOnly from, DateOnly to, CancellationToken ct = default);
     Task<List<Booking>> GetDueForReminderAsync(DateOnly fromDate, DateOnly toDate, CancellationToken ct = default);
 
     /// <summary>
@@ -261,6 +265,14 @@ internal sealed class BookingRepository(AppDbContext db) : IBookingRepository
     public Task<List<Booking>> GetCancelledBetweenAsync(DateTime fromUtc, DateTime toUtc, CancellationToken ct) =>
         Live.Include(b => b.Cancellation)
             .Where(b => b.Cancellation != null && b.Cancellation.CancelledAt >= fromUtc && b.Cancellation.CancelledAt < toUtc)
+            .ToListAsync(ct);
+
+    public async Task<decimal> SumBalancesReceivedAsync(DateTime fromUtc, DateTime toUtc, CancellationToken ct) =>
+        await Live.Where(b => b.BalanceReceivedAt >= fromUtc && b.BalanceReceivedAt < toUtc).SumAsync(b => (decimal?)b.BalanceReceived, ct) ?? 0;
+
+    public Task<List<Booking>> GetUpcomingAsync(DateOnly from, DateOnly to, CancellationToken ct) =>
+        WithDetails.Where(b => (b.Status == BookingStatus.Pending || b.Status == BookingStatus.Confirmed) && b.BookingDate >= from && b.BookingDate <= to)
+            .OrderBy(b => b.BookingDate).ThenBy(b => b.StartTime)
             .ToListAsync(ct);
 
     public Task<List<Booking>> GetDueForReminderAsync(DateOnly fromDate, DateOnly toDate, CancellationToken ct) =>

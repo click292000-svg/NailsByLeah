@@ -3,11 +3,12 @@ import { Link } from 'react-router'
 import { api } from '../../api'
 import { useAsync } from '../../hooks/useAsync'
 import { errorMessage } from '../../api/errors'
+import { addDays } from '../../lib/dates'
 import { formatDate } from '../../lib/format'
 import { Alert, Card, Money, PageHeader, PageLoader, StatCard } from '../../components/ui'
 import { AdminBookingTable } from './AdminBookingTable'
 
-/** Today's bookings, pending bookings and payments collected online (deposits and full payments, Ref 11.1). */
+/** Today's and the next 7 days' bookings, pending bookings and payments collected online (deposits and full payments, Ref 11.1). */
 export default function DashboardPage() {
   const dashboard = useAsync(() => api.admin.dashboard(), [])
   const [message, setMessage] = useState(null)
@@ -15,6 +16,8 @@ export default function DashboardPage() {
   if (dashboard.loading && !dashboard.data) return <PageLoader label="Loading dashboard…" />
   if (dashboard.error) return <Alert kind="error">{errorMessage(dashboard.error)}</Alert>
   const d = dashboard.data
+  // A paid client should not arrive with a booking still unconfirmed.
+  const needConfirming = d.upcomingBookings.filter((b) => b.status === 'Pending' && b.bookingDate <= addDays(d.today, 2)).length
 
   return (
     <div className="stack-lg">
@@ -44,6 +47,16 @@ export default function DashboardPage() {
         <p className="card-intro">Confirm new bookings and mark finished appointments as completed.</p>
         <AdminBookingTable bookings={d.todaysBookings} onChanged={(text) => { setMessage(text); dashboard.reload() }}
           emptyTitle="No appointments today" emptyText="Bookings for today show up here." />
+      </Card>
+
+      <Card title="Next 7 days" actions={<Link to="/admin/bookings" className="card-link">All bookings →</Link>}>
+        {needConfirming > 0 && (
+          <Alert kind="warning">
+            {needConfirming === 1 ? '1 booking in the next 2 days still needs' : `${needConfirming} bookings in the next 2 days still need`} confirming.
+          </Alert>
+        )}
+        <AdminBookingTable bookings={d.upcomingBookings} onChanged={(text) => { setMessage(text); dashboard.reload() }}
+          emptyTitle="Nothing coming up" emptyText="Bookings for the next 7 days show up here." />
       </Card>
     </div>
   )

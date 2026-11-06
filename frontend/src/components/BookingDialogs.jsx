@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Modal } from './Modal'
 import { SlotPicker } from './SlotPicker'
-import { Alert, Button, Field, SelectField } from './ui'
+import { Alert, Button, Field, Money, SelectField } from './ui'
 import { errorMessage, fieldErrors } from '../api/errors'
 import { formatDate, formatTime } from '../lib/format'
 import { LIMITS } from '../validation/rules'
@@ -57,6 +57,102 @@ export function CancelBookingDialog({ booking, reasons, allowExplanation = false
           <Button type="submit" variant="danger" loading={saving}>Cancel booking</Button>
         </div>
       </form>
+    </Modal>
+  )
+}
+
+/**
+ * Records the balance a client paid after the service. When completing a booking (`completing`), Leyah can also say
+ * it hasn't been paid yet and record it later from the booking's menu. Always the whole balance.
+ */
+export function BalanceDialog({ booking, completing = false, onSubmit, onClose }) {
+  const [received, setReceived] = useState(true)
+  const [reference, setReference] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState(null)
+  const [fieldError, setFieldError] = useState(null)
+
+  const submit = async (e) => {
+    e.preventDefault()
+    setSaving(true)
+    setError(null)
+    setFieldError(null)
+    try {
+      await onSubmit({ received, reference: reference.trim() || null })
+    } catch (err) {
+      const problem = fieldErrors(err).balanceReference
+      if (problem) setFieldError(problem)
+      else setError(errorMessage(err))
+      setSaving(false)
+    }
+  }
+
+  return (
+    <Modal title={completing ? 'Complete booking' : 'Record balance'} onClose={onClose}>
+      <form onSubmit={submit} noValidate className="stack">
+        <p>
+          {booking.client?.firstName} {booking.client?.lastName}, {booking.serviceName}<br />
+          Balance: <strong><Money amount={booking.balanceDue} /></strong>
+        </p>
+        {error && <Alert kind="error">{error}</Alert>}
+        {completing && (
+          <fieldset className="balance-options">
+            <legend className="sr-only">Has the balance been paid?</legend>
+            <label className={received ? 'balance-option selected' : 'balance-option'}>
+              <input type="radio" name="balance-received" checked={received} onChange={() => setReceived(true)} />
+              <span>Balance received</span>
+            </label>
+            <label className={received ? 'balance-option' : 'balance-option selected'}>
+              <input type="radio" name="balance-received" checked={!received} onChange={() => setReceived(false)} />
+              <span>Not paid yet</span>
+            </label>
+          </fieldset>
+        )}
+        {received ? (
+          <Field label="GCash reference (optional)" error={fieldError}>
+            {(aria) => <input className="input" maxLength={LIMITS.balanceReferenceMax} value={reference} onChange={(e) => setReference(e.target.value)} {...aria} />}
+          </Field>
+        ) : (
+          <p className="muted small">The balance stays on the booking and in Reports until you record it from the booking&apos;s menu.</p>
+        )}
+        <div className="modal-actions">
+          <Button variant="secondary" onClick={onClose} disabled={saving}>Back</Button>
+          <Button type="submit" loading={saving}>{completing ? 'Complete booking' : 'Record balance'}</Button>
+        </div>
+      </form>
+    </Modal>
+  )
+}
+
+/** A no-show can't be undone, so it is confirmed first. */
+export function NoShowDialog({ booking, onSubmit, onClose }) {
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState(null)
+
+  const confirm = async () => {
+    setSaving(true)
+    setError(null)
+    try {
+      await onSubmit()
+    } catch (err) {
+      setError(errorMessage(err))
+      setSaving(false)
+    }
+  }
+
+  return (
+    <Modal title="Mark as no-show" onClose={onClose}>
+      <div className="stack">
+        <p>
+          {booking.client?.firstName} {booking.client?.lastName} did not come on <strong>{formatDate(booking.bookingDate)}</strong> at {formatTime(booking.startTime)}?
+        </p>
+        <Alert kind="warning">The <Money amount={booking.depositAmount} /> deposit is kept. This can&apos;t be undone.</Alert>
+        {error && <Alert kind="error">{error}</Alert>}
+        <div className="modal-actions">
+          <Button variant="secondary" onClick={onClose} disabled={saving}>Back</Button>
+          <Button variant="danger" loading={saving} onClick={confirm}>Mark as no-show</Button>
+        </div>
+      </div>
     </Modal>
   )
 }

@@ -3,15 +3,18 @@ import { api } from '../../api'
 import { useAsync } from '../../hooks/useAsync'
 import { errorMessage } from '../../api/errors'
 import { formatDate, formatTime } from '../../lib/format'
-import { today } from '../../lib/dates'
+import { startsAt, today } from '../../lib/dates'
 import { Alert, Button, EmptyState, Money, StatusBadge } from '../../components/ui'
-import { CancelBookingDialog, RescheduleDialog } from '../../components/BookingDialogs'
+import { BalanceDialog, CancelBookingDialog, NoShowDialog, RescheduleDialog } from '../../components/BookingDialogs'
 import { BookingDetails } from './BookingDetails'
 
 const isActive = (b) => b.status === 'Pending' || b.status === 'Confirmed'
+const hasStarted = (b) => startsAt(b.bookingDate, b.startTime) <= new Date()
+// A cancelled booking or a no-show owes nothing more, so no balance is shown for them.
+const isClosed = (b) => b.status === 'Cancelled' || b.status === 'NoShow'
 
 /**
- * Bookings table with the administrator actions Confirm, Reschedule, Complete and Cancel (Ref 11.2).
+ * Bookings table with the administrator actions Confirm, Complete, Record balance, No-show, Reschedule and Cancel (Ref 11.2).
  * On small screens each row becomes a card (cells carry data-label).
  */
 export function AdminBookingTable({ bookings, onChanged, emptyTitle = 'No bookings found', emptyText }) {
@@ -86,7 +89,7 @@ export function AdminBookingTable({ bookings, onChanged, emptyTitle = 'No bookin
                   </td>
                   <td data-label="Payment">
                     <span className="cell-main"><Money amount={b.totalPrice} /></span>
-                    {b.status !== 'Cancelled' && (
+                    {!isClosed(b) && (
                       <span className={fullyPaid ? 'pay-pill paid' : 'pay-pill due'}>
                         {fullyPaid ? 'Paid in full' : <><Money amount={b.balanceDue} /> due</>}
                       </span>
@@ -103,11 +106,16 @@ export function AdminBookingTable({ bookings, onChanged, emptyTitle = 'No bookin
                         <Button size="sm" loading={busyId === b.id} onClick={() => quick(b, 'confirm', `Booking #${b.id} confirmed.`)}>Confirm</Button>
                       )}
                       {b.status === 'Confirmed' && b.bookingDate <= today() && (
-                        <Button size="sm" loading={busyId === b.id} onClick={() => quick(b, 'complete', `Booking #${b.id} marked as completed.`)}>Complete</Button>
+                        <Button size="sm" loading={busyId === b.id}
+                          onClick={() => (b.balanceDue > 0 ? setDialog({ kind: 'complete', booking: b }) : quick(b, 'complete', `Booking #${b.id} marked as completed.`))}>
+                          Complete
+                        </Button>
                       )}
                       <RowMenu label={`More actions for booking #${b.id}`} items={[
                         { label: 'View details', onSelect: () => setDialog({ kind: 'details', booking: b }) },
+                        b.status === 'Completed' && b.balanceDue > 0 && { label: 'Record balance', onSelect: () => setDialog({ kind: 'balance', booking: b }) },
                         isActive(b) && { label: 'Reschedule', onSelect: () => setDialog({ kind: 'reschedule', booking: b }) },
+                        isActive(b) && hasStarted(b) && { label: 'Mark as no-show', danger: true, onSelect: () => setDialog({ kind: 'no-show', booking: b }) },
                         isActive(b) && { label: 'Cancel booking', danger: true, onSelect: () => setDialog({ kind: 'cancel', booking: b }) },
                       ].filter(Boolean)} />
                     </div>
@@ -135,6 +143,27 @@ export function AdminBookingTable({ bookings, onChanged, emptyTitle = 'No bookin
           }} />
       )}
       {dialog?.kind === 'details' && <BookingDetails booking={dialog.booking} onClose={() => setDialog(null)} />}
+      {dialog?.kind === 'complete' && (
+        <BalanceDialog booking={dialog.booking} completing onClose={() => setDialog(null)}
+          onSubmit={async ({ received, reference }) => {
+            await api.admin.complete(dialog.booking.id, { balanceReceived: received, balanceReference: received ? reference : null })
+            closeAnd(`Booking #${dialog.booking.id} marked as completed${received ? ', balance received' : ''}.`)
+          }} />
+      )}
+      {dialog?.kind === 'balance' && (
+        <BalanceDialog booking={dialog.booking} onClose={() => setDialog(null)}
+          onSubmit={async ({ reference }) => {
+            await api.admin.recordBalance(dialog.booking.id, { balanceReference: reference })
+            closeAnd(`Balance recorded for booking #${dialog.booking.id}.`)
+          }} />
+      )}
+      {dialog?.kind === 'no-show' && (
+        <NoShowDialog booking={dialog.booking} onClose={() => setDialog(null)}
+          onSubmit={async () => {
+            await api.admin.markNoShow(dialog.booking.id)
+            closeAnd(`Booking #${dialog.booking.id} marked as a no-show.`)
+          }} />
+      )}
     </>
   )
 }
