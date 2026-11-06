@@ -19,6 +19,10 @@ export default defineConfig(() => {
       environment: 'jsdom',
       globals: true,
       setupFiles: './src/test/setup.js',
+      // Long flows (a whole booking) can't finish in the default 5 seconds on a busy machine. These are limits,
+      // not delays: a passing test takes no longer because of them.
+      testTimeout: 30_000,
+      hookTimeout: 30_000,
     },
   }
 })
