@@ -81,6 +81,15 @@ public class Booking : IPayable, ICancellable, ISoftDeletable
     public string? BalanceReference { get; set; }
 
     /// <summary>When and by whom the administrator confirmed the booking after checking its payment.</summary>
+    /// <summary>
+    /// What the salon owes back after a cancellation or no-show, set when it happens: everything paid when the salon
+    /// cancels; otherwise everything above the deposit, which is kept (it is also the late-cancellation and no-show fee).
+    /// </summary>
+    public decimal RefundDue { get; set; }
+    /// <summary>When Leyah sent the refund (by GCash or Maya, outside the website), and its reference if she gave one.</summary>
+    public DateTime? RefundSentAt { get; set; }
+    public string? RefundReference { get; set; }
+
     public DateTime? ConfirmedAt { get; set; }
     public int? ConfirmedByUserId { get; set; }
     public User? ConfirmedBy { get; set; }
@@ -120,12 +129,29 @@ public class Booking : IPayable, ICancellable, ISoftDeletable
         UpdatedAt = utcNow;
     }
 
-    public void MarkCancelled(DateTime utcNow)
+    /// <summary>The deposit is kept from what was paid; the rest goes back.</summary>
+    public decimal AmountAboveDeposit => Math.Max(0, AmountPaid - DepositAmount);
+
+    public void MarkCancelled(DateTime utcNow, bool fullRefund)
     {
         if (!CanBeCancelled)
             throw new ConflictException($"A {Status} booking cannot be cancelled.", "invalid_status");
         Status = BookingStatus.Cancelled;
+        RefundDue = fullRefund ? AmountPaid : AmountAboveDeposit;
         UpdatedAt = utcNow;
+    }
+
+    /// <summary>Leyah sent the refund. Always the whole amount owed, so it can only happen once.</summary>
+    public decimal RecordRefund(string? reference, DateTime utcNow)
+    {
+        if (RefundDue <= 0)
+            throw new ConflictException("No refund is owed on this booking.", "no_refund_due");
+        if (RefundSentAt is not null)
+            throw new ConflictException("This refund has already been recorded.", "refund_already_sent");
+        RefundSentAt = utcNow;
+        RefundReference = reference;
+        UpdatedAt = utcNow;
+        return RefundDue;
     }
 
     public void MarkCompleted(DateTime utcNow)
@@ -144,6 +170,7 @@ public class Booking : IPayable, ICancellable, ISoftDeletable
         if (StartsAtLocal > localNow)
             throw new ConflictException("A booking can only be marked as a no-show once its appointment time has arrived.", "invalid_status");
         Status = BookingStatus.NoShow;
+        RefundDue = AmountAboveDeposit; // the deposit is the no-show fee
         UpdatedAt = utcNow;
     }
 

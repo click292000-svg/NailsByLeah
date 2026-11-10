@@ -26,7 +26,7 @@ public static class Labels
 
     public static readonly IReadOnlyDictionary<AdminCancellationReason, string> AdminCancellationReasons = new Dictionary<AdminCancellationReason, string>
     {
-        [AdminCancellationReason.StaffUnavailable] = "Staff unavailable",
+        [AdminCancellationReason.StaffUnavailable] = "Leyah is not available",
         [AdminCancellationReason.ScheduleConflict] = "Schedule conflict",
         [AdminCancellationReason.Emergency] = "Emergency",
         [AdminCancellationReason.ClientDidNotRespond] = "Client did not respond",

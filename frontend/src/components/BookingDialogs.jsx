@@ -5,6 +5,7 @@ import { Alert, Button, Field, Money, SelectField } from './ui'
 import { errorMessage, fieldErrors } from '../api/errors'
 import { formatDate, formatTime } from '../lib/format'
 import { LIMITS } from '../validation/rules'
+import { amountPaid, depositKept, refundFor } from '../lib/refunds'
 
 /**
  * Cancellation dialog. Clients pick from their reasons (Ref 2.5), and "Others" asks them to write theirs;
@@ -48,7 +49,7 @@ export function CancelBookingDialog({ booking, reasons, allowExplanation = false
         <p>
           {booking.serviceName} on <strong>{formatDate(booking.bookingDate)}</strong> at {formatTime(booking.startTime)}
         </p>
-        <Alert kind="warning">The booking deposit is non-refundable.</Alert>
+        <RefundNote booking={booking} bySalon={allowExplanation} reason={reason} />
         {error && <Alert kind="error">{error}</Alert>}
         <SelectField label="Reason for cancelling" required value={reason} placeholder="Select a reason"
           options={reasons} error={fieldError} onChange={(e) => { setReason(e.target.value); setFieldError(null); setExplanationError(null) }} />
@@ -140,6 +141,80 @@ export function BalanceDialog({ booking, completing = false, onSubmit, onClose }
   )
 }
 
+/** What happens to the money if this booking is cancelled now, worded for whoever is cancelling. */
+function RefundNote({ booking, bySalon, reason }) {
+  const paid = amountPaid(booking)
+  const refund = refundFor(booking, { bySalon, reason })
+  if (bySalon) {
+    if (!paid) return null
+    if (reason === 'ClientDidNotRespond') {
+      return (
+        <Alert kind="info">
+          The client keeps the usual rule: the <Money amount={depositKept(booking)} /> deposit is kept
+          {refund > 0 ? <>, and <Money amount={refund} /> is refunded.</> : ', and nothing is refunded.'}
+        </Alert>
+      )
+    }
+    return (
+      <Alert kind="info">
+        The salon is cancelling, so the client gets back everything they paid: <strong><Money amount={paid} /></strong>, the deposit
+        included. Send it by GCash or Maya, then record it from the booking&apos;s menu.
+      </Alert>
+    )
+  }
+  return refund > 0 ? (
+    <Alert kind="info">
+      You paid <Money amount={paid} />. The <Money amount={depositKept(booking)} /> deposit is non-refundable, so <strong><Money amount={refund} /></strong> will
+      be refunded to the account you paid from.
+    </Alert>
+  ) : (
+    <Alert kind="warning">The <Money amount={booking.depositAmount} /> booking deposit is non-refundable, so nothing is refunded.</Alert>
+  )
+}
+
+/** Leyah sent a refund by GCash or Maya; the reference is optional. */
+export function RefundDialog({ booking, onSubmit, onClose }) {
+  const [reference, setReference] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState(null)
+  const [fieldError, setFieldError] = useState(null)
+
+  const submit = async (e) => {
+    e.preventDefault()
+    setSaving(true)
+    setError(null)
+    setFieldError(null)
+    try {
+      await onSubmit({ refundReference: reference.trim() || null })
+    } catch (err) {
+      const problem = fieldErrors(err).refundReference
+      if (problem) setFieldError(problem)
+      else setError(errorMessage(err))
+      setSaving(false)
+    }
+  }
+
+  return (
+    <Modal title="Record refund" onClose={onClose}>
+      <form onSubmit={submit} noValidate className="stack">
+        <p>
+          {booking.client?.firstName} {booking.client?.lastName}, booking #{booking.id}<br />
+          Refund owed: <strong><Money amount={booking.payment?.refundDue ?? 0} /></strong>
+        </p>
+        <p className="muted small">Send it to the client by GCash or Maya first, then record it here.</p>
+        {error && <Alert kind="error">{error}</Alert>}
+        <Field label="GCash or Maya reference (optional)" error={fieldError}>
+          {(aria) => <input className="input" maxLength={LIMITS.balanceReferenceMax} value={reference} onChange={(e) => setReference(e.target.value)} {...aria} />}
+        </Field>
+        <div className="modal-actions">
+          <Button variant="secondary" onClick={onClose} disabled={saving}>Back</Button>
+          <Button type="submit" loading={saving}>Record refund sent</Button>
+        </div>
+      </form>
+    </Modal>
+  )
+}
+
 /** A no-show can't be undone, so it is confirmed first. */
 export function NoShowDialog({ booking, onSubmit, onClose }) {
   const [saving, setSaving] = useState(false)
@@ -162,7 +237,11 @@ export function NoShowDialog({ booking, onSubmit, onClose }) {
         <p>
           {booking.client?.firstName} {booking.client?.lastName} did not come on <strong>{formatDate(booking.bookingDate)}</strong> at {formatTime(booking.startTime)}?
         </p>
-        <Alert kind="warning">The <Money amount={booking.depositAmount} /> deposit is kept. This can&apos;t be undone.</Alert>
+        <Alert kind="warning">
+          The <Money amount={depositKept(booking)} /> deposit is kept as the no-show fee.
+          {refundFor(booking) > 0 && <> The rest, <Money amount={refundFor(booking)} />, is owed back to the client.</>}
+          {' '}This can&apos;t be undone.
+        </Alert>
         {error && <Alert kind="error">{error}</Alert>}
         <div className="modal-actions">
           <Button variant="secondary" onClick={onClose} disabled={saving}>Back</Button>

@@ -31,12 +31,17 @@ public interface IAdminBookingService
     /// <summary>The admin calendar: booking counts for each day of a month that has any.</summary>
     Task<IReadOnlyList<BookingCalendarDayResponse>> GetCalendarAsync(int year, int month, CancellationToken ct = default);
     Task<BookingResponse> GetAsync(int bookingId, CancellationToken ct = default);
+    /// <summary>Any booking's payment receipt, for the salon's own records.</summary>
+    Task<ReceiptResponse> GetReceiptAsync(int bookingId, CancellationToken ct = default);
     /// <summary>The administrator checks the payment and confirms the booking (a separate step from paying).</summary>
     Task<BookingResponse> ConfirmAsync(int adminId, int bookingId, CancellationToken ct = default);
     Task<BookingResponse> CompleteAsync(int bookingId, CompleteBookingRequest? request = null, CancellationToken ct = default);
 
     /// <summary>The balance of an already completed booking was paid later.</summary>
     Task<BookingResponse> RecordBalanceAsync(int bookingId, RecordBalanceRequest request, CancellationToken ct = default);
+
+    /// <summary>Leyah sent back what a cancelled or no-show booking was owed.</summary>
+    Task<BookingResponse> RecordRefundAsync(int bookingId, RecordRefundRequest request, CancellationToken ct = default);
 
     /// <summary>The client did not come; only possible once the appointment time has arrived.</summary>
     Task<BookingResponse> MarkNoShowAsync(int bookingId, CancellationToken ct = default);
@@ -58,7 +63,8 @@ public sealed class BookingService(
     IAuditLogger audit,
     ISalonClock clock,
     IOptions<BookingOptions> bookingOptions,
-    IOptions<LegalOptions> legalOptions) : IClientBookingService, IAdminBookingService
+    IOptions<LegalOptions> legalOptions,
+    ISalonProfileService salonProfile) : IClientBookingService, IAdminBookingService
 {
     private const string SlotTakenMessage = "This time slot has just been booked by someone else. Please choose another slot.";
 
@@ -205,7 +211,8 @@ public sealed class BookingService(
 
         var (fromDate, fromTime) = (booking.BookingDate, booking.StartTime);
         var moved = await MoveAsync(booking, request, ct);
-        await background.EnqueueAsync((n, stop) => n.SendSalonRescheduleAsync(booking, fromDate, fromTime, stop), $"reschedule alert for booking {booking.Id}");
+        if (await salonProfile.WantsAlertAsync(SalonAlert.Reschedule, ct))
+            await background.EnqueueAsync((n, stop) => n.SendSalonRescheduleAsync(booking, fromDate, fromTime, stop), $"reschedule alert for booking {booking.Id}");
         return moved;
     }
 
@@ -219,10 +226,11 @@ public sealed class BookingService(
         var explanation = request.Reason == ClientCancellationReason.Others ? InputNormalizer.Text(request.Explanation) : null;
         if (request.Reason == ClientCancellationReason.Others && string.IsNullOrEmpty(explanation))
             throw new ValidationAppException("explanation", ClientCancelRequestValidator.ExplanationRequired);
-        await CancelCoreAsync(booking, clientId, request.Reason.ToString(), explanation, ct);
+        await CancelCoreAsync(booking, clientId, request.Reason.ToString(), explanation, fullRefund: false, ct);
         var cancelled = await ReloadAsync(booking.Id, ct);
         var reasonLabel = Labels.ForCancellationReason(request.Reason.ToString()) + (explanation is null ? "" : $": {explanation}");
-        await background.EnqueueAsync((n, stop) => n.SendSalonCancellationAsync(cancelled, reasonLabel, stop), $"cancellation alert for booking {booking.Id}");
+        if (await salonProfile.WantsAlertAsync(SalonAlert.Cancellation, ct))
+            await background.EnqueueAsync((n, stop) => n.SendSalonCancellationAsync(cancelled, reasonLabel, stop), $"cancellation alert for booking {booking.Id}");
         return Map(cancelled, includeClient: false);
     }
 
@@ -254,6 +262,14 @@ public sealed class BookingService(
 
     public async Task<BookingResponse> GetAsync(int bookingId, CancellationToken ct = default) =>
         Map(await ReloadAsync(bookingId, ct), includeClient: true);
+
+    async Task<ReceiptResponse> IAdminBookingService.GetReceiptAsync(int bookingId, CancellationToken ct)
+    {
+        var booking = await ReloadAsync(bookingId, ct);
+        var payment = await paymentService.GetDepositAsync(booking.Id, ct)
+                      ?? throw new NotFoundException("No payment has been recorded for this booking.");
+        return BookingMapper.ToReceipt(payment, booking);
+    }
 
     public async Task<IReadOnlyList<BookingCalendarDayResponse>> GetCalendarAsync(int year, int month, CancellationToken ct = default)
     {
@@ -309,11 +325,24 @@ public sealed class BookingService(
         return Map(booking, includeClient: true);
     }
 
+    public async Task<BookingResponse> RecordRefundAsync(int bookingId, RecordRefundRequest request, CancellationToken ct = default)
+    {
+        var reference = CleanBalanceReference(request.RefundReference, "refundReference");
+        var booking = await ReloadAsync(bookingId, ct);
+        var amount = booking.RecordRefund(reference, clock.UtcNow);
+        audit.Record(AuditActions.RefundSent, nameof(Booking), booking.Id,
+            $"PHP {amount:0.00}{(reference is null ? "" : $" (reference {reference})")}");
+        await unitOfWork.SaveChangesAsync(ct);
+        return Map(booking, includeClient: true);
+    }
+
     public async Task<BookingResponse> MarkNoShowAsync(int bookingId, CancellationToken ct = default)
     {
         var booking = await ReloadAsync(bookingId, ct);
         booking.MarkNoShow(clock.LocalNow, clock.UtcNow);
-        audit.Record(AuditActions.BookingNoShow, nameof(Booking), booking.Id, $"Deposit of PHP {booking.AmountPaid:0.00} kept");
+        audit.Record(AuditActions.BookingNoShow, nameof(Booking), booking.Id,
+            $"Deposit of PHP {Math.Min(booking.AmountPaid, booking.DepositAmount):0.00} kept" +
+            (booking.RefundDue > 0 ? $"; refund due PHP {booking.RefundDue:0.00}" : ""));
         await unitOfWork.SaveChangesAsync(ct);
         return Map(booking, includeClient: true);
     }
@@ -325,13 +354,13 @@ public sealed class BookingService(
             $"PHP {amount:0.00}{(reference is null ? "" : $" (reference {reference})")}");
     }
 
-    private static string? CleanBalanceReference(string? reference)
+    private static string? CleanBalanceReference(string? reference, string field = "balanceReference")
     {
         if (string.IsNullOrWhiteSpace(reference))
             return null;
         var cleaned = InputNormalizer.Text(reference);
         if (cleaned.Length > InputLimits.BalanceReferenceMaxLength)
-            throw new ValidationAppException("balanceReference", $"The reference must be {InputLimits.BalanceReferenceMaxLength} characters or fewer.");
+            throw new ValidationAppException(field, $"The reference must be {InputLimits.BalanceReferenceMaxLength} characters or fewer.");
         return cleaned;
     }
 
@@ -341,19 +370,22 @@ public sealed class BookingService(
     public async Task<BookingResponse> CancelAsync(int adminId, int bookingId, AdminCancelRequest request, CancellationToken ct = default)
     {
         var booking = await ReloadAsync(bookingId, ct);
-        await CancelCoreAsync(booking, adminId, request.Reason.ToString(), request.Explanation, ct);
+        // The salon cancelling is not the client's doing, so everything comes back; a client who stopped answering keeps the
+        // usual rule (the deposit is kept).
+        var fullRefund = request.Reason != AdminCancellationReason.ClientDidNotRespond;
+        await CancelCoreAsync(booking, adminId, request.Reason.ToString(), request.Explanation, fullRefund, ct);
         return Map(await ReloadAsync(bookingId, ct), includeClient: true);
     }
 
     // ---- Shared ----
 
-    private async Task CancelCoreAsync(ICancellable booking, int cancelledByUserId, string reason, string? explanation, CancellationToken ct)
+    private async Task CancelCoreAsync(Booking booking, int cancelledByUserId, string reason, string? explanation, bool fullRefund, CancellationToken ct)
     {
         if (!booking.CanBeCancelled)
             throw new ConflictException($"A {booking.Status} booking cannot be cancelled.", "invalid_status");
 
         var now = clock.UtcNow;
-        booking.MarkCancelled(now);
+        booking.MarkCancelled(now, fullRefund);
         bookings.AddCancellation(new Cancellation
         {
             BookingId = booking.Id,
@@ -363,7 +395,8 @@ public sealed class BookingService(
             CancelledAt = now,
         });
         audit.Record(AuditActions.BookingCancelled, nameof(Booking), booking.Id,
-            $"Reason: {Labels.ForCancellationReason(reason)}. The deposit is non-refundable.");
+            $"Reason: {Labels.ForCancellationReason(reason)}. " +
+            (booking.RefundDue > 0 ? $"Refund due: PHP {booking.RefundDue:0.00}." : "Nothing to refund (the deposit is kept)."));
         await unitOfWork.SaveChangesAsync(ct);
     }
 
@@ -420,7 +453,8 @@ public sealed class BookingService(
     private async Task NotifyConfirmedAsync(Booking booking, Payment payment)
     {
         await background.EnqueueAsync((n, stop) => n.SendBookingConfirmationAsync(booking, payment, stop), $"confirmation for booking {booking.Id}");
-        await background.EnqueueAsync((n, stop) => n.SendSalonNewBookingAsync(booking, payment, stop), $"new booking alert for booking {booking.Id}");
+        if (await salonProfile.WantsAlertAsync(SalonAlert.NewBooking))
+            await background.EnqueueAsync((n, stop) => n.SendSalonNewBookingAsync(booking, payment, stop), $"new booking alert for booking {booking.Id}");
     }
 
     private static BookingResponse Map(Booking booking, bool includeClient) => BookingMapper.ToResponse(booking, includeClient);
@@ -452,7 +486,8 @@ public static class BookingMapper
                 c.CancelledBy?.Role.ToString() ?? "", c.CancelledAt)
             : null,
         includeClient
-            ? new ClientSummaryResponse(b.Client.Id, b.Client.FirstName, b.Client.LastName, b.Client.Username, b.Client.Email, b.Client.PhoneNumber)
+            ? new ClientSummaryResponse(b.Client.Id, b.Client.FirstName, b.Client.LastName, b.Client.Username, b.Client.Email, b.Client.PhoneNumber,
+                ClientProfileService.AdminPhotoUrl(b.Client))
             : null,
         b.ReferenceImages.Where(r => !r.IsDeleted).OrderBy(r => r.Id).Select(ReferenceImageService.ToResponse).ToList(),
         b.DurationMinutes,
@@ -472,11 +507,32 @@ public static class BookingMapper
         return new BookingPaymentResponse(
             b.PaymentOption.ToString(), Labels.For(b.PaymentOption), b.AmountPaid, p?.ReferenceNumber, p?.Method.ToString(), p?.PaidAt,
             Verified: p?.VerifiedAt is not null, b.ConfirmedAt, b.ConfirmedBy is { } admin ? $"{admin.FirstName} {admin.LastName}" : null,
-            b.BalanceReceived, b.BalanceReceivedAt, b.BalanceReference);
+            b.BalanceReceived, b.BalanceReceivedAt, b.BalanceReference,
+            b.RefundDue, b.RefundSentAt, b.RefundReference);
     }
 
     public static ReceiptResponse ToReceipt(Payment p, Booking b) => new(
         p.Id, b.Id, p.ReferenceNumber, p.Method.ToString(), p.Amount, "PHP", p.PaidAt, p.Status.ToString(),
         Refundable: false, b.ServiceDescription, b.BookingDate, b.StartTime,
-        p.Option.ToString(), Labels.For(p.Option), b.TotalPrice, b.BalanceDue, b.Status.ToString());
+        p.Option.ToString(), Labels.For(p.Option), b.TotalPrice, b.BalanceDue, b.Status.ToString(),
+        ClientName: b.Client is { } c ? $"{c.FirstName} {c.LastName}" : null,
+        Lines: ReceiptLines(b),
+        Verified: p.VerifiedAt is not null,
+        VerifiedAt: p.VerifiedAt,
+        AmountPaid: b.AmountPaid,
+        RefundDue: b.RefundDue,
+        RefundSentAt: b.RefundSentAt,
+        RefundReference: b.RefundReference);
+
+    /// <summary>The removal first, as in the appointment, then the service and each Stone add-on.</summary>
+    private static List<ReceiptLineResponse> ReceiptLines(Booking b)
+    {
+        var lines = new List<ReceiptLineResponse>();
+        if (b.RemovalService is { } removal)
+            lines.Add(new($"Removal ({removal.Name})", b.RemovalPrice));
+        lines.Add(new(b.Service?.Name ?? "Service", b.ServicePrice));
+        lines.AddRange(b.AddOns.Select(a => new ReceiptLineResponse(
+            $"{a.AddOn?.Name ?? "Stone add-on"} ({Labels.For(a.Hand).ToLowerInvariant()}, {a.NailCount} {(a.NailCount == 1 ? "nail" : "nails")})", a.LinePrice)));
+        return lines;
+    }
 }

@@ -1,5 +1,6 @@
 import { salon } from '../../../content/salon'
 import { config } from '../../../config'
+import { formatPhone, useSalon } from '../../../components/SalonProfile'
 
 const PinIcon = () => (
   <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
@@ -25,7 +26,28 @@ const GoogleIcon = () => (
  * salon's pin (Ref 2.1). Laid out side by side on wide screens, map below the text on phones.
  */
 /** `hours` is the opening-hours line, e.g. "Open daily, 11:00 AM – 9:00 PM". */
+const PhoneIcon = () => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <path d="M5 3h4l2 5-2.5 1.5a11 11 0 0 0 6 6L16 13l5 2v4a2 2 0 0 1-2 2A16 16 0 0 1 3 5a2 2 0 0 1 2-2" />
+  </svg>
+)
+
+/** Leyah's photo and bio from her profile; nothing is shown until she adds at least one of them. */
+function MeetLeyah({ photo, bio }) {
+  if (!photo && !bio) return null
+  return (
+    <div className="visit-meet">
+      {photo && <img className="visit-meet-photo" src={photo} alt="Leyah" width="72" height="72" />}
+      <div>
+        <p className="visit-meet-name">Meet Leyah</p>
+        {bio && <p className="visit-meet-bio">{bio}</p>}
+      </div>
+    </div>
+  )
+}
+
 export function Location({ hours }) {
+  const { phone, photo, bio } = useSalon()
   // The pin comes from the address search, centred on the salon's coordinates.
   const query = encodeURIComponent(salon.mapQuery)
   const center = `${salon.latitude},${salon.longitude}`
@@ -41,9 +63,11 @@ export function Location({ hours }) {
         <p className="visit-eyebrow">Visit us</p>
         <h2 id="find-us-title">Find Nails by Leyah</h2>
         <p className="visit-lead">Plan your design and book your appointment online, then visit Nails by Leyah.</p>
+        <MeetLeyah photo={photo} bio={bio} />
         <address className="visit-facts">
           <span className="visit-pill"><PinIcon /> {salon.addressLines.join(', ')}</span>
           <span className="visit-pill"><ClockIcon /> {hours}</span>
+          {phone && <a className="visit-pill visit-phone" href={`tel:${phone}`}><PhoneIcon /> {formatPhone(phone)}</a>}
         </address>
         <a className="visit-maps" href={openInMaps} target="_blank" rel="noopener noreferrer">
           <GoogleIcon /> Open in Maps

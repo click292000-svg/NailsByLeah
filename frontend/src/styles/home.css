@@ -251,3 +251,25 @@ html[data-home-section="prices"] .nav-link[href="/#prices"] { background: var(--
   .page-home *, .page-home *::before, .page-home *::after, .hm-intro, .hm-intro * {
     animation: none !important; transition-duration: .01ms !important; transition-delay: 0s !important; }
 }
+
+/* Welcome after sign-up and email verification: a card under the header, above the page. */
+.hm-welcome { position: fixed; top: calc(var(--header-h) + 12px); left: 50%; transform: translateX(-50%); z-index: 50; width: min(620px, calc(100% - 32px));
+  display: flex; align-items: center; gap: 12px; padding: 12px 12px 12px 16px; border-radius: 16px; background: var(--white); border: 1px solid var(--green-100);
+  box-shadow: 0 14px 34px rgb(48 37 42 / .18); animation: hm-welcome-in .4s var(--ease) both; }
+@keyframes hm-welcome-in { from { opacity: 0; transform: translate(-50%, -10px); } }
+@media (prefers-reduced-motion: reduce) { .hm-welcome { animation: none; } }
+.hm-welcome p { flex: 1; font-size: var(--fs-body); color: var(--ink); }
+.hm-welcome strong { color: var(--green-700); }
+.hm-welcome-check { display: grid; place-items: center; width: 32px; height: 32px; flex: none; border-radius: 50%; background: var(--green-100); color: var(--green-700); font-weight: 700; }
+.hm-welcome-close { width: 32px; height: 32px; flex: none; border: 0; border-radius: 50%; background: none; color: var(--muted); font-size: var(--fs-title); cursor: pointer; }
+.hm-welcome-close:hover { background: var(--rose-50); color: var(--rose-700); }
+.hm-welcome-close:focus-visible { box-shadow: var(--focus); outline: 0; }
+@media (max-width: 560px) { .hm-welcome { flex-wrap: wrap; } .hm-welcome p { flex-basis: calc(100% - 90px); } }
+
+/* "Find us": the salon phone, and Leyah's photo and bio from her profile. */
+a.visit-pill { color: inherit; text-decoration: none; }
+a.visit-pill:hover { color: var(--rose-700); }
+.visit-meet { display: flex; align-items: center; gap: 14px; margin: 4px 0 14px; padding: 12px 14px; border-radius: 12px; background: rgb(255 255 255 / .1); border: 1px solid rgb(255 255 255 / .22); }
+.visit-meet-photo { width: 64px; height: 64px; flex: none; border-radius: 50%; object-fit: cover; border: 2px solid rgb(255 255 255 / .85); }
+.visit-meet-name { font-family: var(--font-display); color: #fff; font-weight: 600; font-size: var(--fs-lead); }
+.visit-meet-bio { color: rgb(255 255 255 / .85); font-size: var(--fs-small); margin-top: 2px; }

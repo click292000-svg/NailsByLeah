@@ -17,6 +17,11 @@ export default function RegisterPage() {
   const [submitting, setSubmitting] = useState(false)
   const [usernameAvailable, setUsernameAvailable] = useState(null)
   const [openDocument, setOpenDocument] = useState(null)
+  // The box can be ticked only once both documents have been read to the end.
+  const [read, setRead] = useState({ terms: false, privacy: false })
+  const readBoth = read.terms && read.privacy
+  // Decided when the window opens: unread, it must be scrolled to the end; read already, it is for reference only.
+  const open = (kind) => setOpenDocument({ kind, mustRead: !read[kind] })
 
   const set = (field) => (value) => {
     setValues((v) => ({ ...v, [field]: value }))
@@ -71,12 +76,14 @@ export default function RegisterPage() {
 
           <div className={errors.acceptTerms ? 'checkbox-field field-invalid' : 'checkbox-field'}>
             <label>
-              <input type="checkbox" checked={values.acceptTerms} onChange={(e) => set('acceptTerms')(e.target.checked)} />
+              <input type="checkbox" checked={values.acceptTerms} disabled={!readBoth}
+                title={readBoth ? undefined : 'Open and read the Terms & Conditions and the Privacy Policy to the end first'}
+                onChange={(e) => set('acceptTerms')(e.target.checked)} />
               <span>
                 I have read and accept the{' '}
-                <button type="button" className="link-button" onClick={() => setOpenDocument('terms')}>Terms &amp; Conditions</button>
+                <button type="button" className="link-button" onClick={() => open('terms')}>Terms &amp; Conditions</button>
                 {' '}and the{' '}
-                <button type="button" className="link-button" onClick={() => setOpenDocument('privacy')}>Privacy Policy</button>.
+                <button type="button" className="link-button" onClick={() => open('privacy')}>Privacy Policy</button>.
               </span>
             </label>
             {errors.acceptTerms && <div className="field-error">{errors.acceptTerms}</div>}
@@ -91,7 +98,10 @@ export default function RegisterPage() {
         </p>
       </Card>
 
-      {openDocument && <LegalDocumentModal document={openDocument} onClose={() => setOpenDocument(null)} />}
+      {openDocument && (
+        <LegalDocumentModal document={openDocument.kind} onClose={() => setOpenDocument(null)}
+          onReadToEnd={openDocument.mustRead ? () => setRead((r) => ({ ...r, [openDocument.kind]: true })) : undefined} />
+      )}
     </div>
   )
 }

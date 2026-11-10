@@ -230,6 +230,20 @@ namespace NailsByLeah.Api.Data.Migrations
                         .HasColumnType("nvarchar(10)")
                         .HasColumnName("payment_option");
 
+                    b.Property<decimal>("RefundDue")
+                        .HasPrecision(10, 2)
+                        .HasColumnType("decimal(10,2)")
+                        .HasColumnName("refund_due");
+
+                    b.Property<string>("RefundReference")
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)")
+                        .HasColumnName("refund_reference");
+
+                    b.Property<DateTime?>("RefundSentAt")
+                        .HasColumnType("datetime2")
+                        .HasColumnName("refund_sent_at");
+
                     b.Property<DateTime?>("ReminderSentAt")
                         .HasColumnType("datetime2")
                         .HasColumnName("reminder_sent_at");
@@ -317,6 +331,8 @@ namespace NailsByLeah.Api.Data.Migrations
                             t.HasCheckConstraint("ck_bookings_deposit_non_negative", "[deposit_amount] >= 0");
 
                             t.HasCheckConstraint("ck_bookings_duration_positive", "[duration_minutes] > 0");
+
+                            t.HasCheckConstraint("ck_bookings_refund_due_non_negative", "[refund_due] >= 0");
 
                             t.HasCheckConstraint("ck_bookings_removal_price_non_negative", "[removal_price] >= 0");
 
@@ -752,9 +768,61 @@ namespace NailsByLeah.Api.Data.Migrations
                         .HasColumnType("int")
                         .HasColumnName("id");
 
+                    b.Property<bool>("AlertCancellation")
+                        .HasColumnType("bit")
+                        .HasColumnName("alert_cancellation");
+
+                    b.Property<bool>("AlertNewBooking")
+                        .HasColumnType("bit")
+                        .HasColumnName("alert_new_booking");
+
+                    b.Property<bool>("AlertReschedule")
+                        .HasColumnType("bit")
+                        .HasColumnName("alert_reschedule");
+
+                    b.Property<string>("Bio")
+                        .HasMaxLength(300)
+                        .HasColumnType("nvarchar(300)")
+                        .HasColumnName("bio");
+
                     b.Property<TimeOnly>("ClosingTime")
                         .HasColumnType("time")
                         .HasColumnName("closing_time");
+
+                    b.Property<string>("FacebookUrl")
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)")
+                        .HasColumnName("facebook_url");
+
+                    b.Property<string>("InstagramHandle")
+                        .HasMaxLength(31)
+                        .HasColumnType("nvarchar(31)")
+                        .HasColumnName("instagram_handle");
+
+                    b.Property<string>("InstagramUrl")
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)")
+                        .HasColumnName("instagram_url");
+
+                    b.Property<string>("PaymentAccountName")
+                        .HasMaxLength(60)
+                        .HasColumnType("nvarchar(60)")
+                        .HasColumnName("payment_account_name");
+
+                    b.Property<string>("Phone")
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)")
+                        .HasColumnName("phone");
+
+                    b.Property<string>("PhotoContentType")
+                        .HasMaxLength(40)
+                        .HasColumnType("nvarchar(40)")
+                        .HasColumnName("photo_content_type");
+
+                    b.Property<string>("PhotoFileName")
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)")
+                        .HasColumnName("photo_file_name");
 
                     b.Property<DateTime>("UpdatedAt")
                         .HasColumnType("datetime2")
@@ -776,6 +844,9 @@ namespace NailsByLeah.Api.Data.Migrations
                         new
                         {
                             Id = 1,
+                            AlertCancellation = true,
+                            AlertNewBooking = true,
+                            AlertReschedule = true,
                             ClosingTime = new TimeOnly(21, 0, 0),
                             UpdatedAt = new DateTime(2026, 11, 2, 0, 0, 0, 0, DateTimeKind.Utc)
                         });
@@ -944,6 +1015,16 @@ namespace NailsByLeah.Api.Data.Migrations
                         .HasMaxLength(11)
                         .HasColumnType("nvarchar(11)")
                         .HasColumnName("phone_number");
+
+                    b.Property<string>("PhotoContentType")
+                        .HasMaxLength(40)
+                        .HasColumnType("nvarchar(40)")
+                        .HasColumnName("photo_content_type");
+
+                    b.Property<string>("PhotoFileName")
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)")
+                        .HasColumnName("photo_file_name");
 
                     b.Property<string>("Role")
                         .IsRequired()

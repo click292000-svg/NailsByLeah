@@ -78,6 +78,9 @@ public static class ServiceRegistration
         services.AddScoped<IFeedbackService, FeedbackService>();
         services.AddScoped<IPaymentService, PaymentService>();
         services.AddScoped<IDashboardService, DashboardService>();
+        services.AddScoped<ISalonProfileService, SalonProfileService>();
+        services.AddScoped<IAccountSecurityService, AccountSecurityService>();
+        services.AddScoped<IClientProfileService, ClientProfileService>();
         services.AddScoped<IReportService, ReportService>();
         services.AddScoped<IActivityLogService, ActivityLogService>();
         services.AddScoped<IClientDataService, ClientDataService>();

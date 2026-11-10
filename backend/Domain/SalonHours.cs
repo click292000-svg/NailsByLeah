@@ -11,6 +11,23 @@ public class SalonSettings
     /// <summary>Every appointment must be finished by this time.</summary>
     public TimeOnly ClosingTime { get; set; } = DefaultClosingTime;
 
+    // Shown to clients on the website. Empty fields are simply left out there.
+    public string? Phone { get; set; }
+    /// <summary>The name on Leyah's GCash/Maya account, so clients can check who they are paying.</summary>
+    public string? PaymentAccountName { get; set; }
+    public string? FacebookUrl { get; set; }
+    public string? InstagramUrl { get; set; }
+    public string? InstagramHandle { get; set; }
+    public string? Bio { get; set; }
+    /// <summary>Leyah's photo, in the same private storage as design photos; served at /api/salon/photo.</summary>
+    public string? PhotoFileName { get; set; }
+    public string? PhotoContentType { get; set; }
+
+    // Which salon emails Leyah gets. Client emails are never switched off.
+    public bool AlertNewBooking { get; set; } = true;
+    public bool AlertCancellation { get; set; } = true;
+    public bool AlertReschedule { get; set; } = true;
+
     public DateTime UpdatedAt { get; set; }
     public int? UpdatedByUserId { get; set; }
 }

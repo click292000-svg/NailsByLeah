@@ -82,7 +82,8 @@ function requireUser(db, role) {
 }
 
 const profile = (u) => ({ id: u.id, firstName: u.firstName, lastName: u.lastName, username: u.username, email: u.email,
-  phoneNumber: u.phoneNumber, role: u.role })
+  phoneNumber: u.phoneNumber, role: u.role, createdAt: u.createdAt ?? null,
+  photoUrl: u.photoDataUrl ? '/api/auth/me/photo' : null, photoDataUrl: u.photoDataUrl ?? null })
 
 /** Same checks and messages as backend PasswordResetService. */
 function usableResetToken(db, token) {
@@ -180,6 +181,14 @@ const blockedSlotResponse = (s) => ({ id: s.id, date: s.date, startTime: s.start
 const describeBlock = (s) => s.startTime === null ? `${s.date} (whole day)` : `${s.date} ${s.startTime.slice(0, 5)}-${(s.endTime ?? '').slice(0, 5)}`
 
 const closingTime = (db) => db.salonSettings.closingTime
+const salonProfile = (db) => {
+  const s = db.salonSettings
+  return { phone: s.phone ?? null, paymentAccountName: s.paymentAccountName ?? null, facebookUrl: s.facebookUrl ?? null,
+    instagramUrl: s.instagramUrl ?? null, instagramHandle: s.instagramHandle ?? null, bio: s.bio ?? null,
+    photoUrl: s.photoDataUrl ? '/api/salon/photo' : null, photoDataUrl: s.photoDataUrl ?? null }
+}
+const salonSettingsResponse = (db) => ({ profile: salonProfile(db), alertNewBooking: db.salonSettings.alertNewBooking !== false,
+  alertCancellation: db.salonSettings.alertCancellation !== false, alertReschedule: db.salonSettings.alertReschedule !== false })
 const salonHours = (db) => ({ openingTime: schedule.openingTime, closingTime: closingTime(db),
   slotIntervalMinutes: schedule.slotIntervalMinutes, bufferMinutes: schedule.bufferMinutes })
 
@@ -272,7 +281,7 @@ function ensureBookable(db, date, startTime, duration, movingBookingId = null) {
 // ---------------------------------------------------------------- bookings
 
 // Most urgent first: a client who paid is waiting, then appointments left open, then money to note down.
-const ATTENTION_ORDER = ['CheckPayment', 'DatePassed', 'BalanceNotRecorded']
+const ATTENTION_ORDER = ['CheckPayment', 'RefundDue', 'DatePassed', 'BalanceNotRecorded']
 
 function bookingResponse(db, b, includeClient) {
   const service = db.services.find((s) => s.id === b.serviceId)
@@ -299,7 +308,8 @@ function bookingResponse(db, b, includeClient) {
       cancelledByRole: db.users.find((u) => u.id === cancellation.cancelledByUserId)?.role ?? '', cancelledAt: cancellation.cancelledAt,
     } : null,
     client: includeClient && client ? { id: client.id, firstName: client.firstName, lastName: client.lastName,
-      username: client.username, email: client.email, phoneNumber: client.phoneNumber } : null,
+      username: client.username, email: client.email, phoneNumber: client.phoneNumber,
+      photoUrl: client.photoDataUrl ? `/api/admin/clients/${client.id}/photo` : null, photoDataUrl: client.photoDataUrl ?? null } : null,
     referenceImages: db.referenceImages.filter((r) => r.bookingId === b.id && !r.isDeleted).map(referenceImageResponse),
   }
 }
@@ -344,8 +354,13 @@ function paymentInfo(db, b) {
   const admin = b.confirmedByUserId ? db.users.find((u) => u.id === b.confirmedByUserId) : null
   return { option, optionLabel: PAYMENT_OPTION_LABELS[option], amountPaid: b.amountPaid ?? b.depositAmount,
     referenceNumber: p?.referenceNumber ?? null, method: p?.method ?? null, paidAt: p?.paidAt ?? null, verified: Boolean(p?.verifiedAt),
-    confirmedAt: b.confirmedAt ?? null, confirmedBy: admin ? `${admin.firstName} ${admin.lastName}` : null }
+    confirmedAt: b.confirmedAt ?? null, confirmedBy: admin ? `${admin.firstName} ${admin.lastName}` : null,
+    refundDue: b.refundDue ?? 0, refundSentAt: b.refundSentAt ?? null, refundReference: b.refundReference ?? null }
 }
+
+// Same rule as Booking.MarkCancelled on the server: the deposit is kept unless the salon cancels.
+const paidOf = (b) => b.amountPaid ?? b.depositAmount
+const aboveDeposit = (b) => Math.max(0, paidOf(b) - b.depositAmount)
 
 const draftResponse = (d) => ({ data: structuredClone(d.data), updatedAt: d.updatedAt, status: 'Draft' })
 
@@ -407,7 +422,15 @@ function receipt(db, payment) {
     amount: payment.amount, currency: 'PHP', paidAt: payment.paidAt, status: payment.status, refundable: false,
     serviceName: db.services.find((s) => s.id === b.serviceId)?.name ?? '', bookingDate: b.bookingDate, startTime: b.startTime,
     paymentOption: payment.option ?? 'Deposit', paymentOptionLabel: PAYMENT_OPTION_LABELS[payment.option ?? 'Deposit'],
-    totalAmount: view.totalPrice, balanceDue: view.balanceDue, bookingStatus: b.status }
+    totalAmount: view.totalPrice, balanceDue: view.balanceDue, bookingStatus: b.status,
+    clientName: (({ firstName, lastName }) => `${firstName} ${lastName}`)(db.users.find((u) => u.id === b.clientId)),
+    lines: [
+      ...(view.removalServiceName ? [{ description: `Removal (${view.removalServiceName})`, amount: view.removalPrice }] : []),
+      { description: view.serviceName, amount: view.servicePrice },
+      ...view.addOns.map((a) => ({ description: `${a.name} (${a.handLabel.toLowerCase()}, ${a.nailCount} ${a.nailCount === 1 ? 'nail' : 'nails'})`, amount: a.linePrice })),
+    ],
+    verified: Boolean(payment.verifiedAt), verifiedAt: payment.verifiedAt ?? null, amountPaid: b.amountPaid ?? payment.amount,
+    refundDue: b.refundDue ?? 0, refundSentAt: b.refundSentAt ?? null, refundReference: b.refundReference ?? null }
 }
 
 const findBooking = (db, id) => db.bookings.find((b) => b.id === Number(id) && !b.isDeleted) ?? notFound('Booking not found.')
@@ -519,13 +542,15 @@ function moveBooking(db, user, booking, body) {
   saveDb()
 }
 
-function cancelBooking(db, user, booking, reason, explanation) {
+function cancelBooking(db, user, booking, reason, explanation, fullRefund = false) {
   if (!isActive(booking)) conflict(`A ${booking.status} booking cannot be cancelled.`, 'invalid_status')
   booking.status = 'Cancelled'
+  booking.refundDue = fullRefund ? paidOf(booking) : aboveDeposit(booking)
   booking.updatedAt = nowIso()
   db.cancellations.push({ id: nextId('cancellations'), bookingId: booking.id, cancelledByUserId: user.id, reason,
     explanation: explanation?.trim() ? explanation.trim() : null, cancelledAt: nowIso() })
-  audit(db, user.id, 'BookingCancelled', 'Booking', booking.id, `Reason: ${reasonLabel(reason)}. The deposit is non-refundable.`)
+  audit(db, user.id, 'BookingCancelled', 'Booking', booking.id,
+    `Reason: ${reasonLabel(reason)}. ${booking.refundDue > 0 ? `Refund due: PHP ${booking.refundDue.toFixed(2)}.` : 'Nothing to refund (the deposit is kept).'}`)
   saveDb()
 }
 
@@ -703,6 +728,105 @@ const routes = [
   }],
 
   ['GET', '/auth/me', (db) => profile(requireUser(db))],
+  ['POST', '/auth/me/photo', async (db, { file }) => {
+    const user = requireUser(db)
+    if (!file || !file.size) invalid('file', 'Choose a photo to upload.', 'image_missing')
+    if (file.size > 2 * 1024 * 1024) invalid('file', 'The photo must be 2 MB or smaller.', 'image_too_large')
+    const bytes = new Uint8Array(await file.arrayBuffer())
+    const contentType = detectImageType(bytes)
+    if (!contentType) invalid('file', rules.REFERENCE_IMAGE_MESSAGES.type, 'image_type')
+    let binary = ''
+    for (let i = 0; i < bytes.length; i += 0x8000) binary += String.fromCharCode(...bytes.subarray(i, i + 0x8000))
+    Object.assign(user, { photoDataUrl: `data:${contentType};base64,${btoa(binary)}`, updatedAt: nowIso() })
+    saveDb()
+    return profile(user)
+  }],
+  ['DELETE', '/auth/me/photo', (db) => {
+    const user = requireUser(db)
+    Object.assign(user, { photoDataUrl: null, updatedAt: nowIso() })
+    saveDb()
+    return profile(user)
+  }],
+  ['POST', '/auth/change-password', (db, { body }) => {
+    const user = requireUser(db)
+    if (!body.currentPassword) invalid('currentPassword', 'Enter your current password.')
+    if (body.currentPassword !== user.password) invalid('currentPassword', "That isn't your current password.", 'wrong_password')
+    const problem = rules.validateResetPassword({ newPassword: body.newPassword }).newPassword
+    if (problem) invalid('newPassword', problem)
+    if (body.newPassword === user.password) invalid('newPassword', 'Your new password must be different from your current password.', 'password_reused')
+    Object.assign(user, { password: body.newPassword, securityStamp: randomHex(8), updatedAt: nowIso() })
+    audit(db, user.id, 'PasswordChanged', 'User', user.id)
+    saveDb()
+    writeSession({ userId: user.id, securityStamp: user.securityStamp, lastActivityAt: Date.now() }) // this browser stays signed in
+    return { message: 'Your password has been changed. Other devices have been signed out.' }
+  }],
+  ['POST', '/auth/sign-out-other-devices', (db) => {
+    const user = requireUser(db)
+    user.securityStamp = randomHex(8)
+    audit(db, user.id, 'SignedOutEverywhere', 'User', user.id)
+    saveDb()
+    writeSession({ userId: user.id, securityStamp: user.securityStamp, lastActivityAt: Date.now() })
+    return { message: 'Every other device has been signed out.' }
+  }],
+  ['GET', '/auth/security', (db) => {
+    const user = requireUser(db)
+    const logins = db.auditLogs.filter((a) => a.userId === user.id && a.action === 'LoginSucceeded').sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+    return { previousSignInAt: logins[1]?.createdAt ?? null, previousSignInFrom: logins[1]?.ipAddress ?? null }
+  }],
+
+  // Salon details (Leyah's profile) — same rules as SalonProfileService.
+  ['GET', '/salon', (db) => salonProfile(db)],
+  ['GET', '/admin/salon-settings', (db) => { requireUser(db, 'Administrator'); return salonSettingsResponse(db) }],
+  ['PUT', '/admin/salon-settings', (db, { body }) => {
+    const admin = requireUser(db, 'Administrator')
+    const errors = {}
+    const clean = (v) => (typeof v === 'string' && v.trim() ? v.trim() : null)
+    let phone = clean(body.phone)
+    if (phone) { const p = rules.validatePhone(phone); if (p) errors.phone = p; else phone = rules.normalizePhone(phone) }
+    const url = (v, field, host, site) => {
+      let u = clean(v)
+      if (!u) return null
+      if (!/^http/i.test(u)) u = `https://${u}`
+      try {
+        const parsed = new URL(u)
+        if (parsed.protocol !== 'https:' || !(parsed.hostname === host || parsed.hostname.endsWith(`.${host}`))) throw new Error()
+      } catch { errors[field] = `Enter your ${site} page link, starting with https://${host}/` }
+      return u
+    }
+    const facebookUrl = url(body.facebookUrl, 'facebookUrl', 'facebook.com', 'Facebook')
+    const instagramUrl = url(body.instagramUrl, 'instagramUrl', 'instagram.com', 'Instagram')
+    const handle = clean(body.instagramHandle)?.replace(/^@+/, '') ?? null
+    if (handle && !/^[A-Za-z0-9._]{1,30}$/.test(handle)) errors.instagramHandle = 'Use letters, numbers, dots and underscores only, up to 30 characters.'
+    const bio = clean(body.bio)
+    if (bio && bio.length > 300) errors.bio = 'Keep the bio to 300 characters or fewer.'
+    if (Object.keys(errors).length) invalidMany(errors)
+    Object.assign(db.salonSettings, { phone, paymentAccountName: clean(body.paymentAccountName), facebookUrl, instagramUrl,
+      instagramHandle: handle ? `@${handle}` : null, bio, alertNewBooking: body.alertNewBooking !== false,
+      alertCancellation: body.alertCancellation !== false, alertReschedule: body.alertReschedule !== false, updatedAt: nowIso(), updatedByUserId: admin.id })
+    audit(db, admin.id, 'SalonDetailsChanged', 'SalonSettings', 1)
+    saveDb()
+    return salonSettingsResponse(db)
+  }],
+  ['POST', '/admin/salon-settings/photo', async (db, { file }) => {
+    const admin = requireUser(db, 'Administrator')
+    if (!file || !file.size) invalid('file', 'Choose a photo to upload.', 'image_missing')
+    if (file.size > 2 * 1024 * 1024) invalid('file', 'The photo must be 2 MB or smaller.', 'image_too_large')
+    const bytes = new Uint8Array(await file.arrayBuffer())
+    const contentType = detectImageType(bytes)
+    if (!contentType) invalid('file', rules.REFERENCE_IMAGE_MESSAGES.type, 'image_type')
+    let binary = ''
+    for (let i = 0; i < bytes.length; i += 0x8000) binary += String.fromCharCode(...bytes.subarray(i, i + 0x8000))
+    Object.assign(db.salonSettings, { photoDataUrl: `data:${contentType};base64,${btoa(binary)}`, updatedAt: nowIso(), updatedByUserId: admin.id })
+    audit(db, admin.id, 'SalonPhotoChanged', 'SalonSettings', 1)
+    saveDb()
+    return salonSettingsResponse(db)
+  }],
+  ['DELETE', '/admin/salon-settings/photo', (db) => {
+    const admin = requireUser(db, 'Administrator')
+    Object.assign(db.salonSettings, { photoDataUrl: null, updatedAt: nowIso(), updatedByUserId: admin.id })
+    saveDb()
+    return salonSettingsResponse(db)
+  }],
   ['PUT', '/auth/me', (db, { body }) => {
     const user = requireUser(db)
     const errors = Object.fromEntries([
@@ -745,6 +869,7 @@ const routes = [
     if (Object.keys(errors).length) invalidMany(errors)
     const record = usableResetToken(db, body.token)
     const user = db.users.find((u) => u.id === record.userId)
+    if (user.password === body.newPassword) invalid('newPassword', 'Your new password must be different from your current password.', 'password_reused')
     Object.assign(user, { password: body.newPassword, securityStamp: randomHex(8), failedLoginCount: 0, lockoutEndUtc: null, updatedAt: nowIso() })
     db.userTokens.filter((t) => t.userId === user.id && t.purpose === 'PasswordReset' && !t.consumedAt).forEach((t) => { t.consumedAt = nowIso() })
     audit(db, user.id, 'PasswordReset', 'User', user.id)
@@ -846,7 +971,8 @@ const routes = [
       .filter((u) => !text || [u.username, u.email, u.phoneNumber, `${u.firstName} ${u.lastName}`].some((v) => v.toLowerCase().includes(text)))
       .sort((a, b) => a.username.localeCompare(b.username))
     return { items: matches.slice((page - 1) * pageSize, page * pageSize).map((u) => ({ id: u.id, username: u.username, firstName: u.firstName,
-      lastName: u.lastName, email: u.email, phoneNumber: u.phoneNumber, emailVerified: u.emailVerified, createdAt: u.createdAt })),
+      lastName: u.lastName, email: u.email, phoneNumber: u.phoneNumber, emailVerified: u.emailVerified, createdAt: u.createdAt,
+      photoUrl: u.photoDataUrl ? `/api/admin/clients/${u.id}/photo` : null, photoDataUrl: u.photoDataUrl ?? null })),
       page, pageSize, totalCount: matches.length }
   }],
   ['GET', '/admin/clients/:id', (db, { params }) => {
@@ -896,6 +1022,12 @@ const routes = [
     return null
   }],
 
+  ['GET', '/admin/bookings/:id/receipt', (db, { params }) => {
+    requireUser(db, 'Administrator')
+    const booking = db.bookings.find((b) => b.id === Number(params.id) && !b.isDeleted) ?? notFound('Booking not found.')
+    const payment = db.payments.find((p) => p.bookingId === booking.id && p.status === 'Succeeded') ?? notFound('No payment has been recorded for this booking.')
+    return receipt(db, payment)
+  }],
   ['GET', '/bookings/:id/receipt', (db, { params }) => {
     const booking = ownedBooking(db, requireUser(db, 'Client'), params.id)
     const payment = db.payments.find((p) => p.bookingId === booking.id && p.status === 'Succeeded') ?? notFound('No payment has been recorded for this booking.')
@@ -939,6 +1071,7 @@ const routes = [
     const isOver = (b) => b.bookingDate < current || (b.bookingDate === current && b.endTime <= nowTime)
     const next = day < current ? null : days.find((b) => isActive(b) && (day > current || b.endTime > nowTime)) ?? null
     const attention = live.sort(byTime).map(view).flatMap((b) => {
+      if (b.payment.refundDue > 0 && !b.payment.refundSentAt) return [{ kind: 'RefundDue', booking: b }]
       if (isActive(b) && isOver(b)) return [{ kind: 'DatePassed', booking: b }]
       if (b.status === 'Pending') return [{ kind: 'CheckPayment', booking: b }]
       if (b.status === 'Completed' && b.balanceDue > 0 && b.bookingDate >= addDays(current, -30)) return [{ kind: 'BalanceNotRecorded', booking: b }]
@@ -1031,12 +1164,25 @@ const routes = [
     saveDb()
     return bookingResponse(db, booking, true)
   }],
+  ['POST', '/admin/bookings/:id/refund', (db, { params, body }) => {
+    const admin = requireUser(db, 'Administrator')
+    const reference = String(body?.refundReference ?? '').trim() || null
+    if (reference && reference.length > rules.LIMITS.balanceReferenceMax) invalid('refundReference', `The reference must be ${rules.LIMITS.balanceReferenceMax} characters or fewer.`)
+    const booking = findBooking(db, params.id)
+    if (!(booking.refundDue > 0)) conflict('No refund is owed on this booking.', 'no_refund_due')
+    if (booking.refundSentAt) conflict('This refund has already been recorded.', 'refund_already_sent')
+    Object.assign(booking, { refundSentAt: nowIso(), refundReference: reference, updatedAt: nowIso() })
+    audit(db, admin.id, 'RefundSent', 'Booking', booking.id, `PHP ${booking.refundDue.toFixed(2)}`)
+    saveDb()
+    return bookingResponse(db, booking, true)
+  }],
   ['POST', '/admin/bookings/:id/no-show', (db, { params }) => {
     const admin = requireUser(db, 'Administrator')
     const booking = findBooking(db, params.id)
     if (!['Pending', 'Confirmed'].includes(booking.status)) conflict(`A ${booking.status} booking cannot be marked as a no-show.`, 'invalid_status')
     if (startsAt(booking.bookingDate, booking.startTime) > new Date()) conflict('A booking can only be marked as a no-show once its appointment time has arrived.', 'invalid_status')
     booking.status = 'NoShow'
+    booking.refundDue = aboveDeposit(booking) // the deposit is the no-show fee
     audit(db, admin.id, 'BookingNoShow', 'Booking', booking.id)
     saveDb()
     return bookingResponse(db, booking, true)
@@ -1053,7 +1199,7 @@ const routes = [
     if (!lookups.adminCancellationReasons.some((r) => r.value === body.reason)) invalid('reason', 'Select a cancellation reason.')
     if ((body.explanation ?? '').length > rules.LIMITS.explanationMax)
       invalid('explanation', `Explanation must be ${rules.LIMITS.explanationMax} characters or fewer.`)
-    cancelBooking(db, admin, booking, body.reason, body.explanation)
+    cancelBooking(db, admin, booking, body.reason, body.explanation, body.reason !== 'ClientDidNotRespond')
     return bookingResponse(db, booking, true)
   }],
 

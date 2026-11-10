@@ -115,7 +115,7 @@ describe('Administrator cancellation (7.8)', () => {
     expect(lookups.clientCancellationReasons.map((r) => r.label))
       .toEqual(['Change of schedule', 'Emergency', 'Booked by mistake', 'Found another provider', 'Others'])
     expect(lookups.adminCancellationReasons.map((r) => r.label))
-      .toEqual(['Staff unavailable', 'Schedule conflict', 'Emergency', 'Client did not respond', 'Others'])
+      .toEqual(['Leyah is not available', 'Schedule conflict', 'Emergency', 'Client did not respond', 'Others'])
   })
 })
 

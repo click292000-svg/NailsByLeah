@@ -49,7 +49,8 @@ public sealed class ClientDataService(
         var search = string.IsNullOrWhiteSpace(request.Search) ? null : InputNormalizer.Text(request.Search);
         var (items, total) = await users.SearchClientsAsync(search, page, pageSize, ct);
         return new PagedResponse<ClientListItemResponse>(
-            items.Select(u => new ClientListItemResponse(u.Id, u.Username, u.FirstName, u.LastName, u.Email, u.PhoneNumber, u.EmailVerified, u.CreatedAt)).ToList(),
+            items.Select(u => new ClientListItemResponse(u.Id, u.Username, u.FirstName, u.LastName, u.Email, u.PhoneNumber, u.EmailVerified, u.CreatedAt,
+                ClientProfileService.AdminPhotoUrl(u))).ToList(),
             page, pageSize, total);
     }
 
@@ -82,6 +83,9 @@ public sealed class ClientDataService(
         client.Username = $"deleted-{client.Id}";
         client.Email = $"deleted-{client.Id}@deleted.invalid";
         client.PhoneNumber = $"00{client.Id:D9}";
+        var profilePhoto = client.PhotoFileName;
+        client.PhotoFileName = null;
+        client.PhotoContentType = null;
         client.ChangePassword(hasher.Hash(Guid.NewGuid().ToString("N"))); // a new security stamp also ends every session
         client.UpdatedAt = clock.UtcNow;
         client.IsDeleted = true;
@@ -95,6 +99,8 @@ public sealed class ClientDataService(
 
         var photos = await clientData.GetReferenceImagesAsync(clientId, ct);
         var filesToDelete = photos.Where(p => !p.IsDeleted).Select(p => p.StoredFileName).ToList();
+        if (profilePhoto is not null)
+            filesToDelete.Add(profilePhoto);
         foreach (var photo in photos)
             photo.IsDeleted = true;
 

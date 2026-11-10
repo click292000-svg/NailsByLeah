@@ -83,7 +83,7 @@ public sealed class SupabaseOptions
 public sealed class LegalOptions
 {
     public const string Section = "Legal";
-    public string TermsVersion { get; set; } = "2.3";
+    public string TermsVersion { get; set; } = "2.4";
 }
 
 public sealed class FrontendOptions

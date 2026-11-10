@@ -63,3 +63,25 @@ public sealed class LookupsController(IOptions<LegalOptions> legal) : Controller
         Enum.GetValues<BookingStatus>().Select(s => new LookupItem(s.ToString(), s == BookingStatus.NoShow ? "No-show" : s.ToString())).ToList(),
         legal.Value.TermsVersion);
 }
+
+/// <summary>The salon's public details and Leyah's photo, for the website.</summary>
+[ApiController]
+[AllowAnonymous]
+[Route("api/salon")]
+public sealed class SalonController(ISalonProfileService salon) : ControllerBase
+{
+    [HttpGet]
+    public Task<SalonProfileResponse> Get(CancellationToken ct) => salon.GetPublicAsync(ct);
+
+    /// <summary>The address carries a version (?v=), so a changed photo is fetched again while an unchanged one stays cached.</summary>
+    [HttpGet("photo")]
+    public async Task<IActionResult> Photo(CancellationToken ct)
+    {
+        var photo = await salon.OpenPhotoAsync(ct);
+        if (photo is null)
+            return NotFound();
+        Response.Headers.CacheControl = "public, max-age=86400";
+        Response.Headers["X-Content-Type-Options"] = "nosniff";
+        return File(photo.Value.Content, photo.Value.ContentType);
+    }
+}

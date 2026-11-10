@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { fireEvent, render, screen, within } from '@testing-library/react'
 import { DateCalendar, SlotPicker } from '../components/SlotPicker'
 import { dateFromToday } from '../lib/dates'
+import { getDb, saveDb } from './mockBackend/db'
 import { formatDate } from '../lib/format'
 
 const day = (iso) => screen.getByRole('radio', { name: formatDate(iso) })
@@ -53,6 +54,27 @@ describe('Booking time list', () => {
     show('11:00:00')
 
     expect(await screen.findByText('11:00 AM – 1:00 PM')).toBeInTheDocument() // Plain takes 2 hours
+  })
+})
+
+describe('No time left on a day', () => {
+  function Picker({ start }) {
+    const [date, setDate] = useState(start)
+    return <SlotPicker date={date} onDateChange={setDate} selectedTime="" onTimeChange={() => {}} serviceId={1} />
+  }
+
+  it('says why and moves to the next day with Book the next day', async () => {
+    const full = dateFromToday(3)
+    getDb().blockedSlots.push({ id: 900, date: full, startTime: '11:00:00', endTime: '21:00:00', reason: 'Seminar', createdByUserId: 1, createdAt: new Date().toISOString(), isDeleted: false })
+    saveDb()
+    render(<Picker start={full} />)
+
+    expect(await screen.findByText('No suitable times left')).toBeInTheDocument()
+    expect(screen.getByRole('status')).toHaveTextContent('No times are left on this day for 2 hr before the salon closes at 9:00 PM.')
+    fireEvent.click(screen.getByRole('button', { name: /Book the next day/ }))
+
+    expect(await screen.findByRole('group', { name: 'Morning' })).toBeInTheDocument()
+    expect(day(dateFromToday(4))).toBeChecked()
   })
 })
 

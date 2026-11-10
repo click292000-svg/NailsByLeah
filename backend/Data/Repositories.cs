@@ -319,7 +319,8 @@ internal sealed class BookingRepository(AppDbContext db) : IBookingRepository
     public Task<List<Booking>> GetAttentionCandidatesAsync(DateOnly today, DateOnly balanceSince, CancellationToken ct) =>
         WithDetails.Where(b => b.Status == BookingStatus.Pending ||
                                (b.Status == BookingStatus.Confirmed && b.BookingDate <= today) ||
-                               (b.Status == BookingStatus.Completed && b.BookingDate >= balanceSince))
+                               (b.Status == BookingStatus.Completed && b.BookingDate >= balanceSince) ||
+                               (b.RefundDue > 0 && b.RefundSentAt == null))
             .OrderBy(b => b.BookingDate).ThenBy(b => b.StartTime)
             .ToListAsync(ct);
 

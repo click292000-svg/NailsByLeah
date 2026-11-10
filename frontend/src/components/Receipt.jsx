@@ -9,6 +9,11 @@ export function Receipt({ receipt, booking }) {
   const status = booking?.status ?? receipt.bookingStatus
   const total = booking?.totalPrice ?? receipt.totalAmount
   const balance = booking?.balanceDue ?? receipt.balanceDue
+  // A cancelled or no-show booking owes no balance; what matters is the refund, if any.
+  const closed = status === 'Cancelled' || status === 'NoShow'
+  const refundDue = booking?.payment?.refundDue ?? receipt.refundDue ?? 0
+  const refundSentAt = booking?.payment?.refundSentAt ?? receipt.refundSentAt
+  const refundReference = booking?.payment?.refundReference ?? receipt.refundReference
   return (
     <div className="receipt" aria-label="Payment receipt">
       <div className="receipt-header">
@@ -40,15 +45,34 @@ export function Receipt({ receipt, booking }) {
         <dd><Money amount={total} /></dd>
         <dt>Amount paid</dt>
         <dd><Money amount={receipt.amount} /></dd>
-        <dt>Balance due at the salon</dt>
-        <dd><strong><Money amount={balance} /></strong></dd>
+        {closed ? (
+          <>
+            <dt>Refund</dt>
+            <dd>
+              {refundDue > 0 ? (
+                <>
+                  <strong><Money amount={refundDue} /></strong>{' '}
+                  <span className={refundSentAt ? 'refund-line sent' : 'refund-line'}>
+                    {refundSentAt ? `sent ${formatDateTime(refundSentAt)}` : 'to be sent to the account you paid from'}
+                  </span>
+                  {refundReference && <div className="muted small">Reference <span className="mono">{refundReference}</span></div>}
+                </>
+              ) : 'None (the deposit is kept)'}
+            </dd>
+          </>
+        ) : (
+          <>
+            <dt>Balance due at the salon</dt>
+            <dd><strong><Money amount={balance} /></strong></dd>
+          </>
+        )}
         <dt>Booking status</dt>
         <dd><StatusBadge status={status} /></dd>
       </dl>
       {status === 'Pending' && (
         <p className="receipt-pending" role="note">Your payment is received. Leyah will check it and confirm your appointment; you&apos;ll get an email when she does.</p>
       )}
-      <p className="muted small">The booking deposit is non-refundable. Booking #{receipt.bookingId}.</p>
+      <p className="muted small">The booking deposit is non-refundable unless the salon cancels. Booking #{receipt.bookingId}.</p>
     </div>
   )
 }

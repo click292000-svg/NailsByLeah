@@ -7,6 +7,7 @@ import { addDays, dateFromToday, today } from '../lib/dates'
 import { buildSalesReportPdf, totalReceived } from '../lib/reportPdf'
 import { BookingDetails } from '../pages/admin/BookingDetails'
 import { StatusBadge } from '../components/ui'
+import { CancelBookingDialog } from '../components/BookingDialogs'
 
 const row = (name) => screen.getAllByRole('row').find((r) => within(r).queryByText(name))
 
@@ -107,7 +108,7 @@ describe('No-shows', () => {
 
     await user.click(within(await attentionRow(booking.id)).getByRole('button', { name: 'No-show' }))
     const dialog = screen.getByRole('dialog', { name: 'Mark as no-show' })
-    expect(dialog).toHaveTextContent("deposit is kept. This can't be undone.")
+    expect(dialog).toHaveTextContent("deposit is kept as the no-show fee. This can't be undone.")
     await user.click(within(dialog).getByRole('button', { name: 'Mark as no-show' }))
 
     expect(await screen.findByText(`Booking #${booking.id} marked as a no-show.`)).toBeInTheDocument()
@@ -129,6 +130,46 @@ describe('No-shows', () => {
   it('reads as "No-show"', () => {
     render(<StatusBadge status="NoShow" />)
     expect(screen.getByText('No-show')).toHaveClass('badge-noshow')
+  })
+})
+
+describe('Refunds', () => {
+  const paidInFull = { id: 5, serviceName: 'Plain', bookingDate: '2026-11-20', startTime: '11:00:00', depositAmount: 150,
+    payment: { amountPaid: 300 }, client: { firstName: 'Kyla', lastName: 'Santos' } }
+  const reasons = [{ value: 'StaffUnavailable', label: 'Leyah is not available' }, { value: 'ClientDidNotRespond', label: 'Client did not respond' }]
+
+  it('tells a client who paid in full what comes back when cancelling', () => {
+    render(<CancelBookingDialog booking={paidInFull} reasons={[]} onSubmit={() => {}} onClose={() => {}} />)
+    expect(screen.getByRole('dialog')).toHaveTextContent('You paid ₱300.00. The ₱150.00 deposit is non-refundable, so ₱150.00 will be refunded')
+  })
+
+  it('tells a client who paid only the deposit that nothing comes back', () => {
+    render(<CancelBookingDialog booking={{ ...paidInFull, payment: { amountPaid: 150 } }} reasons={[]} onSubmit={() => {}} onClose={() => {}} />)
+    expect(screen.getByRole('dialog')).toHaveTextContent('non-refundable, so nothing is refunded')
+  })
+
+  it('tells Leyah the whole payment goes back when the salon cancels, but not when the client stopped answering', async () => {
+    const user = userEvent.setup()
+    render(<CancelBookingDialog booking={paidInFull} reasons={reasons} allowExplanation onSubmit={() => {}} onClose={() => {}} />)
+    expect(screen.getByRole('dialog')).toHaveTextContent('everything they paid: ₱300.00, the deposit included')
+    await user.selectOptions(screen.getByLabelText(/Reason for cancelling/), 'ClientDidNotRespond')
+    expect(screen.getByRole('dialog')).toHaveTextContent('the ₱150.00 deposit is kept, and ₱150.00 is refunded')
+  })
+
+  it('lists a refund to send on the dashboard until Leyah records it', async () => {
+    const user = userEvent.setup()
+    // Leyah cancelled this paid-in-full booking because she was sick, so all ₱300 goes back.
+    const booking = stage({ bookingDate: addDays(today(), 4), startTime: '11:00:00', status: 'Cancelled', amountPaid: 300, paymentOption: 'Full', refundDue: 300 })
+    await openDashboard()
+    const item = await attentionRow(booking.id)
+    expect(item).toHaveTextContent('Refund to send · Testa Client')
+    await user.click(within(item).getByRole('button', { name: 'Record' }))
+    const dialog = screen.getByRole('dialog', { name: 'Record refund' })
+    await user.type(within(dialog).getByLabelText(/reference/), 'GC-RF-9')
+    await user.click(within(dialog).getByRole('button', { name: 'Record refund sent' }))
+
+    expect(await screen.findByText(`Refund recorded for booking #${booking.id}.`)).toBeInTheDocument()
+    expect(getDb().bookings.find((b) => b.id === booking.id)).toMatchObject({ refundReference: 'GC-RF-9' })
   })
 })
 

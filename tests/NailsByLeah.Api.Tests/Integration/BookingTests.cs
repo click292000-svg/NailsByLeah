@@ -53,6 +53,22 @@ public sealed class BookingTests(ApiFactory factory) : IClassFixture<ApiFactory>
 
         var receipt = await user.Client.GetAsync<ReceiptResponse>($"/api/bookings/{result.Booking.Id}/receipt");
         Assert.Equal(result.Receipt.ReferenceNumber, receipt.ReferenceNumber);
+        Assert.False(receipt.Verified); // paid, not yet checked by the salon: no PDF receipt yet
+        Assert.Equal(3, receipt.Lines!.Count); // the service and the two Stone add-ons
+        Assert.Equal(570m, receipt.Lines.Sum(l => l.Amount));
+        Assert.False(string.IsNullOrWhiteSpace(receipt.ClientName));
+
+        var admin = await factory.CreateAdminClientAsync();
+        await admin.ConfirmAsync(result.Booking.Id);
+        var verified = await user.Client.GetAsync<ReceiptResponse>($"/api/bookings/{result.Booking.Id}/receipt");
+        Assert.True(verified.Verified);
+        Assert.NotNull(verified.VerifiedAt);
+        Assert.Equal(150m, verified.AmountPaid);
+        Assert.Equal(verified.ReferenceNumber, (await admin.GetAsync<ReceiptResponse>($"/api/admin/bookings/{result.Booking.Id}/receipt")).ReferenceNumber);
+
+        // Another client cannot see it.
+        var other = await factory.CreateClientAsync();
+        await (await other.Client.GetAsync($"/api/bookings/{result.Booking.Id}/receipt")).ShouldHaveStatus(HttpStatusCode.NotFound);
     }
 
     [Fact] // Ref 10.4
@@ -89,7 +105,7 @@ public sealed class BookingTests(ApiFactory factory) : IClassFixture<ApiFactory>
 
         var details = factory.WithDb(db => db.AuditLogs
             .Single(a => a.Action == "BookingCreated" && a.EntityId == booked.Booking.Id.ToString()).Details);
-        Assert.Contains("Booking policy and Terms v2.3 accepted", details);
+        Assert.Contains($"Booking policy and Terms v{TestHelpers.TermsVersion} accepted", details);
     }
 
     [Fact] // 9.1.7

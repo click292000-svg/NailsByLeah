@@ -3,6 +3,7 @@ import { formatDate } from '../lib/format'
 import { MemoryRouter } from 'react-router'
 import { AuthProvider, IdleLogout } from '../auth/AuthContext'
 import { AppRoutes } from '../App'
+import { SalonProvider } from '../components/SalonProfile'
 import { mockRequest } from './mockBackend/mockApi'
 import { demoAccounts } from './mockBackend/data/users'
 
@@ -32,8 +33,10 @@ export function renderApp(route = '/') {
   return render(
     <MemoryRouter initialEntries={[route]}>
       <AuthProvider>
-        <IdleLogout />
-        <AppRoutes />
+        <SalonProvider>
+          <IdleLogout />
+          <AppRoutes />
+        </SalonProvider>
       </AuthProvider>
     </MemoryRouter>,
   )

@@ -163,7 +163,7 @@ public sealed class ReferenceImageService(
             image.BookingId = booking.Id;
     }
 
-    private static async Task CopyLimitedAsync(Stream source, Stream destination, long limit, CancellationToken ct)
+    internal static async Task CopyLimitedAsync(Stream source, Stream destination, long limit, CancellationToken ct)
     {
         var chunk = new byte[81920];
         long total = 0;

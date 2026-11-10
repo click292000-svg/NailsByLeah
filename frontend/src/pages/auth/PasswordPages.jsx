@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Link, useLocation, useSearchParams } from 'react-router'
+import { Link, useLocation, useNavigate, useSearchParams } from 'react-router'
 import { api } from '../../api'
 import { PasswordField, PasswordRules } from '../../components/FormFields'
 import { Alert, Button, Card, PageLoader, TextField } from '../../components/ui'
@@ -48,6 +48,7 @@ function useResendCountdown(email) {
 export function VerifyEmailPage() {
   const [params] = useSearchParams()
   const location = useLocation()
+  const navigate = useNavigate()
   const [email, setEmail] = useState(params.get('email') ?? '')
   const [code, setCode] = useState('')
   const [errors, setErrors] = useState({})
@@ -72,7 +73,8 @@ export function VerifyEmailPage() {
     setSubmitting(true)
     try {
       await api.auth.verifyEmail({ email, code })
-      setStatus('verified')
+      // Registration is complete: on to the landing page, which welcomes the new client.
+      navigate('/', { replace: true, state: { welcome: 'verified' } })
     } catch (err) {
       setErrors(fieldErrors(err))
       if (!Object.keys(fieldErrors(err)).length) setFailure(errorMessage(err))
@@ -100,18 +102,6 @@ export function VerifyEmailPage() {
     } finally {
       setResending(false)
     }
-  }
-
-  if (status === 'verified') {
-    return (
-      <div className="auth-page">
-        <Card className="auth-card">
-          <h1>Email verified</h1>
-          <Alert kind="success">Your email address is verified. You can now log in.</Alert>
-          <Link to="/login" className="btn btn-primary btn-block">Log in</Link>
-        </Card>
-      </div>
-    )
   }
 
   return (

@@ -1,5 +1,6 @@
 import { Link, Route, Routes } from 'react-router'
 import { AuthProvider, IdleLogout } from './auth/AuthContext'
+import { SalonProvider } from './components/SalonProfile'
 import { GuestOnly, RequireRole } from './auth/RouteGuards'
 import { Layout } from './components/Layout'
 import { EmptyState } from './components/ui'
@@ -60,8 +61,10 @@ export function AppRoutes() {
 export default function App() {
   return (
     <AuthProvider>
-      <IdleLogout />
-      <AppRoutes />
+      <SalonProvider>
+        <IdleLogout />
+        <AppRoutes />
+      </SalonProvider>
     </AuthProvider>
   )
 }

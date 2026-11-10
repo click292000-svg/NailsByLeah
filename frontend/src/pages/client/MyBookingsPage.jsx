@@ -9,6 +9,7 @@ import { Alert, Button, EmptyState, Money, PageHeader, PageLoader, Spinner, Stat
 import { CancelBookingDialog, RescheduleDialog } from '../../components/BookingDialogs'
 import { Modal } from '../../components/Modal'
 import { Receipt } from '../../components/Receipt'
+import { ReceiptDownload } from '../../components/ReceiptDownload'
 import { colorLabel } from '../../lib/shades'
 import { ReferenceImageGallery } from '../../components/ReferenceImageGallery'
 import { clearBookingDraft, draftHasProgress, loadBookingDraft } from '../../lib/bookingDraft'
@@ -136,7 +137,7 @@ function BookingCard({ booking: b, onAction }) {
       <div className="booking-card-meta">
         <span>Total <Money amount={b.totalPrice} /></span>
         <span>Paid <Money amount={b.payment?.amountPaid ?? b.depositAmount} />{b.payment?.option === 'Full' ? ' (full)' : ' (deposit)'}</span>
-        {b.status !== 'NoShow' && <span>Balance <Money amount={b.balanceDue} /></span>}
+        {b.status !== 'NoShow' && b.status !== 'Cancelled' && <span>Balance <Money amount={b.balanceDue} /></span>}
         <span>Note: {b.note ?? 'No note'}</span>
       </div>
       <ReferenceImageGallery images={b.referenceImages} />
@@ -144,6 +145,12 @@ function BookingCard({ booking: b, onAction }) {
         <p className="muted small">
           Cancelled by {b.cancellation.cancelledByRole === 'Administrator' ? 'the salon' : 'you'}: {b.cancellation.reasonLabel}
           {b.cancellation.explanation && ` — ${b.cancellation.explanation}`}
+        </p>
+      )}
+      {b.payment?.refundDue > 0 && (
+        <p className={b.payment.refundSentAt ? 'refund-line sent' : 'refund-line'}>
+          Refund <Money amount={b.payment.refundDue} />:{' '}
+          {b.payment.refundSentAt ? `sent on ${new Date(b.payment.refundSentAt).toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' })}` : 'Leyah will send it to the account you paid from.'}
         </p>
       )}
       <div className="booking-card-actions">
@@ -165,7 +172,8 @@ function BookingCard({ booking: b, onAction }) {
 function ReceiptDialog({ booking, onClose }) {
   const receipt = useAsync(() => api.bookings.receipt(booking.id), [booking.id])
   return (
-    <Modal title="Payment receipt" onClose={onClose} footer={<Button onClick={onClose}>Close</Button>}>
+    <Modal title="Payment receipt" onClose={onClose}
+      footer={<>{receipt.data && <ReceiptDownload receipt={receipt.data} />}<Button variant="secondary" onClick={onClose}>Close</Button></>}>
       {receipt.loading && <PageLoader />}
       {receipt.error && <Alert kind="error">{errorMessage(receipt.error)}</Alert>}
       {receipt.data && <Receipt receipt={receipt.data} booking={booking} />}

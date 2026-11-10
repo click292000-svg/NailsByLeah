@@ -4,7 +4,7 @@ import { useAsync } from '../hooks/useAsync'
 import { addDays, daysInMonth, toIsoDate, today } from '../lib/dates'
 import { formatDate, formatDuration, formatTime } from '../lib/format'
 import { errorMessage } from '../api/errors'
-import { Alert, Spinner } from './ui'
+import { Alert, Button, Spinner } from './ui'
 import { schedule } from '../content/salon'
 
 const STATUS_TEXT = { Open: 'Available', Booked: 'Booked', Break: 'Break', Closed: 'Closed', Past: 'Past', TooShort: 'Not enough time' }
@@ -64,15 +64,18 @@ export function SlotPicker({ date, onDateChange, selectedTime, onTimeChange, ser
   // Days the salon is closed all day (days off and dates Leyah blocked) are grayed out in the calendar.
   const closedDates = useAsync(() => api.catalog.closedDates().catch(() => []), [])
   const chosen = selectedTime && slots.data?.slots.find((s) => s.startTime === selectedTime)
+  const goTo = (value) => {
+    onDateChange(value)
+    onTimeChange('')
+  }
+  const noTimes = (reason) => (
+    <NoTimes date={date} reason={reason} closedDates={closedDates.data ?? []} maxDaysAhead={maxDaysAhead} onPick={goTo} />
+  )
 
   return (
     <div className="slot-picker">
       <div className="slot-layout">
-      <DateCalendar value={date} maxDaysAhead={maxDaysAhead} error={error} closedDates={closedDates.data ?? []}
-        onChange={(value) => {
-          onDateChange(value)
-          onTimeChange('')
-        }} />
+      <DateCalendar value={date} maxDaysAhead={maxDaysAhead} error={error} closedDates={closedDates.data ?? []} onChange={goTo} />
 
       <div className="pick-column">
         <span className="field-label pick-title" id="time-label">Choose a time <span className="required" aria-hidden="true">*</span></span>
@@ -81,13 +84,19 @@ export function SlotPicker({ date, onDateChange, selectedTime, onTimeChange, ser
           {!date && <p className="muted pick-empty">Choose a date to see available times.</p>}
           {date && slots.loading && <div className="inline-loader"><Spinner small /> Loading times…</div>}
           {date && slots.error && <Alert kind="error">{errorMessage(slots.error)}</Alert>}
-          {date && slots.data?.isClosed && <p className="muted pick-empty">{slots.data.closedReason}. Please choose another date.</p>}
+          {date && slots.data?.isClosed && noTimes(`${slots.data.closedReason}.`)}
           {date && slots.data && !slots.data.isClosed && (() => {
             const day = slots.data
             const closing = minutesOf(day.closingTime)
             // With a service chosen, times that would end after closing can never be booked for it, so they aren't shown.
             const visible = serviceId ? day.slots.filter((s) => s.status !== 'TooShort' || minutesOf(s.startTime) + day.durationMinutes <= closing) : day.slots
             const lastOpen = serviceId ? visible.filter((s) => s.status === 'Open').at(-1) : null
+            // Nothing left that fits (booked, past, closed or too close to closing): offer the next day instead of a wall of gray times.
+            if (!visible.some((s) => s.status === 'Open')) {
+              return noTimes(serviceId
+                ? `No times are left on this day for ${formatDuration(day.durationMinutes)} before the salon closes at ${formatTime(day.closingTime)}.`
+                : 'No times are left on this day.')
+            }
             return (
             <>
               {lastOpen && (
@@ -98,7 +107,6 @@ export function SlotPicker({ date, onDateChange, selectedTime, onTimeChange, ser
                     ? `, ending at ${formatTime(day.closingTime)} closing.` : `, ending at ${formatTime(lastOpen.endTime)}.`}
                 </p>
               )}
-              {serviceId && !lastOpen && <p className="slot-last-note">No times left on this day for {formatDuration(day.durationMinutes)}. Please choose another date.</p>}
               <TakenTimes taken={day.taken} />
               <div className="slot-groups">
                 {SLOT_GROUPS.map(({ name, from, to }) => {
@@ -156,6 +164,30 @@ export function SlotPicker({ date, onDateChange, selectedTime, onTimeChange, ser
   )
 }
 
+/**
+ * No time fits on the chosen day: says why and offers the next day the salon is open ("Book tomorrow" when that is
+ * literally tomorrow). Closed days are skipped; when nothing is open within the booking window, it says so.
+ */
+function NoTimes({ date, reason, closedDates, maxDaysAhead, onPick }) {
+  const last = addDays(today(), maxDaysAhead)
+  const closed = new Set(closedDates)
+  let next = addDays(date, 1)
+  while (next <= last && closed.has(next)) next = addDays(next, 1)
+  const canMove = next <= last
+  const label = !canMove ? null
+    : next === addDays(today(), 1) ? 'Book tomorrow'
+    : next === addDays(date, 1) ? 'Book the next day'
+    : `Book ${formatDate(next).replace(/, \d{4}$/, '')}`
+  return (
+    <div className="no-times" role="status">
+      <span className="no-times-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5" /><path d="M12 7.5V12l3 2" /></svg></span>
+      <strong>No suitable times left</strong>
+      <p>{reason} {canMove ? 'Try the next open day, or choose another date on the calendar.' : `There are no open days in the next ${maxDaysAhead} days.`}</p>
+      {canMove && <Button onClick={() => onPick(next)}>{label} →</Button>}
+    </div>
+  )
+}
+
 const longDate = (iso) => {
   const [y, m, d] = iso.split('-').map(Number)
   return new Date(y, m - 1, d).toLocaleDateString('en-PH', { weekday: 'long', month: 'long', day: 'numeric' })
@@ -172,6 +204,11 @@ export function DateCalendar({ value, onChange, maxDaysAhead, error, closedDates
   const first = today()
   const last = addDays(first, maxDaysAhead)
   const [month, setMonth] = useState(() => (value && value >= first && value <= last ? value : first).slice(0, 7))
+  const [shownValue, setShownValue] = useState(value)
+  if (value !== shownValue) {
+    setShownValue(value)
+    if (value && value >= first && value <= last) setMonth(value.slice(0, 7))
+  }
   const gridRef = useRef(null)
   const focusNext = useRef(null)
 

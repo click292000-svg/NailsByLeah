@@ -1,4 +1,4 @@
-import { salon } from '../content/salon'
+import { useSalon } from './SalonProfile'
 
 // Leyah's Facebook and Instagram profiles. They open in a new tab (noopener, noreferrer), so a booking
 // in progress stays where it is; on phones the Facebook / Instagram app takes over the link if installed.
@@ -15,21 +15,23 @@ const InstagramIcon = () => (
   </svg>
 )
 
-const LINKS = [
-  { key: 'facebook', name: 'Facebook', label: 'Nails by Leyah', Icon: FacebookIcon },
-  { key: 'instagram', name: 'Instagram', label: salon.social.instagramHandle, Icon: InstagramIcon },
-]
 
 /**
  * Facebook and Instagram buttons. `variant="icons"` shows round brand-coloured icons, `variant="plain"`
  * bare single-colour icons (footer), `variant="labelled"` adds the page names (booking page).
  */
 export function SocialLinks({ variant = 'icons', className = '' }) {
+  // The links Leyah saved on her profile (content/salon.js until then).
+  const salon = useSalon()
+  const links = [
+    { key: 'facebook', name: 'Facebook', label: 'Nails by Leyah', href: salon.facebookUrl, Icon: FacebookIcon },
+    { key: 'instagram', name: 'Instagram', label: salon.instagramHandle, href: salon.instagramUrl, Icon: InstagramIcon },
+  ].filter((link) => link.href)
   return (
     <ul className={`social-links social-${variant} ${className}`} aria-label="Nails by Leyah on social media">
-      {LINKS.map(({ key, name, label, Icon }) => (
+      {links.map(({ key, name, label, href, Icon }) => (
         <li key={key}>
-          <a className={`social-link social-${key}`} href={salon.social[key]} target="_blank" rel="noopener noreferrer"
+          <a className={`social-link social-${key}`} href={href} target="_blank" rel="noopener noreferrer"
             aria-label={`${name}: ${label} (opens in a new tab)`} title={`${name}: ${label}`}>
             <span className="social-icon"><Icon /></span>
             {variant === 'labelled' && (

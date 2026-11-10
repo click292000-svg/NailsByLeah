@@ -40,7 +40,14 @@ export const referenceImageUrl = (image) =>
   image.dataUrl ?? `${config.apiBaseUrl.replace(/\/$/, '')}/reference-images/${image.id}`
 
 export const api = {
+  /** The salon's public details: phone, payment account name, social links, bio and Leyah's photo. */
+  salon: {
+    get: () => get('/salon'),
+  },
   auth: {
+    changePassword: (body) => post('/auth/change-password', body),
+    signOutOtherDevices: () => post('/auth/sign-out-other-devices'),
+    security: () => get('/auth/security'),
     register: (body) => post('/auth/register', body),
     usernameAvailability: (username) => get('/auth/username-availability', { username }),
     verifyEmail: (body) => post('/auth/verify-email', body),
@@ -49,6 +56,8 @@ export const api = {
     logout: () => post('/auth/logout'),
     me: () => get('/auth/me'),
     updateProfile: (body) => put('/auth/me', body),
+    uploadPhoto: (file) => upload('/auth/me/photo', file),
+    removePhoto: () => del('/auth/me/photo'),
     forgotPassword: (email) => post('/auth/forgot-password', { email }),
     validateResetToken: (token) => post('/auth/reset-password/validate', { token }),
     resetPassword: (body) => post('/auth/reset-password', body),
@@ -91,9 +100,15 @@ export const api = {
     searchBookings: (query) => get('/admin/bookings', query),
     /** Booking counts for each day of a month that has any: [{ date, count, activeCount }]. */
     bookingCalendar: (year, month) => get('/admin/bookings/calendar', { year, month }),
+    receipt: (id) => get(`/admin/bookings/${id}/receipt`),
+    salonSettings: () => get('/admin/salon-settings'),
+    updateSalonSettings: (body) => put('/admin/salon-settings', body),
+    uploadSalonPhoto: (file) => upload('/admin/salon-settings/photo', file),
+    removeSalonPhoto: () => del('/admin/salon-settings/photo'),
     confirm: (id) => post(`/admin/bookings/${id}/confirm`),
     complete: (id, body) => post(`/admin/bookings/${id}/complete`, body),
     recordBalance: (id, body) => post(`/admin/bookings/${id}/balance`, body),
+    recordRefund: (id, body) => post(`/admin/bookings/${id}/refund`, body),
     markNoShow: (id) => post(`/admin/bookings/${id}/no-show`),
     reschedule: (id, body) => post(`/admin/bookings/${id}/reschedule`, body),
     cancel: (id, body) => post(`/admin/bookings/${id}/cancel`, body),

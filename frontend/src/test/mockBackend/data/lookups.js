@@ -12,7 +12,7 @@ export const lookups = {
     { value: 'Others', label: 'Others' },
   ],
   adminCancellationReasons: [
-    { value: 'StaffUnavailable', label: 'Staff unavailable' },
+    { value: 'StaffUnavailable', label: 'Leyah is not available' },
     { value: 'ScheduleConflict', label: 'Schedule conflict' },
     { value: 'Emergency', label: 'Emergency' },
     { value: 'ClientDidNotRespond', label: 'Client did not respond' },

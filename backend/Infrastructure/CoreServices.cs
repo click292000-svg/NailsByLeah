@@ -138,6 +138,11 @@ public static class AuditActions
     public const string BookingCancelled = "BookingCancelled";
     public const string BookingNoShow = "BookingNoShow";
     public const string BalanceReceived = "BalanceReceived";
+    public const string RefundSent = "RefundSent";
+    public const string SalonDetailsChanged = "SalonDetailsChanged";
+    public const string SalonPhotoChanged = "SalonPhotoChanged";
+    public const string PasswordChanged = "PasswordChanged";
+    public const string SignedOutEverywhere = "SignedOutEverywhere";
     public const string PaymentSucceeded = "PaymentSucceeded";
     public const string PaymentFailed = "PaymentFailed";
     public const string ServiceCreated = "ServiceCreated";

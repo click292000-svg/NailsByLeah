@@ -26,7 +26,7 @@ const CONTROL_KEYS = new Set(['Backspace', 'Delete', 'Tab', 'Enter', 'Escape', '
  * a silently cut-off (wrong) number. The server stores it as 09XXXXXXXXX.
  * `onBlur` lets the form check the number once the user leaves the field.
  */
-export function PhoneField({ value, onChange, onBlur, error, label = 'Phone Number' }) {
+export function PhoneField({ value, onChange, onBlur, error, label = 'Phone Number', required = true }) {
   // Short-lived explanation of why a keystroke or part of a paste was ignored.
   const [notice, setNotice] = useState(null)
   const max = phoneMaxLength(value)
@@ -39,10 +39,10 @@ export function PhoneField({ value, onChange, onBlur, error, label = 'Phone Numb
   const digits = value.startsWith('+63') ? value.length - 2 : value.length // +63 counts as the leading 0
   const counter = `${digits}/${LIMITS.phoneDigits} digits`
   return (
-    <Field label={label} error={error} required counter={counter}
-      hint={notice ?? 'Philippine mobile number, e.g. 09171234567 or +639171234567'}>
+    <Field label={label} error={error} required={required} counter={counter}
+      hint={notice ?? 'Philippine mobile number'}>
       {(aria) => (
-        <input className="input" type="tel" inputMode="tel" autoComplete="tel" value={value} required
+        <input className="input" type="tel" inputMode="tel" autoComplete="tel" value={value} required={required}
           onKeyDown={(e) => {
             if (e.ctrlKey || e.metaKey || e.altKey || CONTROL_KEYS.has(e.key)) return
             const atStart = e.currentTarget.selectionStart === 0 && !value.startsWith('+')

@@ -47,10 +47,12 @@ public sealed record UpdateProfileRequest(string FirstName, string LastName, str
 public sealed record ClientSearchRequest(string? Search, int Page = 1, int PageSize = 20);
 
 public sealed record ClientListItemResponse(
-    int Id, string Username, string FirstName, string LastName, string Email, string PhoneNumber, bool EmailVerified, DateTime CreatedAt);
+    int Id, string Username, string FirstName, string LastName, string Email, string PhoneNumber, bool EmailVerified, DateTime CreatedAt,
+    string? PhotoUrl = null);
 
 public sealed record UserProfileResponse(
-    int Id, string FirstName, string LastName, string Username, string Email, string PhoneNumber, string Role);
+    int Id, string FirstName, string LastName, string Username, string Email, string PhoneNumber, string Role,
+    DateTime? CreatedAt = null, string? PhotoUrl = null);
 
 // ---- Catalog and pricing ----
 
@@ -155,7 +157,28 @@ public sealed record CompleteBookingRequest(bool BalanceReceived, string? Balanc
 /// <summary>The balance of a completed booking was paid later.</summary>
 public sealed record RecordBalanceRequest(string? BalanceReference);
 
-public sealed record ClientSummaryResponse(int Id, string FirstName, string LastName, string Username, string Email, string PhoneNumber);
+/// <summary>The salon's public details for the website. PhotoUrl is null when Leyah has no photo.</summary>
+public sealed record SalonProfileResponse(
+    string? Phone, string? PaymentAccountName, string? FacebookUrl, string? InstagramUrl, string? InstagramHandle, string? Bio, string? PhotoUrl);
+
+/// <summary>The public details plus Leyah's email alert switches, for her profile page.</summary>
+public sealed record SalonSettingsResponse(SalonProfileResponse Profile, bool AlertNewBooking, bool AlertCancellation, bool AlertReschedule);
+
+public sealed record UpdateSalonSettingsRequest(
+    string? Phone, string? PaymentAccountName, string? FacebookUrl, string? InstagramUrl, string? InstagramHandle, string? Bio,
+    bool AlertNewBooking = true, bool AlertCancellation = true, bool AlertReschedule = true);
+
+/// <summary>Changing a password while signed in asks for the current one first.</summary>
+public sealed record ChangePasswordRequest(string CurrentPassword, string NewPassword);
+
+/// <summary>The sign-in before this one, so the user can spot one they don't recognise.</summary>
+public sealed record AccountSecurityResponse(DateTime? PreviousSignInAt, string? PreviousSignInFrom);
+
+/// <summary>Leyah sent a refund by GCash or Maya; the reference is optional.</summary>
+public sealed record RecordRefundRequest(string? RefundReference);
+
+public sealed record ClientSummaryResponse(int Id, string FirstName, string LastName, string Username, string Email, string PhoneNumber,
+    string? PhotoUrl = null);
 
 public sealed record BookingAddOnResponse(int AddOnId, string Name, int NailCount, decimal LinePrice, string Hand, string HandLabel);
 
@@ -198,7 +221,8 @@ public sealed record BookingResponse(
 public sealed record BookingPaymentResponse(
     string Option, string OptionLabel, decimal AmountPaid, string? ReferenceNumber, string? Method, DateTime? PaidAt,
     bool Verified, DateTime? ConfirmedAt, string? ConfirmedBy,
-    decimal BalanceReceived = 0, DateTime? BalanceReceivedAt = null, string? BalanceReference = null);
+    decimal BalanceReceived = 0, DateTime? BalanceReceivedAt = null, string? BalanceReference = null,
+    decimal RefundDue = 0, DateTime? RefundSentAt = null, string? RefundReference = null);
 
 /// <summary>An uploaded design photo. The file is at GET /api/reference-images/{id}.</summary>
 public sealed record ReferenceImageResponse(int Id, string ContentType, long SizeBytes, DateTime CreatedAt);
@@ -220,7 +244,18 @@ public sealed record ReceiptResponse(
     string PaymentOptionLabel = "Booking deposit",
     decimal TotalAmount = 0,
     decimal BalanceDue = 0,
-    string BookingStatus = "Pending");
+    string BookingStatus = "Pending",
+    string? ClientName = null,
+    IReadOnlyList<ReceiptLineResponse>? Lines = null,
+    bool Verified = false, // the salon has checked this payment; only then can the PDF receipt be downloaded
+    DateTime? VerifiedAt = null,
+    decimal AmountPaid = 0, // everything verified as paid online for the booking (deposit or full payment)
+    decimal RefundDue = 0, // owed back after a cancellation or no-show; see BookingPaymentResponse
+    DateTime? RefundSentAt = null,
+    string? RefundReference = null);
+
+/// <summary>One priced line on a receipt: the service, the removal before it, or a Stone add-on.</summary>
+public sealed record ReceiptLineResponse(string Description, decimal Amount);
 
 public sealed record CreateBookingResponse(BookingResponse Booking, ReceiptResponse Receipt);
 
@@ -275,7 +310,8 @@ public sealed record DashboardResponse(
 
 /// <summary>
 /// Something Leyah has to act on. Kind is CheckPayment (paid, not confirmed yet), DatePassed (the appointment is over but the
-/// booking is still Pending or Confirmed) or BalanceNotRecorded (completed in the last 30 days with money still owing).
+/// booking is still Pending or Confirmed), BalanceNotRecorded (completed in the last 30 days with money still owing) or
+/// RefundDue (cancelled or a no-show, with money to send back).
 /// </summary>
 public sealed record DashboardAttentionItem(string Kind, BookingResponse Booking);
 

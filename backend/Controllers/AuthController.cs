@@ -19,6 +19,8 @@ public sealed class AuthController(
     IRegistrationService registration,
     IAuthService auth,
     IPasswordResetService passwordReset,
+    IAccountSecurityService security,
+    IClientProfileService clientProfile,
     IUserRepository users) : ControllerBase
 {
     private const string ResetRequestedMessage = "If that email address is registered, a password reset link has been sent. It expires in 15 minutes.";
@@ -63,6 +65,36 @@ public sealed class AuthController(
     public async Task<UserProfileResponse> Login(LoginRequest request, CancellationToken ct)
     {
         var user = await auth.LoginAsync(request, ct);
+        await SignInAsync(user);
+        return ToProfile(user);
+    }
+
+    /// <summary>Asks for the current password; every other signed-in device is signed out, this browser stays signed in.</summary>
+    [Authorize]
+    [EnableRateLimiting(RateLimitPolicies.Login)]
+    [HttpPost("change-password")]
+    public async Task<MessageResponse> ChangePassword(ChangePasswordRequest request, CancellationToken ct)
+    {
+        await SignInAsync(await security.ChangePasswordAsync(User.GetUserId(), request, ct));
+        return new MessageResponse("Your password has been changed. Other devices have been signed out.");
+    }
+
+    [Authorize]
+    [HttpPost("sign-out-other-devices")]
+    public async Task<MessageResponse> SignOutOtherDevices(CancellationToken ct)
+    {
+        await SignInAsync(await security.SignOutEverywhereAsync(User.GetUserId(), ct));
+        return new MessageResponse("Every other device has been signed out.");
+    }
+
+    [Authorize]
+    [HttpGet("security")]
+    public Task<AccountSecurityResponse> Security(CancellationToken ct) => security.GetAsync(User.GetUserId(), ct);
+
+    // Session cookie; the server-side ticket expires after 30 idle minutes (Ref 8.4). The security stamp in it lets a
+    // password change or "sign out other devices" end every other session.
+    private Task SignInAsync(User user)
+    {
         var identity = new ClaimsIdentity(
         [
             new Claim(ClaimTypes.NameIdentifier, user.Id.ToString()),
@@ -70,11 +102,8 @@ public sealed class AuthController(
             new Claim(ClaimTypes.Role, user.Role.ToString()),
             new Claim(ClaimNames.SecurityStamp, user.SecurityStamp),
         ], CookieAuthenticationDefaults.AuthenticationScheme);
-
-        // Session cookie; the server-side ticket expires after 30 idle minutes (Ref 8.4).
-        await HttpContext.SignInAsync(CookieAuthenticationDefaults.AuthenticationScheme, new ClaimsPrincipal(identity),
+        return HttpContext.SignInAsync(CookieAuthenticationDefaults.AuthenticationScheme, new ClaimsPrincipal(identity),
             new AuthenticationProperties { IsPersistent = false });
-        return ToProfile(user);
     }
 
     [Authorize]
@@ -95,6 +124,30 @@ public sealed class AuthController(
     [HttpPut("me")]
     public async Task<UserProfileResponse> UpdateMe(UpdateProfileRequest request, CancellationToken ct) =>
         ToProfile(await registration.UpdateProfileAsync(User.GetUserId(), request, ct));
+
+    [Authorize]
+    [HttpPost("me/photo")]
+    [RequestSizeLimit(ClientProfileService.PhotoMaxBytes + 64 * 1024)]
+    [RequestFormLimits(MultipartBodyLengthLimit = ClientProfileService.PhotoMaxBytes + 64 * 1024)]
+    public async Task<UserProfileResponse> UploadPhoto(IFormFile? file, CancellationToken ct) =>
+        ToProfile(await clientProfile.UploadPhotoAsync(User.GetUserId(), file, ct));
+
+    [Authorize]
+    [HttpDelete("me/photo")]
+    public async Task<UserProfileResponse> RemovePhoto(CancellationToken ct) =>
+        ToProfile(await clientProfile.RemovePhotoAsync(User.GetUserId(), ct));
+
+    /// <summary>The signed-in user's own photo; nobody else's can be fetched here.</summary>
+    [Authorize]
+    [HttpGet("me/photo")]
+    public async Task<IActionResult> Photo(CancellationToken ct)
+    {
+        var photo = await clientProfile.OpenPhotoAsync(User.GetUserId(), ct);
+        if (photo is null) return NotFound();
+        Response.Headers.CacheControl = "private, max-age=86400";
+        Response.Headers["X-Content-Type-Options"] = "nosniff";
+        return File(photo.Value.Content, photo.Value.ContentType);
+    }
 
     [AllowAnonymous]
     [EnableRateLimiting(RateLimitPolicies.Email)]
@@ -125,5 +178,6 @@ public sealed class AuthController(
     }
 
     private static UserProfileResponse ToProfile(User u) =>
-        new(u.Id, u.FirstName, u.LastName, u.Username, u.Email, u.PhoneNumber, u.Role.ToString());
+        new(u.Id, u.FirstName, u.LastName, u.Username, u.Email, u.PhoneNumber, u.Role.ToString(), u.CreatedAt,
+            ClientProfileService.MyPhotoUrl(u));
 }

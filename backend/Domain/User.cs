@@ -27,6 +27,10 @@ public class User : IAuthenticatable, ISoftDeletable
     /// <summary>Changes whenever credentials change, which invalidates existing sessions.</summary>
     public string SecurityStamp { get; set; } = NewSecurityStamp();
 
+    /// <summary>The client's own photo, in the same private storage as design photos. Seen by the client and administrators.</summary>
+    public string? PhotoFileName { get; set; }
+    public string? PhotoContentType { get; set; }
+
     public DateTime CreatedAt { get; set; }
     public DateTime UpdatedAt { get; set; }
     public bool IsDeleted { get; set; }
@@ -51,6 +55,9 @@ public class User : IAuthenticatable, ISoftDeletable
         FailedLoginCount = 0;
         LockoutEndUtc = null;
     }
+
+    /// <summary>Signs out every session: each one carries the old stamp and is refused from now on.</summary>
+    public void RenewSecurityStamp() => SecurityStamp = NewSecurityStamp();
 
     public void ChangePassword(string newPasswordHash)
     {

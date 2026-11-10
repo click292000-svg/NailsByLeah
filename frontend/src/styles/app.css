@@ -309,7 +309,10 @@ select.input { appearance: auto; }
 /* ---------- Auth ---------- */
 
 .auth-page { display: flex; justify-content: center; }
-.auth-page { padding-top: 8px; }
+/* Log in, sign up and the password pages sit in the middle of the space between header and footer. A form taller than
+   the screen starts at the top and scrolls as usual. */
+.auth-page { flex: 1; align-items: center; padding: 8px 0; }
+.page:has(> .auth-page) { padding-top: 18px; padding-bottom: 18px; }
 .auth-card { width: 100%; max-width: 420px; }
 .auth-card-wide { max-width: 600px; }
 .auth-card h1 { font-size: var(--fs-display); }
@@ -712,12 +715,15 @@ select.input { appearance: auto; }
 .card-filter .field-label { font-size: var(--fs-caption); color: var(--muted); }
 
 /* Activity log: one row per entry, grouped under day headings; same header strip as the Services lists. */
-.activity { --activity-cols: 84px 120px minmax(0, 1fr) minmax(0, 1.25fr); display: flex; flex-direction: column; }
-.activity-head, .activity-row { display: grid; grid-template-columns: var(--activity-cols); gap: 14px; align-items: center; padding: 0 12px; }
+/* Usernames stay on one line, the action column is just wide enough for its names, and the details get the rest;
+   every cell starts at the same top line so rows of different heights still line up. */
+.activity { --activity-cols: 92px 160px minmax(170px, 0.75fr) minmax(0, 1.6fr); display: flex; flex-direction: column; }
+.activity-head, .activity-row { display: grid; grid-template-columns: var(--activity-cols); gap: 16px; align-items: center; padding: 0 12px; }
+.activity-row { align-items: start; }
 .activity-row { padding-top: 10px; padding-bottom: 10px; border-bottom: 1px solid var(--line); font-size: var(--fs-body); transition: background .15s; }
 .activity-row:hover { background: #fffbf9; }
 .activity-time { color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
-.activity-user { font-weight: 600; color: var(--ink-soft); overflow-wrap: anywhere; }
+.activity-user { font-weight: 600; color: var(--ink-soft); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
 .activity-action { display: flex; align-items: flex-start; gap: 8px; min-width: 0; }
 .activity-entity { display: block; color: var(--muted); font-size: var(--fs-caption); }
 .activity-details { color: var(--ink-soft); overflow-wrap: anywhere; }
@@ -1715,3 +1721,65 @@ button.dash-pill:focus-visible { box-shadow: var(--focus); outline: 0; }
 }
 .bd-swatch { display: inline-block; width: 13px; height: 13px; margin-right: 7px; vertical-align: -1px; border-radius: 50%; border: 1px solid rgb(0 0 0 / .12); }
 .yt-facts dd.yt-color { white-space: normal; min-width: 0; } /* long shade names wrap under the dot */
+
+/* No time fits on the chosen day: offer the next day. */
+.no-times { display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 18px 12px; text-align: center; }
+.no-times-icon { display: grid; place-items: center; width: 44px; height: 44px; border-radius: 50%; background: var(--rose-50); color: var(--rose-600); }
+.no-times-icon svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.no-times strong { color: var(--burgundy); font-size: var(--fs-lead); }
+.no-times p { color: var(--ink-soft); font-size: var(--fs-small); max-width: 34ch; }
+.receipt-download { display: inline-flex; align-items: center; gap: 10px; flex-wrap: wrap; justify-content: flex-end; margin-right: auto; }
+
+.checkbox-field input:disabled { cursor: not-allowed; opacity: .5; }
+
+.refund-line { font-size: var(--fs-small); color: var(--amber-700); font-weight: 600; }
+.refund-line.sent { color: var(--green-700); }
+
+/* Activity log: each day gets its own band, separated from the rows under it. */
+.activity-day .list-group-title { padding: 10px 12px; margin-top: 8px; background: #fffafb; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+.activity-day:first-of-type .list-group-title { margin-top: 0; border-top: 0; }
+.activity-day .list-group-title { justify-content: space-between; }
+.activity-day .list-group-title .activity-day-date { padding: 0; min-width: 0; max-width: 92px; background: none; color: var(--burgundy); font-size: var(--fs-small); text-align: left; }
+.activity-day .list-group-title .activity-day-count { font-weight: 600; }
+
+/* ---- My profile ---- */
+.profile-wide { max-width: 1000px; margin: 0 auto; width: 100%; }
+.profile-grid { display: grid; grid-template-columns: minmax(0, 300px) minmax(0, 1fr); gap: 18px; align-items: start; }
+@media (max-width: 820px) { .profile-grid { grid-template-columns: minmax(0, 1fr); } }
+.profile-photo-card { align-items: center; text-align: center; }
+.profile-photo { width: 112px; height: 112px; border-radius: 50%; display: grid; place-items: center; overflow: hidden; background: var(--rose-100);
+  border: 3px solid var(--white); box-shadow: 0 0 0 1px var(--nude-200), var(--shadow); color: var(--burgundy); font-family: var(--font-display); font-size: var(--fs-hero); }
+.profile-photo img { width: 100%; height: 100%; object-fit: cover; }
+.profile-name { font-family: var(--font-display); color: var(--burgundy); font-size: var(--fs-title); font-weight: 600; margin-top: 4px; }
+.profile-photo-actions { display: flex; gap: 8px; justify-content: center; }
+.profile-tag { margin-left: 8px; padding: 2px 9px; border-radius: 99px; background: var(--blue-100); color: var(--blue-700); font-family: var(--font); font-size: var(--fs-caption); font-weight: 600; vertical-align: 3px; }
+.profile-switch { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 10px 0; border-top: 1px solid var(--line); cursor: pointer; }
+.profile-switch > span { display: flex; flex-direction: column; gap: 2px; }
+.profile-switch input { appearance: none; width: 40px; height: 22px; flex: none; border-radius: 99px; background: var(--nude-200); position: relative; cursor: pointer; transition: background .15s; }
+.profile-switch input::after { content: ""; position: absolute; top: 3px; left: 3px; width: 16px; height: 16px; border-radius: 50%; background: var(--white); transition: transform .15s var(--ease); box-shadow: 0 1px 2px rgb(0 0 0 / .2); }
+.profile-switch input:checked { background: var(--rose-600); }
+.profile-switch input:checked::after { transform: translateX(18px); }
+.profile-switch input:focus-visible { box-shadow: var(--focus); outline: 0; }
+.profile-signout { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; padding-top: 12px; border-top: 1px solid var(--line); }
+.nav-avatar img { width: 100%; height: 100%; border-radius: 50%; object-fit: cover; }
+.nav-avatar:has(img) { overflow: hidden; }
+.pay-to { margin-top: 8px; }
+.footer-phone { color: inherit; text-decoration: none; font-weight: 600; }
+.footer-phone:hover { color: var(--rose-700); text-decoration: underline; }
+
+
+/* Client profile photo and notes, and where Leyah sees them. */
+.bd-client { display: flex; align-items: center; gap: 12px; }
+.bd-client-photo { width: 48px; height: 48px; flex: none; border-radius: 50%; object-fit: cover; display: grid; place-items: center; background: var(--rose-100); color: var(--burgundy); font-family: var(--font-display); font-size: var(--fs-title); }
+.dash-client-photo { width: 22px; height: 22px; border-radius: 50%; object-fit: cover; margin-right: 6px; vertical-align: -6px; }
+.client-cell { display: inline-flex; align-items: center; gap: 8px; }
+.client-avatar { width: 28px; height: 28px; flex: none; border-radius: 50%; object-fit: cover; display: grid; place-items: center; background: var(--rose-100); color: var(--burgundy); font-size: var(--fs-small); font-weight: 700; }
+.client-avatar[data-initial]::before { content: attr(data-initial); } /* drawn by CSS, so the name cell reads as just the username */
+
+/* Client profile: the last visit and Book again. */
+.profile-visit { display: grid; gap: 8px; margin: 0; }
+.profile-visit div { display: grid; grid-template-columns: 90px 1fr; gap: 8px; }
+.profile-visit dt { color: var(--muted); }
+.profile-visit dd { margin: 0; overflow-wrap: anywhere; }
+.profile-visit-actions { align-items: center; gap: 12px; flex-wrap: wrap; }
+.profile-empty { display: flex; flex-direction: column; align-items: flex-start; gap: 10px; }

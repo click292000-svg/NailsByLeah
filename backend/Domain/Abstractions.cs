@@ -52,5 +52,6 @@ public interface ICancellable
     BookingStatus Status { get; }
     bool CanBeCancelled { get; }
 
-    void MarkCancelled(DateTime utcNow);
+    /// <summary>fullRefund: the salon cancelled, so everything paid goes back, the deposit included.</summary>
+    void MarkCancelled(DateTime utcNow, bool fullRefund);
 }

@@ -1,12 +1,14 @@
 import { useState } from 'react'
 import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router'
-import { AdminNav } from './AdminNav'
+import { AdminNav, ClientAccountMenu } from './AdminNav'
 import { ErrorBoundary } from './ErrorBoundary'
 import { useAuth } from '../auth/AuthContext'
 import { Alert } from './ui'
 import { SocialLinks } from './SocialLinks'
 import { LegalDocumentModal } from './Modal'
 import { salon } from '../content/salon'
+import { formatPhone, useSalon } from './SalonProfile'
+import { apiPhotoSrc } from '../lib/photos'
 
 const YEAR = new Date().getFullYear()
 
@@ -18,6 +20,7 @@ const clientLinks = [
 
 export function Layout() {
   const { user, logout } = useAuth()
+  const { phone } = useSalon()
   const [legalDocument, setLegalDocument] = useState(null)
   const navigate = useNavigate()
   const location = useLocation()
@@ -67,10 +70,7 @@ export function Layout() {
                 </NavLink>
               ))}
               {user ? (
-                <div className="nav-user">
-                  <NavLink to="/profile" className="nav-greeting nav-profile-link" aria-label={`My profile (${user.firstName})`}>Hi, {user.firstName}</NavLink>
-                  <button type="button" className="btn btn-ghost btn-sm" onClick={signOut}>Log out</button>
-                </div>
+                <ClientAccountMenu user={user} photo={apiPhotoSrc(user.photoUrl, user.photoDataUrl)} onSignOut={signOut} />
               ) : (
                 <div className="nav-user">
                   <NavLink to="/login" className="nav-link">Log in</NavLink>
@@ -97,7 +97,10 @@ export function Layout() {
       <footer className="site-footer">
         {/* One slim row: copyright, legal links, social icons (no logo here: the header already shows it). */}
         <div className="footer-inner">
-          <p className="footer-copy">© {YEAR} {salon.name}</p>
+          <p className="footer-copy">
+            © {YEAR} {salon.name}
+            {phone && <> · <a className="footer-phone" href={`tel:${phone}`}>Call or text {formatPhone(phone)}</a></>}
+          </p>
           <nav className="footer-links" aria-label="Footer">
             <button type="button" onClick={() => setLegalDocument('terms')}>Terms &amp; Conditions</button>
             <span aria-hidden="true">•</span>

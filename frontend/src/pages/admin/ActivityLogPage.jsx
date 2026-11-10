@@ -4,6 +4,8 @@ import { useAsync } from '../../hooks/useAsync'
 import { errorMessage } from '../../api/errors'
 import { formatDate, humanize } from '../../lib/format'
 import { toIsoDate } from '../../lib/dates'
+
+const dayLabel = (day) => (day.slice(0, 4) === String(new Date().getFullYear()) ? formatDate(day).replace(/, \d{4}$/, '') : formatDate(day))
 import { Alert, Card, EmptyState, PageHeader, PageLoader, Pager, SelectField } from '../../components/ui'
 
 const ACTIONS = [
@@ -60,11 +62,15 @@ export default function ActivityLogPage() {
             </div>
             {days.map(({ day, entries }) => (
               <section key={day} className="activity-day" aria-label={formatDate(day)}>
-                <h3 className="list-group-title">{formatDate(day)}<span>{entries.length}</span></h3>
+                {/* The date fits the Time column ("Wed, Nov 11"; the year only when it isn't this year); the count sits at the far end. */}
+                <h3 className="list-group-title">
+                  <span className="activity-day-date">{dayLabel(day)}</span>
+                  <span className="activity-day-count">{entries.length} {entries.length === 1 ? 'entry' : 'entries'}</span>
+                </h3>
                 {entries.map((entry) => (
                   <div key={entry.id} className="activity-row">
                     <span className="activity-time" data-label="Time">{timeOf(entry.createdAt)}</span>
-                    <span className="activity-user" data-label="User">{entry.username ? `@${entry.username}` : <span className="muted">System</span>}</span>
+                    <span className="activity-user" data-label="User" title={entry.username ? `@${entry.username}` : 'System'}>{entry.username ? `@${entry.username}` : <span className="muted">System</span>}</span>
                     <span className="activity-action" data-label="Action">
                       <span className={`activity-dot activity-dot-${tone(entry.action)}`} aria-hidden="true" />
                       <span>

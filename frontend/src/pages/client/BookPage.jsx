@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Link } from 'react-router'
+import { Link, useLocation, useNavigate } from 'react-router'
 import { api, referenceImageUrl } from '../../api'
 import { addMinutesToTime, today } from '../../lib/dates'
 import { clearBookingDraft, draftHasProgress, loadBookingDraft, saveBookingDraft } from '../../lib/bookingDraft'
@@ -43,11 +43,39 @@ const SparkleIcon = () => (
   </svg>
 )
 
+/**
+ * "Book again" from the profile: a new draft with the same set, removal, colour and Stones as an earlier booking, keeping
+ * only what is still offered. Date, time, note and photos start empty.
+ */
+function repeatDraft(catalog, booking) {
+  const active = (id) => catalog.services.find((s) => s.id === id)
+  const set = active(booking.serviceId)
+  const softGel = set && !isRemoval(set) ? set : null
+  const removal = active(booking.removalServiceId ?? (set && isRemoval(set) ? set.id : null)) ?? null
+  const stones = softGel?.allowsAddOns ? booking.addOns.filter((a) => catalog.addOns.some((x) => x.id === a.addOnId)) : []
+  return {
+    step: 0, serviceId: softGel?.id ?? null, removalId: removal?.id ?? null,
+    color: softGel && (catalog.nailColors ?? []).includes(booking.nailColor) ? booking.nailColor : '',
+    nails: Object.fromEntries(stones.map((a) => [a.addOnId, a.nailCount])),
+    hands: Object.fromEntries(stones.map((a) => [a.addOnId, a.hand])),
+    date: '', time: '', noteText: '', referenceImages: [], savedAt: `repeat-${booking.id}`, repeatOf: booking,
+  }
+}
+
 export default function BookPage() {
+  // "Book again" arrives with the earlier booking; it is used once, so a reload continues the saved draft instead.
+  const location = useLocation()
+  const navigate = useNavigate()
+  const [repeat, setRepeat] = useState(() => location.state?.repeat ?? null)
+  useEffect(() => {
+    if (location.state?.repeat) navigate(location.pathname, { replace: true, state: null })
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
   // A saved draft is checked against what is offered now: photos removed or used elsewhere, add-ons no longer
   // offered and dates that have passed are dropped. Prices always come from the current price list.
   const data = useAsync(async () => {
     const [catalog, lookups, draft] = await Promise.all([api.catalog.get(), api.catalog.lookups(), loadBookingDraft()])
+    if (repeat) return { catalog, lookups, draft: repeatDraft(catalog, repeat) }
     if (!draftHasProgress(draft)) return { catalog, lookups, draft: null }
     const pending = draft.referenceImages?.length ? await api.referenceImages.pending().catch(() => []) : []
     const stillPending = (draft.referenceImages ?? []).filter((saved) => pending.some((p) => p.id === saved.id))
@@ -59,7 +87,8 @@ export default function BookPage() {
   }, [])
   if (data.loading) return <PageLoader label="Loading services…" />
   if (data.error) return <Alert kind="error">{errorMessage(data.error)}</Alert>
-  return <BookingWizard key={data.data.draft?.savedAt ?? 'new'} {...data.data} onStartOver={data.reload} />
+  // Start over forgets the repeated visit too, so the page really starts empty.
+  return <BookingWizard key={data.data.draft?.savedAt ?? 'new'} {...data.data} onStartOver={() => { setRepeat(null); data.reload() }} />
 }
 
 const byId = (catalog, id) => catalog.services.find((s) => s.id === id)
@@ -228,7 +257,14 @@ function BookingWizard({ catalog, lookups, draft, onStartOver }) {
   return (
     <div className="stack">
       <PageHeader title="Book an appointment" />
-      {restored && (
+      {restored && draft?.repeatOf && (
+        <Alert kind="info" onClose={() => setRestored(false)}>
+          We filled in the same set as your visit on {formatDate(draft.repeatOf.bookingDate)}. Check it, then pick a date and time.
+          Prices are today&apos;s.{' '}
+          <button type="button" className="link-button" onClick={startOver}>Start over</button>
+        </Alert>
+      )}
+      {restored && !draft?.repeatOf && (
         <Alert kind="info" onClose={() => setRestored(false)}>
           We restored the booking you saved as a draft{referenceImages.length > 0 ? ', including your design photos' : ''}.
           Prices and times are checked again before you pay.{' '}
@@ -497,7 +533,7 @@ function NoteStep({ suggestions, value, onChange }) {
 // "Soft Gel – Plain", "Removal – My Work"; Stones keep their own name.
 const CATEGORY_LABELS = { SoftGel: 'Soft Gel' }
 function totalLineName(line) {
-  if (line.category === 'Removal') return line.name.replace(/^Removal \((.*)\)$/, 'Removal – $1')
+  if (line.category === 'Removal') return /^Removal \(/.test(line.name) ? line.name.replace(/^Removal \((.*)\)$/, 'Removal – $1') : `Removal – ${line.name}`
   const category = CATEGORY_LABELS[line.category]
   return category && category.toLowerCase() !== line.name.toLowerCase() ? `${category} – ${line.name}` : line.name
 }

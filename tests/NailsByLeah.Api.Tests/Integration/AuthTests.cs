@@ -106,7 +106,7 @@ public sealed class AuthTests(ApiFactory factory) : IClassFixture<ApiFactory>
 
         Assert.StartsWith("$2", stored.PasswordHash);
         Assert.DoesNotContain(ApiFactory.DefaultPassword, stored.PasswordHash);
-        Assert.Equal("2.3", stored.TermsVersion);
+        Assert.Equal(TestHelpers.TermsVersion, stored.TermsVersion);
         Assert.NotNull(stored.TermsAcceptedAt);
     }
 
@@ -142,6 +142,25 @@ public sealed class AuthTests(ApiFactory factory) : IClassFixture<ApiFactory>
         Assert.Equal("token_expired", (await check.ReadProblemAsync()).ProblemCode());
         await response.ShouldHaveStatus(HttpStatusCode.BadRequest);
         Assert.Equal("token_expired", (await response.ReadProblemAsync()).ProblemCode());
+    }
+
+    [Fact]
+    public async Task Password_reset_refuses_the_current_password_and_keeps_the_link_usable()
+    {
+        var user = await factory.CreateClientAsync();
+        var anonymous = factory.NewClient();
+        await anonymous.PostJsonAsync("/api/auth/forgot-password", new EmailRequest(user.Email));
+        var token = factory.Notifications.ResetTokenFor(user.Email);
+
+        var same = await anonymous.PostJsonAsync("/api/auth/reset-password", new ResetPasswordRequest(token, ApiFactory.DefaultPassword));
+        await same.ShouldHaveStatus(HttpStatusCode.BadRequest);
+        var problem = await same.ReadProblemAsync();
+        Assert.Equal("password_reused", problem.ProblemCode());
+        Assert.NotEmpty(problem.ErrorsFor("newPassword"));
+        await (await user.Client.GetAsync("/api/auth/me")).ShouldHaveStatus(HttpStatusCode.OK); // nothing changed
+
+        await (await anonymous.PostJsonAsync("/api/auth/reset-password", new ResetPasswordRequest(token, "Different123")))
+            .ShouldHaveStatus(HttpStatusCode.OK);
     }
 
     [Fact] // Ref 1.4

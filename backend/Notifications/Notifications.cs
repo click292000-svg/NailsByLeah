@@ -68,7 +68,8 @@ public sealed class EmailNotificationService(
 
             {AppointmentLines(booking)}
             Reason: {reasonLabel}
-            Paid online: PHP {booking.AmountPaid:0.00} (the PHP {booking.DepositAmount:0.00} deposit is non-refundable)
+            Paid online: PHP {booking.AmountPaid:0.00}
+            {(booking.RefundDue > 0 ? $"Refund to send the client: PHP {booking.RefundDue:0.00} (everything above the PHP {booking.DepositAmount:0.00} deposit)" : $"Nothing to refund: the PHP {booking.DepositAmount:0.00} deposit is kept")}
 
             Bookings that day: {AdminLink(booking, pendingOnly: false)}
             """, ct);

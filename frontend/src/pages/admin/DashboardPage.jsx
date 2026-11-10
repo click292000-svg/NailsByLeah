@@ -6,9 +6,10 @@ import { errorMessage } from '../../api/errors'
 import { addDays, startsAt } from '../../lib/dates'
 import { formatDate, formatMoney, formatTime } from '../../lib/format'
 import { Alert, Button, PageLoader, STATUS_LABELS } from '../../components/ui'
-import { BalanceDialog, NoShowDialog } from '../../components/BookingDialogs'
+import { BalanceDialog, NoShowDialog, RefundDialog } from '../../components/BookingDialogs'
 import { BookingDetails } from './BookingDetails'
 import { colorFor, colorLabel } from '../../lib/shades'
+import { apiPhotoSrc } from '../../lib/photos'
 
 /* ---- Small line icons (24px grid, drawn with the current text colour) ---- */
 const Icon = ({ children, className = '' }) => (
@@ -263,6 +264,7 @@ const ATTENTION = {
   CheckPayment: { icon: <CardIcon />, tone: 'rose', title: 'Check payment' },
   DatePassed: { icon: <CalendarIcon />, tone: 'blue', title: 'Date passed, still' },
   BalanceNotRecorded: { icon: <WalletIcon />, tone: 'amber', title: 'Balance not recorded' },
+  RefundDue: { icon: <WalletIcon />, tone: 'rose', title: 'Refund to send' },
 }
 
 function attentionLine(kind, b) {
@@ -272,6 +274,7 @@ function attentionLine(kind, b) {
     return p ? `${when} · ${p.method ?? 'Paid'} ${formatMoney(p.amountPaid)} ${p.optionLabel.toLowerCase().replace(/^booking /, '')}` : `${when} · ${formatTime(b.startTime)}`
   }
   if (kind === 'BalanceNotRecorded') return `${when} · ${formatMoney(b.balanceDue)} still to collect`
+  if (kind === 'RefundDue') return `${when} · ${formatMoney(b.payment?.refundDue)} to send back (${b.status === 'NoShow' ? 'no-show' : 'cancelled'})`
   return `${when} · did ${b.client?.firstName ?? 'the client'} come?`
 }
 
@@ -337,6 +340,9 @@ function AttentionCard({ items, onChanged }) {
                   {kind === 'DatePassed' && (
                     <Button size="sm" variant="ghost" onClick={() => setDialog({ kind: 'no-show', booking: b })}>No-show</Button>
                   )}
+                  {kind === 'RefundDue' && (
+                    <Button size="sm" variant="secondary" onClick={() => setDialog({ kind: 'refund', booking: b })}>Record</Button>
+                  )}
                   {kind === 'BalanceNotRecorded' && (
                     <Button size="sm" variant="secondary" onClick={() => setDialog({ kind: 'balance', booking: b })}>Record</Button>
                   )}
@@ -363,6 +369,13 @@ function AttentionCard({ items, onChanged }) {
           onSubmit={async ({ reference }) => {
             await api.admin.recordBalance(dialog.booking.id, { balanceReference: reference })
             closeAnd(`Balance recorded for booking #${dialog.booking.id}.`)
+          }} />
+      )}
+      {dialog?.kind === 'refund' && (
+        <RefundDialog booking={dialog.booking} onClose={() => setDialog(null)}
+          onSubmit={async (body) => {
+            await api.admin.recordRefund(dialog.booking.id, body)
+            closeAnd(`Refund recorded for booking #${dialog.booking.id}.`)
           }} />
       )}
       {dialog?.kind === 'no-show' && (
@@ -404,7 +417,7 @@ function NextClientCard({ booking: b, date, isToday, isPast, now, elapsed, upcom
           </button>
           <dl className="dash-next-details">
             <dt>Client</dt>
-            <dd>{clientName(b)}{b.client?.phoneNumber && <> · <a href={`tel:${b.client.phoneNumber}`}>{b.client.phoneNumber}</a></>}</dd>
+            <dd>{apiPhotoSrc(b.client?.photoUrl, b.client?.photoDataUrl) && <img className="dash-client-photo" src={apiPhotoSrc(b.client?.photoUrl, b.client?.photoDataUrl)} alt="" />}{clientName(b)}{b.client?.phoneNumber && <> · <a href={`tel:${b.client.phoneNumber}`}>{b.client.phoneNumber}</a></>}</dd>
             <dt>Services</dt>
             <dd>{servicesInOrder(b)}</dd>
             {b.nailColor && (<><dt>Colour</dt><dd><ColorDot name={b.nailColor} /> {colorLabel(b.nailColor)}</dd></>)}

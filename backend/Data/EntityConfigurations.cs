@@ -20,6 +20,8 @@ internal sealed class UserConfiguration : IEntityTypeConfiguration<User>
                 $"[phone_number] NOT LIKE '%[^0-9]%' AND LEN([phone_number]) = {InputLimits.PhoneDigits}");
             t.HasCheckConstraint("ck_users_failed_login_count", "[failed_login_count] >= 0");
         });
+        b.Property(x => x.PhotoFileName).HasMaxLength(100);
+        b.Property(x => x.PhotoContentType).HasMaxLength(40);
 
         b.Property(u => u.FirstName).HasMaxLength(InputLimits.NameMaxLength).IsRequired();
         b.Property(u => u.LastName).HasMaxLength(InputLimits.NameMaxLength).IsRequired();
@@ -81,6 +83,7 @@ internal sealed class BookingConfiguration : IEntityTypeConfiguration<Booking>
             t.HasCheckConstraint("ck_bookings_amount_paid_non_negative", "[amount_paid] >= 0");
             t.HasCheckConstraint("ck_bookings_balance_received_non_negative", "[balance_received] >= 0");
             t.HasCheckConstraint("ck_bookings_removal_price_non_negative", "[removal_price] >= 0");
+            t.HasCheckConstraint("ck_bookings_refund_due_non_negative", "[refund_due] >= 0");
         });
 
         b.Property(x => x.NailColor).HasMaxLength(InputLimits.NailColorMaxLength);
@@ -90,6 +93,7 @@ internal sealed class BookingConfiguration : IEntityTypeConfiguration<Booking>
         b.Property(x => x.RowVersion).IsRowVersion();
         b.Property(x => x.Note).HasMaxLength(InputLimits.NoteMaxLength);
         b.Property(x => x.BalanceReference).HasMaxLength(InputLimits.BalanceReferenceMaxLength);
+        b.Property(x => x.RefundReference).HasMaxLength(InputLimits.BalanceReferenceMaxLength);
         b.HasOne(x => x.ConfirmedBy).WithMany().HasForeignKey(x => x.ConfirmedByUserId);
         b.HasOne(x => x.Client).WithMany().HasForeignKey(x => x.ClientId);
         b.HasOne(x => x.Service).WithMany().HasForeignKey(x => x.ServiceId);
@@ -262,6 +266,14 @@ internal sealed class SalonSettingsConfiguration : IEntityTypeConfiguration<Salo
     {
         b.ToTable("salon_settings", t => t.HasCheckConstraint("ck_salon_settings_single_row", $"[id] = {SalonSettings.SingletonId}"));
         b.Property(x => x.Id).ValueGeneratedNever();
+        b.Property(x => x.Phone).HasMaxLength(20);
+        b.Property(x => x.PaymentAccountName).HasMaxLength(Services.SalonProfileService.PaymentNameMaxLength);
+        b.Property(x => x.FacebookUrl).HasMaxLength(Services.SalonProfileService.UrlMaxLength);
+        b.Property(x => x.InstagramUrl).HasMaxLength(Services.SalonProfileService.UrlMaxLength);
+        b.Property(x => x.InstagramHandle).HasMaxLength(Services.SalonProfileService.HandleMaxLength);
+        b.Property(x => x.Bio).HasMaxLength(Services.SalonProfileService.BioMaxLength);
+        b.Property(x => x.PhotoFileName).HasMaxLength(100);
+        b.Property(x => x.PhotoContentType).HasMaxLength(40);
         b.HasData(new SalonSettings
         {
             Id = SalonSettings.SingletonId,

@@ -300,6 +300,8 @@ public sealed class PasswordResetService(
     IOptions<AuthOptions> authOptions,
     IOptions<FrontendOptions> frontendOptions) : IPasswordResetService
 {
+    public const string SamePasswordMessage = "Your new password must be different from your current password.";
+
     public async Task RequestResetAsync(string email, CancellationToken ct = default)
     {
         // Same response whether or not the email exists, so accounts cannot be discovered.
@@ -336,6 +338,11 @@ public sealed class PasswordResetService(
         var user = await users.GetByIdAsync(record.UserId, ct)
                    ?? throw new ValidationAppException("token", "This password reset link is invalid or has already been used.", "token_invalid");
 
+        // Checked against the stored hash, so the current password is never kept or compared in plain text.
+        // The link stays usable, so the user can try again with a different password.
+        if (hasher.Verify(request.NewPassword, user.PasswordHash))
+            throw new ValidationAppException("newPassword", SamePasswordMessage, "password_reused");
+
         // A new security stamp also signs the user out of every existing session.
         user.ChangePassword(hasher.Hash(request.NewPassword));
         user.UpdatedAt = now;
@@ -357,4 +364,62 @@ public sealed class PasswordResetService(
             throw new ValidationAppException("token", "This password reset link has expired. Please request a new one.", "token_expired");
         return record;
     }
+}
+
+/// <summary>Password change and session control for a signed-in user, plus their previous sign-in.</summary>
+public interface IAccountSecurityService
+{
+    /// <summary>Checks the current password, sets the new one and signs out every other session. Returns the user with the new stamp.</summary>
+    Task<User> ChangePasswordAsync(int userId, ChangePasswordRequest request, CancellationToken ct = default);
+
+    /// <summary>Signs out every session, this one included; the caller signs this browser back in with the new stamp.</summary>
+    Task<User> SignOutEverywhereAsync(int userId, CancellationToken ct = default);
+
+    Task<AccountSecurityResponse> GetAsync(int userId, CancellationToken ct = default);
+}
+
+public sealed class AccountSecurityService(
+    IUserRepository users,
+    IAuditLogRepository auditLogs,
+    IUnitOfWork unitOfWork,
+    IPasswordHasher hasher,
+    IAuditLogger audit,
+    ISalonClock clock) : IAccountSecurityService
+{
+    public const string WrongPasswordMessage = "That isn't your current password.";
+
+    public async Task<User> ChangePasswordAsync(int userId, ChangePasswordRequest request, CancellationToken ct = default)
+    {
+        var user = await GetUserAsync(userId, ct);
+        if (!hasher.Verify(request.CurrentPassword ?? "", user.PasswordHash))
+            throw new ValidationAppException("currentPassword", WrongPasswordMessage, "wrong_password");
+        if (hasher.Verify(request.NewPassword, user.PasswordHash))
+            throw new ValidationAppException("newPassword", PasswordResetService.SamePasswordMessage, "password_reused");
+        user.ChangePassword(hasher.Hash(request.NewPassword));
+        user.UpdatedAt = clock.UtcNow;
+        audit.Record(AuditActions.PasswordChanged, nameof(User), user.Id, userId: user.Id);
+        await unitOfWork.SaveChangesAsync(ct);
+        return user;
+    }
+
+    public async Task<User> SignOutEverywhereAsync(int userId, CancellationToken ct = default)
+    {
+        var user = await GetUserAsync(userId, ct);
+        user.RenewSecurityStamp();
+        user.UpdatedAt = clock.UtcNow;
+        audit.Record(AuditActions.SignedOutEverywhere, nameof(User), user.Id, userId: user.Id);
+        await unitOfWork.SaveChangesAsync(ct);
+        return user;
+    }
+
+    public async Task<AccountSecurityResponse> GetAsync(int userId, CancellationToken ct = default)
+    {
+        // The newest sign-in is this one, so the one before it is the second.
+        var (items, _) = await auditLogs.SearchAsync(new AuditLogCriteria(userId, AuditActions.LoginSucceeded, null, null, 1, 2), ct);
+        var previous = items.Skip(1).FirstOrDefault();
+        return new AccountSecurityResponse(previous?.CreatedAt, previous?.IpAddress);
+    }
+
+    private async Task<User> GetUserAsync(int userId, CancellationToken ct) =>
+        await users.GetByIdAsync(userId, ct) ?? throw new UnauthorizedAppException("Please log in again.");
 }

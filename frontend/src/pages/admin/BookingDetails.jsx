@@ -1,7 +1,10 @@
 import { formatDate, formatDateTime, formatTime } from '../../lib/format'
 import { Button, Money, StatusBadge } from '../../components/ui'
 import { Modal } from '../../components/Modal'
+import { ReceiptDownload } from '../../components/ReceiptDownload'
+import { api } from '../../api'
 import { colorFor, colorLabel } from '../../lib/shades'
+import { apiPhotoSrc } from '../../lib/photos'
 import { ReferenceImageGallery } from '../../components/ReferenceImageGallery'
 
 function Section({ title, children, wide = false }) {
@@ -40,7 +43,11 @@ export function BookingDetails({ booking: b, onClose }) {
   const balanceReceived = b.payment?.balanceReceived > 0
 
   return (
-    <Modal wide title={`Booking #${b.id}`} onClose={onClose} footer={<Button onClick={onClose}>Close</Button>}>
+    <Modal wide title={`Booking #${b.id}`} onClose={onClose}
+      footer={<>
+        {b.payment?.verified && <ReceiptDownload variant="secondary" load={() => api.admin.receipt(b.id)} />}
+        <Button onClick={onClose}>Close</Button>
+      </>}>
       <div className="bd">
         <header className="bd-hero">
           <div>
@@ -59,8 +66,16 @@ export function BookingDetails({ booking: b, onClose }) {
 
         <div className="bd-grid">
           <Section title="Client">
-            <p className="bd-name">{client?.firstName} {client?.lastName}</p>
-            <p className="muted small">@{client?.username}</p>
+            <div className="bd-client">
+              {apiPhotoSrc(client?.photoUrl, client?.photoDataUrl)
+                ? <img className="bd-client-photo" src={apiPhotoSrc(client?.photoUrl, client?.photoDataUrl)} alt={`${client?.firstName}'s photo`} />
+                : <span className="bd-client-photo" aria-hidden="true">{client?.firstName?.slice(0, 1)}</span>}
+              <div>
+                <p className="bd-name">{client?.firstName} {client?.lastName}</p>
+                <p className="muted small">@{client?.username}</p>
+              </div>
+            </div>
+
             <ul className="bd-contact">
               <li><a href={`mailto:${client?.email}`}>{client?.email}</a></li>
               <li><a href={`tel:${client?.phoneNumber}`}>{client?.phoneNumber}</a></li>
@@ -110,7 +125,15 @@ export function BookingDetails({ booking: b, onClose }) {
                   {b.payment.balanceReference && <>, reference <span className="mono">{b.payment.balanceReference}</span></>}
                 </p>
               )}
-              <p className="muted small">The <Money amount={b.depositAmount} /> deposit is non-refundable.</p>
+              {b.payment?.refundDue > 0 ? (
+                <p className={b.payment.refundSentAt ? 'bd-check bd-check-ok' : 'bd-check bd-check-waiting'}>
+                  {b.payment.refundSentAt
+                    ? <>✓ Refund of <Money amount={b.payment.refundDue} /> sent{b.payment.refundReference && <>, reference <span className="mono">{b.payment.refundReference}</span></>}</>
+                    : <>Refund owed to the client: <Money amount={b.payment.refundDue} /></>}
+                </p>
+              ) : (
+                <p className="muted small">The <Money amount={b.depositAmount} /> deposit is non-refundable unless the salon cancels.</p>
+              )}
               {b.termsVersion && (
                 <p className="muted small">Booking policy and Terms v{b.termsVersion} agreed to{b.termsAcceptedAt ? ` on ${formatDateTime(b.termsAcceptedAt)}` : ''}.</p>
               )}
@@ -132,6 +155,7 @@ export function BookingDetails({ booking: b, onClose }) {
               {b.payment?.confirmedAt && <li><span>Confirmed</span><time>{formatDateTime(b.payment.confirmedAt)}</time></li>}
               {balanceReceived && <li><span>Balance received</span><time>{formatDateTime(b.payment.balanceReceivedAt)}</time></li>}
               {b.cancellation && <li><span>Cancelled</span><time>{formatDateTime(b.cancellation.cancelledAt)}</time></li>}
+              {b.payment?.refundSentAt && <li><span>Refund sent</span><time>{formatDateTime(b.payment.refundSentAt)}</time></li>}
             </ol>
           </Section>
         </div>

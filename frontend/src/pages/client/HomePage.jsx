@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { useLocation } from 'react-router'
+import { Link, useLocation, useNavigate } from 'react-router'
 import { api } from '../../api'
 import { useAuth } from '../../auth/AuthContext'
 import { useAsync } from '../../hooks/useAsync'
@@ -33,6 +33,10 @@ export default function HomePage() {
   const salonHours = useAsync(() => api.catalog.hours(), [])
   const hours = formatHours(salonHours.data ?? { openingTime: schedule.openingTime, closingTime: schedule.defaultClosingTime })
   const bookTo = user ? '/book' : '/register'
+  // Shown once, after sign-up and email verification.
+  const navigate = useNavigate()
+  const welcome = location.state?.welcome === 'verified'
+  const dismissWelcome = () => navigate(location.pathname + location.hash, { replace: true, state: null })
 
   // Photo viewer (Our Works photos and Leyah's price card); focus goes back to whatever opened it.
   const [viewer, setViewer] = useState({ open: false, photo: null })
@@ -81,6 +85,14 @@ export default function HomePage() {
 
   return (
     <div className="home" ref={rootRef}>
+      {welcome && (
+        <div className="hm-welcome" role="status">
+          <span className="hm-welcome-check" aria-hidden="true">✓</span>
+          <p><strong>Your account is ready!</strong> Your email is verified. Log in to book your first appointment.</p>
+          {!user && <Link to="/login" className="btn btn-primary btn-sm">Log in</Link>}
+          <button type="button" className="hm-welcome-close" onClick={dismissWelcome} aria-label="Dismiss">×</button>
+        </div>
+      )}
       <Intro plan={intro} />
       <Hero bookTo={bookTo} deposit={deposit} typingStartsAfter={intro.lettersDone + 900} onJump={jump} />
       <CloseupTour catalog={catalog.data} />

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { NavLink, useLocation } from 'react-router'
+import { useSalon } from './SalonProfile'
 
 const GROUPS = [
   {
@@ -110,6 +111,7 @@ export function AdminNav({ user, onSignOut, menuOpen }) {
   const close = () => setOpenId(null)
   const toggle = (id) => () => setOpenId((current) => (current === id ? null : id))
   const initial = user.firstName?.trim()[0]?.toUpperCase() ?? '?'
+  const { photo } = useSalon() // Leyah's photo from her profile
 
   return (
     <nav ref={nav} id="site-nav" className={menuOpen ? 'site-nav site-nav-admin open' : 'site-nav site-nav-admin'} aria-label="Main">
@@ -124,7 +126,7 @@ export function AdminNav({ user, onSignOut, menuOpen }) {
       ))}
       <div className="nav-profile">
         <NavDropdown id="profile" align="end" triggerClass="nav-profile-trigger" open={openId === 'profile'} onToggle={toggle('profile')} onClose={close}
-          label={<><span className="nav-avatar" aria-hidden="true">{initial}</span><span className="sr-only">Account: </span><span className="nav-profile-name">{user.firstName}</span></>}>
+          label={<><span className="nav-avatar" aria-hidden="true">{photo ? <img src={photo} alt="" /> : initial}</span><span className="sr-only">Account: </span><span className="nav-profile-name">{user.firstName}</span></>}>
           <div className="nav-account">
             <strong>{user.firstName} {user.lastName}</strong>
             <span>@{user.username}</span>
@@ -136,5 +138,44 @@ export function AdminNav({ user, onSignOut, menuOpen }) {
         </NavDropdown>
       </div>
     </nav>
+  )
+}
+
+/**
+ * A client's account menu, laid out like Leyah's: their photo (or initial) and first name, opening to who they are signed
+ * in as, My profile and Log out (My bookings is already in the top bar). Clicking elsewhere or moving to another page closes it.
+ */
+export function ClientAccountMenu({ user, photo, onSignOut }) {
+  const { pathname } = useLocation()
+  const [open, setOpen] = useState(false)
+  const [closedAt, setClosedAt] = useState(pathname)
+  const box = useRef(null)
+  if (closedAt !== pathname) {
+    setClosedAt(pathname)
+    setOpen(false)
+  }
+  useEffect(() => {
+    if (!open) return undefined
+    const away = (e) => { if (!box.current?.contains(e.target)) setOpen(false) }
+    document.addEventListener('pointerdown', away)
+    return () => document.removeEventListener('pointerdown', away)
+  }, [open])
+  const close = () => setOpen(false)
+  const initial = user.firstName?.trim()[0]?.toUpperCase() ?? '?'
+
+  return (
+    <div className="nav-profile" ref={box}>
+      <NavDropdown id="client-account" align="end" triggerClass="nav-profile-trigger" open={open} onToggle={() => setOpen((v) => !v)} onClose={close}
+        label={<><span className="nav-avatar" aria-hidden="true">{photo ? <img src={photo} alt="" /> : initial}</span><span className="sr-only">Account: </span><span className="nav-profile-name">{user.firstName}</span></>}>
+        <div className="nav-account">
+          <strong>{user.firstName} {user.lastName}</strong>
+          <span>@{user.username}</span>
+          <span>{user.email}</span>
+          <span className="nav-account-role">Client</span>
+        </div>
+        <NavLink to="/profile" className="nav-panel-link" onClick={close}>My profile</NavLink>
+        <button type="button" className="nav-panel-link nav-signout" onClick={onSignOut}>Log out</button>
+      </NavDropdown>
+    </div>
   )
 }

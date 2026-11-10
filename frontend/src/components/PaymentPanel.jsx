@@ -1,6 +1,7 @@
 import { useRef, useState } from 'react'
 import { LegalDocumentModal } from './Modal'
 import { Alert, Button, Money, StatusBadge } from './ui'
+import { useSalon } from './SalonProfile'
 
 const Icon = ({ children, className = 'agree-icon' }) => (
   <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round"
@@ -36,6 +37,7 @@ export const balanceAfter = (quote, option) => Math.max(0, quote.total - amountN
  */
 export function PaymentPanel({ quote, option, onOptionChange, onPay, error }) {
   const [method, setMethod] = useState('GCash')
+  const { paymentAccountName } = useSalon()
   const [understood, setUnderstood] = useState(false)
   const [read, setRead] = useState(false) // opened the Terms and reached the end
   const [nudge, setNudge] = useState(null)
@@ -93,6 +95,7 @@ export function PaymentPanel({ quote, option, onOptionChange, onPay, error }) {
             </label>
           ))}
         </div>
+        {paymentAccountName && <p className="pay-to muted small">Account name: <strong>{paymentAccountName}</strong></p>}
       </fieldset>
 
       <div>

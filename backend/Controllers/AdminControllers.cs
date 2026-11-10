@@ -32,6 +32,9 @@ public sealed class AdminBookingsController(IAdminBookingService bookings) : Con
     [HttpGet("{id:int}")]
     public Task<BookingResponse> Get(int id, CancellationToken ct) => bookings.GetAsync(id, ct);
 
+    [HttpGet("{id:int}/receipt")]
+    public Task<ReceiptResponse> Receipt(int id, CancellationToken ct) => bookings.GetReceiptAsync(id, ct);
+
     /// <summary>How many bookings each day of a month has, for the calendar on the Bookings page.</summary>
     [HttpGet("calendar")]
     public Task<IReadOnlyList<BookingCalendarDayResponse>> Calendar([FromQuery] int year, [FromQuery] int month, CancellationToken ct) =>
@@ -44,6 +47,10 @@ public sealed class AdminBookingsController(IAdminBookingService bookings) : Con
     [HttpPost("{id:int}/complete")]
     public Task<BookingResponse> Complete(int id, [FromBody(EmptyBodyBehavior = EmptyBodyBehavior.Allow)] CompleteBookingRequest? request, CancellationToken ct) =>
         bookings.CompleteAsync(id, request, ct);
+
+    [HttpPost("{id:int}/refund")]
+    public Task<BookingResponse> RecordRefund(int id, RecordRefundRequest request, CancellationToken ct) =>
+        bookings.RecordRefundAsync(id, request, ct);
 
     [HttpPost("{id:int}/balance")]
     public Task<BookingResponse> RecordBalance(int id, RecordBalanceRequest request, CancellationToken ct) =>
@@ -66,8 +73,19 @@ public sealed class AdminBookingsController(IAdminBookingService bookings) : Con
 [ApiController]
 [Authorize(Roles = Roles.Administrator)]
 [Route("api/admin/clients")]
-public sealed class AdminClientDataController(IClientDataService clients) : ControllerBase
+public sealed class AdminClientDataController(IClientDataService clients, IClientProfileService clientProfile) : ControllerBase
 {
+    /// <summary>A client's profile photo, so Leyah recognises who is coming.</summary>
+    [HttpGet("{id:int}/photo")]
+    public async Task<IActionResult> Photo(int id, CancellationToken ct)
+    {
+        var photo = await clientProfile.OpenPhotoAsync(id, ct);
+        if (photo is null) return NotFound();
+        Response.Headers.CacheControl = "private, max-age=86400";
+        Response.Headers["X-Content-Type-Options"] = "nosniff";
+        return File(photo.Value.Content, photo.Value.ContentType);
+    }
+
     /// <summary>POST so the client's email stays out of addresses, which web servers and proxies log.</summary>
     [HttpPost("find")]
     public Task<ClientDataResponse> Find(EmailRequest request, CancellationToken ct) => clients.FindByEmailAsync(request.Email, ct);
@@ -200,4 +218,26 @@ public sealed class AdminFeedbackController(IFeedbackService feedback) : Control
     [HttpGet]
     public Task<FeedbackListResponse> List([FromQuery] int page = 1, [FromQuery] int pageSize = 20, CancellationToken ct = default) =>
         feedback.GetAllAsync(page, pageSize, ct);
+}
+
+/// <summary>Leyah's salon details, photo and email alert switches (her profile page).</summary>
+[ApiController]
+[Authorize(Roles = Roles.Administrator)]
+[Route("api/admin/salon-settings")]
+public sealed class AdminSalonSettingsController(ISalonProfileService salon) : ControllerBase
+{
+    [HttpGet]
+    public Task<SalonSettingsResponse> Get(CancellationToken ct) => salon.GetAsync(ct);
+
+    [HttpPut]
+    public Task<SalonSettingsResponse> Update(UpdateSalonSettingsRequest request, CancellationToken ct) =>
+        salon.UpdateAsync(User.GetUserId(), request, ct);
+
+    [HttpPost("photo")]
+    [RequestSizeLimit(SalonProfileService.PhotoMaxBytes + 64 * 1024)]
+    [RequestFormLimits(MultipartBodyLengthLimit = SalonProfileService.PhotoMaxBytes + 64 * 1024)]
+    public Task<SalonSettingsResponse> UploadPhoto(IFormFile? file, CancellationToken ct) => salon.UploadPhotoAsync(User.GetUserId(), file, ct);
+
+    [HttpDelete("photo")]
+    public Task<SalonSettingsResponse> RemovePhoto(CancellationToken ct) => salon.RemovePhotoAsync(User.GetUserId(), ct);
 }

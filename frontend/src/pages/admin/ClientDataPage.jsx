@@ -5,6 +5,7 @@ import { useAsync, useDebouncedValue } from '../../hooks/useAsync'
 import { formatDateTime } from '../../lib/format'
 import { Alert, Button, Card, PageHeader, PageLoader, Pager, Spinner, TextField } from '../../components/ui'
 import { Modal } from '../../components/Modal'
+import { apiPhotoSrc } from '../../lib/photos'
 
 const CONFIRM_WORD = 'DELETE'
 const PAGE_SIZE = 20
@@ -80,7 +81,14 @@ export default function ClientDataPage() {
                 <tbody>
                   {list.data.items.map((c) => (
                     <tr key={c.id}>
-                      <td>@{c.username}</td>
+                      <td>
+                        <span className="client-cell">
+                          {apiPhotoSrc(c.photoUrl, c.photoDataUrl)
+                            ? <img className="client-avatar" src={apiPhotoSrc(c.photoUrl, c.photoDataUrl)} alt="" />
+                            : <span className="client-avatar" data-initial={c.firstName.slice(0, 1)} aria-hidden="true" />}
+                          @{c.username}
+                        </span>
+                      </td>
                       <td>{c.firstName} {c.lastName}</td>
                       <td>{c.email}{!c.emailVerified && <span className="muted small"> (not verified)</span>}</td>
                       <td>{c.phoneNumber}</td>
@@ -158,7 +166,7 @@ function ConfirmDeleteDialog({ client, onDeleted, onClose }) {
           <h3>Deleted</h3>
           <ul>
             <li>Name, username, email and phone number, and the account's sign-in</li>
-            <li>Design photos, notes for Leyah, feedback comments and any saved booking</li>
+            <li>Profile photo, design photos, notes for Leyah, feedback comments and any saved booking</li>
             <li>Cancellation explanations and the account's security records</li>
           </ul>
         </div>

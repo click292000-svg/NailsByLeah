@@ -23,7 +23,7 @@ public sealed class DashboardService(
     private const int UpcomingDays = 7;
     private const int BalanceLookbackDays = 30;
     private const int MaxDaysAway = 366;
-    private static readonly string[] AttentionOrder = ["CheckPayment", "DatePassed", "BalanceNotRecorded"];
+    private static readonly string[] AttentionOrder = ["CheckPayment", "RefundDue", "DatePassed", "BalanceNotRecorded"];
 
     public async Task<DashboardResponse> GetAsync(DateOnly? date = null, CancellationToken ct = default)
     {
@@ -48,7 +48,7 @@ public sealed class DashboardService(
         var attention = new List<DashboardAttentionItem>();
         foreach (var b in await bookings.GetAttentionCandidatesAsync(today, today.AddDays(-BalanceLookbackDays), ct))
         {
-            var kind = b.Status switch
+            var kind = b.RefundDue > 0 && b.RefundSentAt is null ? "RefundDue" : b.Status switch
             {
                 BookingStatus.Pending or BookingStatus.Confirmed when IsOver(b) => "DatePassed",
                 BookingStatus.Pending => "CheckPayment",

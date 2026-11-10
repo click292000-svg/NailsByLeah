@@ -3,6 +3,14 @@ import userEvent from '@testing-library/user-event'
 import { CLIENT, renderApp } from './helpers'
 import { getDb } from './mockBackend/db'
 
+/** Opens both documents from the sign-up form and closes each once read (a short page counts as read straight away). */
+async function readBothDocuments(user) {
+  for (const name of ['Terms & Conditions', 'Privacy Policy']) {
+    await user.click(screen.getAllByRole('button', { name }).find((b) => b.closest('form')))
+    await user.click(await screen.findByRole('button', { name: 'Done' }))
+  }
+}
+
 describe('Registration', () => {
   it('shows "Username is already taken." for an existing username (7.4)', async () => {
     const user = userEvent.setup()
@@ -19,6 +27,7 @@ describe('Registration', () => {
     const submit = await screen.findByRole('button', { name: 'Create account' })
 
     expect(submit).toBeDisabled()
+    await readBothDocuments(user)
     await user.click(screen.getByRole('checkbox'))
     expect(submit).toBeEnabled()
   })
@@ -61,6 +70,7 @@ describe('Registration', () => {
     await user.type(screen.getByLabelText(/Phone Number/), '09223334444')
     await user.type(screen.getByLabelText(/^Password( \*)?$/), 'BeaPass123')
     await user.type(screen.getByLabelText(/Confirm Password/), 'BeaPass123')
+    await readBothDocuments(user)
     await user.click(screen.getByRole('checkbox'))
     await user.click(screen.getByRole('button', { name: 'Create account' }))
 
@@ -69,7 +79,25 @@ describe('Registration', () => {
     await user.type(screen.getByLabelText(/Verification code/), code)
     await user.click(screen.getByRole('button', { name: 'Verify email' }))
 
-    expect(await screen.findByRole('heading', { name: 'Email verified' })).toBeInTheDocument()
+    // Registration complete: the landing page welcomes the new client.
+    expect(await screen.findByText('Your account is ready!')).toBeInTheDocument()
+    expect(screen.getByText('Your account is ready!').closest('.hm-welcome')).toHaveTextContent('Log in to book your first appointment')
+    expect(screen.queryByRole('heading', { name: 'Verify your email' })).toBeNull()
+  })
+
+  it('lets the box be ticked only after both documents are read to the end', async () => {
+    const user = userEvent.setup()
+    renderApp('/register')
+    const box = await screen.findByRole('checkbox')
+    expect(box).toBeDisabled()
+
+    await user.click(screen.getAllByRole('button', { name: 'Terms & Conditions' }).find((b) => b.closest('form')))
+    await user.click(await screen.findByRole('button', { name: 'Done' }))
+    expect(box).toBeDisabled() // the Privacy Policy is still unread
+
+    await user.click(screen.getAllByRole('button', { name: 'Privacy Policy' }).find((b) => b.closest('form')))
+    await user.click(await screen.findByRole('button', { name: 'Done' }))
+    expect(box).toBeEnabled()
   })
 })
 
@@ -96,7 +124,13 @@ describe('Reset Password page (7.5)', () => {
     const link = new URL(getDb().outbox.find((e) => e.link).link)
     expect(link.search).toBe('') // the token travels after "#", never in the part sent to the server
     renderApp(link.pathname + link.hash)
-    await user.type(await screen.findByLabelText(/^New password/), 'NewSecret123')
+    // The current password is refused; the link still works for a different one.
+    await user.type(await screen.findByLabelText(/^New password/), CLIENT.password)
+    await user.click(screen.getByRole('button', { name: 'Change password' }))
+    expect(await screen.findByText('Your new password must be different from your current password.')).toBeInTheDocument()
+
+    await user.clear(screen.getByLabelText(/^New password/))
+    await user.type(screen.getByLabelText(/^New password/), 'NewSecret123')
     await user.click(screen.getByRole('button', { name: 'Change password' }))
 
     expect(await screen.findByText(/Your password has been changed/)).toBeInTheDocument()
