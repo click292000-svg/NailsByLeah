@@ -2,7 +2,7 @@ import { act, fireEvent, render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { PaymentPanel } from '../components/PaymentPanel'
 import { CancelBookingDialog } from '../components/BookingDialogs'
-import { CLIENT, renderApp, signIn, pickDate } from './helpers'
+import { CLIENT, readTermsAndAgree, renderApp, signIn, pickDate, pickShade } from './helpers'
 import { dateFromToday } from '../lib/dates'
 import { getDb } from './mockBackend/db'
 import { lookups } from './mockBackend/data/lookups'
@@ -17,14 +17,21 @@ describe('Payment step', () => {
     const onPay = vi.fn()
     render(panel({ onPay }))
 
-    expect(screen.getByRole('note')).toHaveTextContent('The ₱150.00 booking deposit is non-refundable, including if you cancel or do not show up.')
+    expect(screen.getByRole('note')).toHaveTextContent('₱150.00 booking depositNon-refundable for cancellations and no-shows. This amount is deducted from your total service cost.')
     expect(screen.getByText('Please accept the booking policy to continue.')).toBeInTheDocument()
     const pay = screen.getByRole('button', { name: /Pay/ })
     expect(pay).toBeDisabled()
     await user.click(pay)
     expect(onPay).not.toHaveBeenCalled()
 
-    await user.click(screen.getByRole('checkbox', { name: /I agree to the booking policy/ }))
+    // The box can't be ticked before the Terms have been opened and read to the end.
+    const agree = screen.getByRole('checkbox', { name: /I have read and agree to the booking policies/ })
+    expect(agree).toBeDisabled()
+    expect(screen.getByRole('button', { name: /Review booking policies/ })).toHaveTextContent('Required before payment')
+    await user.click(agree.closest('label'))
+    expect(screen.getByText('Please open and read the booking policies to the end first.')).toBeInTheDocument()
+
+    await readTermsAndAgree(user)
     expect(pay).toBeEnabled()
   })
 
@@ -32,17 +39,22 @@ describe('Payment step', () => {
     const user = userEvent.setup()
     render(panel({ onPay: vi.fn() }))
 
-    await user.click(screen.getByRole('button', { name: 'Terms & Conditions' }))
+    await user.click(screen.getByRole('button', { name: /Review booking policies/ }))
 
-    expect(screen.getByRole('dialog', { name: 'Terms & Conditions' })).toBeInTheDocument()
-    expect(screen.getByRole('checkbox', { name: /I agree to the booking policy/ })).not.toBeChecked()
+    const dialog = screen.getByRole('dialog', { name: 'Terms & Conditions' })
+    expect(dialog).toHaveTextContent('You have read to the end.')
+    await user.click(within(dialog).getByRole('button', { name: 'Done' }))
+    expect(screen.getByRole('button', { name: /Review booking policies/ })).toHaveTextContent('Read to the end')
+    const agree = screen.getByRole('checkbox', { name: /I have read and agree to the booking policies/ })
+    expect(agree).toBeEnabled()
+    expect(agree).not.toBeChecked() // reading never ticks it
   })
 
   it('sends only one payment when Pay is clicked several times quickly (7.7)', async () => {
     let finish
     const onPay = vi.fn(() => new Promise((resolve) => { finish = resolve }))
     render(panel({ onPay }))
-    fireEvent.click(screen.getByRole('checkbox', { name: /I agree to the booking policy/ }))
+    await readTermsAndAgree(userEvent.setup())
     const pay = screen.getByRole('button', { name: /Pay/ })
 
     fireEvent.click(pay)
@@ -113,51 +125,58 @@ describe('Booking flow', () => {
     await signIn(CLIENT)
     renderApp('/book')
 
-    // Step 1: service and add-ons; the total updates as they change (Ref 10.4).
-    await user.click(await screen.findByRole('radio', { name: /With Design/ }))
+    // Step 1: service, colour and add-ons; the total updates as they change (Ref 10.4).
+    await user.click(await screen.findByRole('checkbox', { name: /With Design/ }))
     const total = () => within(screen.getByRole('complementary')).getByText('Total').nextSibling.textContent
     expect(total()).toBe('₱400.00')
+    // A new add-on goes on both hands, all 10 nails; one hand is 5, and the counter lowers it for an accent.
     await user.click(screen.getByRole('checkbox', { name: /French Tip/ }))
-    await user.click(screen.getByRole('button', { name: 'More nails for French Tip' }))
-    await user.click(screen.getByRole('button', { name: 'More nails for French Tip' }))
+    expect(screen.getByRole('radio', { name: 'Both hands' })).toHaveAttribute('aria-checked', 'true')
+    expect(screen.getByText('10 nails')).toBeInTheDocument()
+    expect(total()).toBe('₱550.00')
+    await user.click(screen.getByRole('radio', { name: 'Right hand' }))
+    expect(screen.getByText('5 nails')).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Fewer nails for French Tip' }))
+    await user.click(screen.getByRole('button', { name: 'Fewer nails for French Tip' }))
     expect(screen.getByText('3 nails')).toBeInTheDocument()
     expect(total()).toBe('₱445.00')
-    // Which hand the add-on goes on is required before continuing.
-    await user.click(screen.getByRole('button', { name: 'Continue' }))
-    expect(screen.getByText(/French Tip: Choose the left hand/)).toBeInTheDocument()
-    await user.click(screen.getByRole('radio', { name: 'Right hand' }))
-    await user.click(screen.getByRole('button', { name: 'Continue' }))
+    // A colour is required for a new set.
+    await user.click(screen.getByRole('button', { name: /^Next:/ }))
+    expect(screen.getByText('Choose a nail colour to continue.')).toBeInTheDocument()
+    await pickShade(user, '06')
+    expect(within(screen.getByRole('complementary')).getByText('#06 – Light Pink-Lavender')).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: /^Next:/ }))
 
-    // Step 2: booked times, the 30-minute break after them and times where the 90-minute service doesn't fit
+    // Step 2: booked times, the 30-minute break after them and times where the 3-hour service doesn't fit
     // before the next appointment are disabled (Ref 10.1). Seeded booking #10: 1:00 PM, 60 minutes.
     pickDate(dateFromToday(5))
     expect(await screen.findByRole('button', { name: /^1:00.*Booked/ })).toBeDisabled()
     expect(screen.getByRole('button', { name: /^2:00.*Break until 2:30 PM/ })).toBeDisabled() // the break, not a booking
-    expect(screen.getByRole('button', { name: /^11:30.*Too close to the 1:00 PM appointment/ })).toBeDisabled() // would end 1:00 PM
+    expect(screen.getByRole('button', { name: /^11:00.*Too close to the 1:00 PM appointment/ })).toBeDisabled() // would end 2:00 PM
     expect(screen.getByText('1:00 PM – 2:00 PM')).toBeInTheDocument() // "Taken:" shows the real appointment
-    expect(screen.getByRole('button', { name: /^11:00 AM – 12:30 PM.*Available/ })).toBeEnabled()
-    expect(screen.getByRole('button', { name: /^2:30.*Available/ })).toBeEnabled()
+    expect(screen.getByRole('button', { name: /^2:30 PM – 5:30 PM.*Available/ })).toBeEnabled()
     pickDate(dateFromToday(3))
     await user.click(await screen.findByRole('button', { name: /^11:00.*Available/ }))
-    await user.click(screen.getByRole('button', { name: 'Continue' }))
+    await user.click(screen.getByRole('button', { name: /^Next:/ }))
 
     // Step 3: note for Leyah (Ref 2.4).
     // The note is typed; a quick-add suggestion adds a common phrase to it.
     await user.type(screen.getByLabelText(/Note for Leyah/), 'Short almond nails please')
     await user.click(screen.getByRole('button', { name: /I'll bring a reference photo/ }))
     expect(screen.getByLabelText(/Note for Leyah/)).toHaveValue("Short almond nails please. I'll bring a reference photo")
-    await user.click(screen.getByRole('button', { name: 'Continue' }))
+    await user.click(screen.getByRole('button', { name: /^Next:/ }))
 
     // Step 4: summary and payment.
     expect(screen.getByRole('heading', { name: 'Booking summary' })).toBeInTheDocument()
     expect(within(screen.getByRole('region', { name: 'Booking policy' })).getByText(/reschedule online up to 24 hours before/)).toBeInTheDocument()
     expect(screen.getByText(/French Tip — Right hand/)).toBeInTheDocument()
+    expect(screen.getByText('#06 – Light Pink-Lavender', { selector: '.review-color' , exact: false })).toBeInTheDocument()
     expect(screen.getByText("Short almond nails please. I'll bring a reference photo")).toBeInTheDocument()
     // Paying in full: the summary and the Pay button switch to the whole amount (₱400 + French Tip × 3 = ₱445).
     await user.click(screen.getByRole('radio', { name: 'Full payment' }))
     expect(screen.getByText('Full payment now').nextSibling).toHaveTextContent('₱445.00')
     await user.click(screen.getByRole('radio', { name: 'Maya' }))
-    await user.click(screen.getByRole('checkbox', { name: /I agree to the booking policy/ }))
+    await readTermsAndAgree(user)
     await user.click(screen.getByRole('button', { name: /Pay ₱445.00 in full/ }))
 
     // Paid, but waiting for Leyah to confirm.
@@ -167,7 +186,7 @@ describe('Booking flow', () => {
     const payment = getDb().payments.at(-1)
     expect(screen.getByText(payment.referenceNumber)).toBeInTheDocument()
     expect(payment).toMatchObject({ method: 'Maya', option: 'Full', amount: 445, balanceAfter: 0 })
-    expect(getDb().bookings.at(-1)).toMatchObject({ bookingDate: dateFromToday(3), startTime: '11:00:00', durationMinutes: 90, status: 'Pending', amountPaid: 445 })
+    expect(getDb().bookings.at(-1)).toMatchObject({ bookingDate: dateFromToday(3), startTime: '11:00:00', durationMinutes: 180, status: 'Pending', amountPaid: 445, nailColor: '#06' })
     expect(getDb().bookings.at(-1).note).toBe("Short almond nails please. I'll bring a reference photo")
     expect(getDb().bookingAddOns.at(-1)).toMatchObject({ addOnId: 1, nailCount: 3, hand: 'Right' })
   })

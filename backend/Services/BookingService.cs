@@ -27,6 +27,9 @@ public interface IClientBookingService
 public interface IAdminBookingService
 {
     Task<PagedResponse<BookingResponse>> SearchAsync(BookingSearchQuery query, CancellationToken ct = default);
+
+    /// <summary>The admin calendar: booking counts for each day of a month that has any.</summary>
+    Task<IReadOnlyList<BookingCalendarDayResponse>> GetCalendarAsync(int year, int month, CancellationToken ct = default);
     Task<BookingResponse> GetAsync(int bookingId, CancellationToken ct = default);
     /// <summary>The administrator checks the payment and confirms the booking (a separate step from paying).</summary>
     Task<BookingResponse> ConfirmAsync(int adminId, int bookingId, CancellationToken ct = default);
@@ -72,9 +75,15 @@ public sealed class BookingService(
         if (await payments.FindByIdempotencyKeyAsync(request.IdempotencyKey, ct) is { } earlier)
             return (await BuildCreateResponseAsync(clientId, earlier, ct), false);
 
-        var selection = await prices.ResolveSelectionAsync(request.ServiceId, request.AddOns, ct);
+        // The client must have agreed to the Terms version in force now, not one shown before an update.
+        if (request.TermsVersion != legalOptions.Value.TermsVersion)
+            throw new ConflictException(
+                "The booking policy and Terms & Conditions have been updated. Please read them again and agree before paying.", "terms_outdated");
+
+        var selection = await prices.ResolveSelectionAsync(request.ServiceId, request.AddOns, request.RemovalServiceId, ct);
+        var nailColor = ResolveColor(selection.Service, request.NailColor);
         var quote = prices.Calculate(selection);
-        var duration = selection.Service.DurationMinutes;
+        var duration = selection.DurationMinutes;
         try
         {
             await slots.EnsureBookableAsync(request.BookingDate, request.StartTime, duration, movingBookingId: null, ct);
@@ -109,12 +118,17 @@ public sealed class BookingService(
                     ClientId = clientId,
                     ServiceId = selection.Service.Id,
                     ServicePrice = selection.Service.CalculatePrice(1),
+                    RemovalServiceId = selection.Removal?.Id,
+                    RemovalPrice = selection.Removal?.CalculatePrice(1) ?? 0,
+                    NailColor = nailColor,
+                    TermsVersion = legalOptions.Value.TermsVersion,
                     DepositAmount = quote.Deposit,
                     BookingDate = request.BookingDate,
                     StartTime = request.StartTime,
                     DurationMinutes = duration,
                     Note = string.IsNullOrWhiteSpace(request.Note) ? null : InputNormalizer.Text(request.Note),
                     Status = BookingStatus.Pending,
+                    TermsAcceptedAt = now,
                     CreatedAt = now,
                     UpdatedAt = now,
                     AddOns = selection.AddOns.Select(a => new BookingAddOn
@@ -136,7 +150,7 @@ public sealed class BookingService(
 
                 var payment = await paymentService.CollectAsync(booking, request.PaymentOption, request.PaymentMethod, request.IdempotencyKey, tx);
                 audit.Record(AuditActions.BookingCreated, nameof(Booking), booking.Id,
-                    $"{selection.Service.Name} on {Describe(booking.BookingDate, booking.StartTime)}, total PHP {booking.TotalPrice:0.00}. Booking policy and Terms v{legalOptions.Value.TermsVersion} accepted");
+                    $"{selection.Service.Name}{(selection.Removal is { } r ? $" + removal ({r.Name})" : "")} on {Describe(booking.BookingDate, booking.StartTime)}, total PHP {booking.TotalPrice:0.00}. Booking policy and Terms v{legalOptions.Value.TermsVersion} accepted");
                 return new CreateOutcome(payment, booking);
             }, ct);
         }
@@ -201,11 +215,30 @@ public sealed class BookingService(
         if (booking.StartsAtLocal <= clock.LocalNow)
             throw new ConflictException("This appointment has already started or passed and can no longer be cancelled.", "invalid_status");
 
-        await CancelCoreAsync(booking, clientId, request.Reason.ToString(), explanation: null, ct);
+        // Only "Others" takes the client's own words; the listed reasons speak for themselves.
+        var explanation = request.Reason == ClientCancellationReason.Others ? InputNormalizer.Text(request.Explanation) : null;
+        if (request.Reason == ClientCancellationReason.Others && string.IsNullOrEmpty(explanation))
+            throw new ValidationAppException("explanation", ClientCancelRequestValidator.ExplanationRequired);
+        await CancelCoreAsync(booking, clientId, request.Reason.ToString(), explanation, ct);
         var cancelled = await ReloadAsync(booking.Id, ct);
-        var reasonLabel = Labels.ForCancellationReason(request.Reason.ToString());
+        var reasonLabel = Labels.ForCancellationReason(request.Reason.ToString()) + (explanation is null ? "" : $": {explanation}");
         await background.EnqueueAsync((n, stop) => n.SendSalonCancellationAsync(cancelled, reasonLabel, stop), $"cancellation alert for booking {booking.Id}");
         return Map(cancelled, includeClient: false);
+    }
+
+    /// <summary>The colour must be one on the salon's list; a removal on its own has none.</summary>
+    private string? ResolveColor(CatalogService service, string? requested)
+    {
+        var color = string.IsNullOrWhiteSpace(requested) ? null : InputNormalizer.Text(requested);
+        if (!service.NeedsColor())
+            return null;
+        var colors = bookingOptions.Value.NailColors;
+        if (colors.Length == 0)
+            return color; // no list configured: nothing to choose from, so nothing is required
+        if (color is null)
+            throw new ValidationAppException("nailColor", "Choose a nail colour.");
+        return colors.FirstOrDefault(c => string.Equals(c, color, StringComparison.OrdinalIgnoreCase))
+               ?? throw new ValidationAppException("nailColor", "Choose one of the listed colours.");
     }
 
     // ---- Administrator operations ----
@@ -215,12 +248,22 @@ public sealed class BookingService(
         var page = Math.Max(1, query.Page);
         var pageSize = Math.Clamp(query.PageSize, 1, 100);
         var (items, total) = await bookings.SearchAsync(
-            new BookingSearchCriteria(query.Date, query.Status, query.ClientName, page, pageSize), ct);
+            new BookingSearchCriteria(query.Date, query.Status, query.ClientName, page, pageSize, query.ServiceId), ct);
         return new PagedResponse<BookingResponse>(items.Select(b => Map(b, includeClient: true)).ToList(), page, pageSize, total);
     }
 
     public async Task<BookingResponse> GetAsync(int bookingId, CancellationToken ct = default) =>
         Map(await ReloadAsync(bookingId, ct), includeClient: true);
+
+    public async Task<IReadOnlyList<BookingCalendarDayResponse>> GetCalendarAsync(int year, int month, CancellationToken ct = default)
+    {
+        if (year is < 2000 or > 2100 || month is < 1 or > 12)
+            throw new ValidationAppException("month", "Choose a valid month.");
+        // Booking dates are stored as the salon's (Manila) calendar dates, so a month is just its first to last day.
+        var first = new DateOnly(year, month, 1);
+        return (await bookings.CountByDayAsync(first, first.AddMonths(1).AddDays(-1), ct))
+            .Select(d => new BookingCalendarDayResponse(d.Date, d.Count, d.ActiveCount)).ToList();
+    }
 
     public async Task<BookingResponse> ConfirmAsync(int adminId, int bookingId, CancellationToken ct = default)
     {
@@ -414,7 +457,13 @@ public static class BookingMapper
         b.ReferenceImages.Where(r => !r.IsDeleted).OrderBy(r => r.Id).Select(ReferenceImageService.ToResponse).ToList(),
         b.DurationMinutes,
         b.Note,
-        PaymentOf(b));
+        PaymentOf(b),
+        b.RemovalServiceId,
+        b.RemovalService?.Name,
+        b.RemovalPrice,
+        b.NailColor,
+        b.TermsVersion,
+        b.TermsAcceptedAt);
 
     // The first successful payment (bookings are paid once, when they are made).
     private static BookingPaymentResponse PaymentOf(Booking b)
@@ -428,6 +477,6 @@ public static class BookingMapper
 
     public static ReceiptResponse ToReceipt(Payment p, Booking b) => new(
         p.Id, b.Id, p.ReferenceNumber, p.Method.ToString(), p.Amount, "PHP", p.PaidAt, p.Status.ToString(),
-        Refundable: false, b.Service.Name, b.BookingDate, b.StartTime,
+        Refundable: false, b.ServiceDescription, b.BookingDate, b.StartTime,
         p.Option.ToString(), Labels.For(p.Option), b.TotalPrice, b.BalanceDue, b.Status.ToString());
 }

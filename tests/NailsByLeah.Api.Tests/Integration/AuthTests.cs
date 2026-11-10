@@ -174,6 +174,7 @@ public sealed class AuthTests(ApiFactory factory) : IClassFixture<ApiFactory>
     {
         var registered = factory.NewRegistration();
         await (await factory.NewClient().PostJsonAsync("/api/auth/register", registered)).ShouldHaveStatus(HttpStatusCode.Created);
+        factory.Clock.Advance(TimeSpan.FromSeconds(61)); // past the wait that sign-up's own code started
 
         var forReal = await factory.NewClient().PostJsonAsync(url, new EmailRequest(registered.Email));
         var forUnknown = await factory.NewClient().PostJsonAsync(url, new EmailRequest("nobody@test.local"));
@@ -181,6 +182,31 @@ public sealed class AuthTests(ApiFactory factory) : IClassFixture<ApiFactory>
         Assert.Equal(forUnknown.StatusCode, forReal.StatusCode);
         Assert.Equal(HttpStatusCode.OK, forReal.StatusCode);
         Assert.Equal(await forUnknown.Content.ReadAsStringAsync(), await forReal.Content.ReadAsStringAsync());
+    }
+
+    [Fact]
+    public async Task Another_verification_code_can_only_be_asked_for_a_minute_after_the_last()
+    {
+        var registration = factory.NewRegistration();
+        var client = factory.NewClient();
+        await (await client.PostJsonAsync("/api/auth/register", registration)).ShouldHaveStatus(HttpStatusCode.Created);
+
+        // Sign-up sent the first code, so asking again straight away is refused, with how long is left.
+        var tooSoon = await client.PostJsonAsync("/api/auth/resend-verification", new EmailRequest(registration.Email));
+        await tooSoon.ShouldHaveStatus(HttpStatusCode.TooManyRequests);
+        var problem = await tooSoon.ReadProblemAsync();
+        Assert.Equal("resend_cooldown", problem.ProblemCode());
+        Assert.InRange(problem.GetProperty("retryAfterSeconds").GetInt32(), 1, 60);
+
+        factory.Clock.Advance(TimeSpan.FromSeconds(61));
+        await (await client.PostJsonAsync("/api/auth/resend-verification", new EmailRequest(registration.Email))).ShouldHaveStatus(HttpStatusCode.OK);
+        await (await client.PostJsonAsync("/api/auth/resend-verification", new EmailRequest(registration.Email)))
+            .ShouldHaveStatus(HttpStatusCode.TooManyRequests);
+
+        // An unknown address waits too, so the answer can't tell the two apart.
+        await (await client.PostJsonAsync("/api/auth/resend-verification", new EmailRequest("nobody.twice@test.local"))).ShouldHaveStatus(HttpStatusCode.OK);
+        await (await client.PostJsonAsync("/api/auth/resend-verification", new EmailRequest("nobody.twice@test.local")))
+            .ShouldHaveStatus(HttpStatusCode.TooManyRequests);
     }
 
     [Fact] // The token goes after "#", which browsers never send to a server, so it stays out of hosting logs.

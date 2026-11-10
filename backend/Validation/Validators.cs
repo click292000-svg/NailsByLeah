@@ -21,6 +21,22 @@ public sealed class RegisterRequestValidator : AbstractValidator<RegisterRequest
     }
 }
 
+public sealed class UpdateProfileRequestValidator : AbstractValidator<UpdateProfileRequest>
+{
+    public UpdateProfileRequestValidator()
+    {
+        RuleFor(x => x.FirstName).PersonName("First Name");
+        RuleFor(x => x.LastName).PersonName("Last Name");
+        RuleFor(x => x.PhoneNumber).PhoneNumber();
+    }
+}
+
+public sealed class ClientSearchRequestValidator : AbstractValidator<ClientSearchRequest>
+{
+    public ClientSearchRequestValidator() =>
+        RuleFor(x => x.Search).MaximumLength(InputLimits.EmailMaxLength).WithMessage("The search is too long.");
+}
+
 public sealed class VerifyEmailRequestValidator : AbstractValidator<VerifyEmailRequest>
 {
     public VerifyEmailRequestValidator()
@@ -75,6 +91,7 @@ public sealed class CreateBookingRequestValidator : AbstractValidator<CreateBook
         addOns is null || addOns.Select(a => a.AddOnId).Distinct().Count() == addOns.Count;
 
     public const string DepositAcknowledgementMessage = "You must acknowledge that the booking deposit is non-refundable.";
+    public const string TermsMessage = "Please read and agree to the booking policy and Terms & Conditions.";
 
     public CreateBookingRequestValidator()
     {
@@ -87,6 +104,9 @@ public sealed class CreateBookingRequestValidator : AbstractValidator<CreateBook
         RuleFor(x => x.PaymentMethod).IsInEnum().WithMessage("Select GCash or Maya.");
         RuleFor(x => x.PaymentOption).IsInEnum().WithMessage("Choose to pay the deposit or the full amount.");
         RuleFor(x => x.DepositAcknowledged).Equal(true).WithMessage(DepositAcknowledgementMessage);
+        RuleFor(x => x.TermsVersion).NotEmpty().WithMessage(TermsMessage);
+        RuleFor(x => x.RemovalServiceId).GreaterThan(0).When(x => x.RemovalServiceId is not null).WithMessage("Select a removal.");
+        RuleFor(x => x.NailColor).MaximumLength(InputLimits.NailColorMaxLength).WithMessage("Choose one of the listed colours.");
         RuleFor(x => x.IdempotencyKey).NotEmpty().WithMessage("A payment request key is required.");
         RuleFor(x => x.ReferenceImageIds)
             .Must(ids => ids is null || ids.Count <= UploadLimits.ReferenceImagesPerBooking)
@@ -103,7 +123,16 @@ public sealed class RescheduleRequestValidator : AbstractValidator<RescheduleReq
 
 public sealed class ClientCancelRequestValidator : AbstractValidator<ClientCancelRequest>
 {
-    public ClientCancelRequestValidator() => RuleFor(x => x.Reason).IsInEnum().WithMessage("Select a cancellation reason.");
+    public const string ExplanationRequired = "Please tell us the reason.";
+
+    public ClientCancelRequestValidator()
+    {
+        RuleFor(x => x.Reason).IsInEnum().WithMessage("Select a cancellation reason.");
+        RuleFor(x => x.Explanation).Must(e => !string.IsNullOrWhiteSpace(e)).When(x => x.Reason == ClientCancellationReason.Others)
+            .WithMessage(ExplanationRequired);
+        RuleFor(x => x.Explanation).MaximumLength(InputLimits.ExplanationMaxLength)
+            .WithMessage($"Your reason must be {InputLimits.ExplanationMaxLength} characters or fewer.");
+    }
 }
 
 public sealed class AdminCancelRequestValidator : AbstractValidator<AdminCancelRequest>

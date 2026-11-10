@@ -12,6 +12,23 @@ public class Booking : IPayable, ICancellable, ISoftDeletable
     public int ServiceId { get; set; }
     public CatalogService Service { get; set; } = null!;
 
+    /// <summary>A removal done before the main service in the same appointment (optional).</summary>
+    public int? RemovalServiceId { get; set; }
+    public RemovalService? RemovalService { get; set; }
+
+    /// <summary>Price of the removal when the booking was made; 0 without one.</summary>
+    public decimal RemovalPrice { get; set; }
+
+    /// <summary>The nail colour the client chose (from the salon's list), or null for a removal only.</summary>
+    public string? NailColor { get; set; }
+
+    /// <summary>The Terms &amp; Conditions version the client agreed to when booking, and when.</summary>
+    public string? TermsVersion { get; set; }
+    public DateTime? TermsAcceptedAt { get; set; }
+
+    /// <summary>"With Design + Removal (My Work)": every service in the appointment.</summary>
+    public string ServiceDescription => RemovalService is { } removal ? $"{Service.Name} + Removal ({removal.Name})" : Service.Name;
+
     /// <summary>Price of the main service when the booking was made (Ref 13.6).</summary>
     public decimal ServicePrice { get; set; }
 
@@ -21,7 +38,7 @@ public class Booking : IPayable, ICancellable, ISoftDeletable
     public DateOnly BookingDate { get; set; }
     public TimeOnly StartTime { get; set; }
 
-    /// <summary>Length of the service when the booking was made, so later duration changes don't move existing appointments.</summary>
+    /// <summary>Length of the whole appointment (removal included) when the booking was made, so later duration changes don't move existing appointments.</summary>
     public int DurationMinutes { get; set; }
 
     /// <summary>Scheduled completion. The 30-minute gap before the next appointment starts here.</summary>
@@ -68,7 +85,7 @@ public class Booking : IPayable, ICancellable, ISoftDeletable
     public int? ConfirmedByUserId { get; set; }
     public User? ConfirmedBy { get; set; }
 
-    public decimal TotalPrice => ServicePrice + AddOns.Sum(a => a.LinePrice);
+    public decimal TotalPrice => ServicePrice + RemovalPrice + AddOns.Sum(a => a.LinePrice);
 
     /// <summary>Amount still to be paid at the salon: nothing after a full payment or once the balance is received.</summary>
     public decimal BalanceDue => Math.Max(0, TotalPrice - AmountPaid - BalanceReceived);

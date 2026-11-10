@@ -16,6 +16,7 @@ public interface IRegistrationService
     Task<UsernameAvailabilityResponse> CheckUsernameAsync(string username, CancellationToken ct = default);
     Task VerifyEmailAsync(VerifyEmailRequest request, CancellationToken ct = default);
     Task ResendVerificationAsync(string email, CancellationToken ct = default);
+    Task<User> UpdateProfileAsync(int userId, UpdateProfileRequest request, CancellationToken ct = default);
 }
 
 /// <summary>Creates client accounts and verifies their email addresses (Ref 1.2, 1.6, 9.1, 9.4).</summary>
@@ -28,7 +29,8 @@ public sealed class RegistrationService(
     IAuditLogger audit,
     ISalonClock clock,
     IOptions<AuthOptions> authOptions,
-    IOptions<LegalOptions> legalOptions) : IRegistrationService
+    IOptions<LegalOptions> legalOptions,
+    ResendCooldown resendCooldown) : IRegistrationService
 {
     public const string UsernameTakenMessage = "Username is already taken.";
 
@@ -45,7 +47,7 @@ public sealed class RegistrationService(
 
         var username = InputNormalizer.Text(request.Username);
         var email = InputNormalizer.Email(request.Email);
-        var phone = InputNormalizer.Text(request.PhoneNumber);
+        var phone = PhoneRule.Normalize(request.PhoneNumber);
 
         var errors = new Dictionary<string, string[]>();
         if (await users.UsernameExistsAsync(username, ct))
@@ -99,6 +101,7 @@ public sealed class RegistrationService(
 
         // The account is saved, so a failed email must not look like a failed sign-up: "resend code" recovers it.
         await background.EnqueueAsync((n, stop) => n.SendEmailVerificationAsync(user, code, stop), "verification code email");
+        resendCooldown.MarkSent(email);
         return user;
     }
 
@@ -148,7 +151,10 @@ public sealed class RegistrationService(
     public async Task ResendVerificationAsync(string email, CancellationToken ct = default)
     {
         // Always behaves the same from the caller's point of view, so it cannot be used to discover accounts.
-        var user = await users.FindByEmailAsync(InputNormalizer.Email(email), ct);
+        // The one-minute wait applies to every address, registered or not.
+        var normalized = InputNormalizer.Email(email);
+        resendCooldown.Start(normalized);
+        var user = await users.FindByEmailAsync(normalized, ct);
         if (user is null || user.EmailVerified)
             return;
 
@@ -161,6 +167,40 @@ public sealed class RegistrationService(
         await unitOfWork.SaveChangesAsync(ct);
         // Sent after the answer, so a real account doesn't answer slower (or fail) where an unknown email wouldn't.
         await background.EnqueueAsync((n, stop) => n.SendEmailVerificationAsync(user, code, stop), "verification code email");
+    }
+
+    public async Task<User> UpdateProfileAsync(int userId, UpdateProfileRequest request, CancellationToken ct = default)
+    {
+        var user = await users.GetByIdAsync(userId, ct) ?? throw new UnauthorizedAppException("Please log in again.");
+        if (PhoneRule.Problem(request.PhoneNumber) is { } phoneProblem)
+            throw new ValidationAppException("phoneNumber", phoneProblem);
+
+        var phone = PhoneRule.Normalize(request.PhoneNumber);
+        if (phone != user.PhoneNumber && await users.PhoneNumberUsedByOtherAsync(phone, user.Id, ct))
+            throw new ValidationAppException("phoneNumber", "This phone number is already registered.");
+
+        var (firstName, lastName) = (InputNormalizer.Text(request.FirstName), InputNormalizer.Text(request.LastName));
+        var changed = new List<string>();
+        if (firstName != user.FirstName || lastName != user.LastName) changed.Add("name");
+        if (phone != user.PhoneNumber) changed.Add("phone number");
+        if (changed.Count == 0)
+            return user;
+
+        user.FirstName = firstName;
+        user.LastName = lastName;
+        user.PhoneNumber = phone;
+        user.UpdatedAt = clock.UtcNow;
+        // The new values themselves stay out of the activity log (personal data).
+        audit.Record(AuditActions.ProfileUpdated, nameof(User), user.Id, $"Changed {string.Join(" and ", changed)}", user.Id);
+        try
+        {
+            await unitOfWork.SaveChangesAsync(ct);
+        }
+        catch (UniqueConstraintViolationException ex) when (ex.IndexName == IndexNames.UsersPhoneNumber)
+        {
+            throw new ValidationAppException("phoneNumber", "This phone number is already registered.");
+        }
+        return user;
     }
 
     private UserToken NewVerificationToken(int userId, string code, DateTime now) => new()

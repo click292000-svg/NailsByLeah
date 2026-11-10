@@ -102,7 +102,13 @@ public static class TestHelpers
         bool depositAcknowledged = true,
         params AddOnSelection[] addOns) =>
         new(serviceId, addOns, slot.Date, slot.Time, PaymentMethod.GCash, depositAcknowledged,
-            idempotencyKey ?? Guid.NewGuid());
+            idempotencyKey ?? Guid.NewGuid(), NailColor: Color, TermsVersion: TermsVersion);
+
+    /// <summary>The Terms version in force, which every booking must have agreed to.</summary>
+    public static readonly string TermsVersion = new NailsByLeah.Api.Configuration.LegalOptions().TermsVersion;
+
+    /// <summary>A colour from the list in appsettings.json.</summary>
+    public const string Color = "#06";
 
     /// <summary>The administrator confirms a paid booking (bookings stay Pending after payment until this).</summary>
     public static async Task<BookingResponse> ConfirmAsync(this HttpClient admin, int bookingId)

@@ -2,12 +2,14 @@ import { mockRequest as call } from './mockBackend/mockApi'
 import { getDb } from './mockBackend/db'
 import { dateFromToday } from '../lib/dates'
 import { calculateQuote } from '../lib/pricing'
-import { validateRegistration } from '../validation/rules'
+import { validatePhone, validateRegistration } from '../validation/rules'
+import { termsAndConditions } from '../content/legal'
 import { ADMIN, CLIENT, signIn } from './helpers'
 
 const booking = (overrides = {}) => ({
   serviceId: 1, addOns: [], bookingDate: dateFromToday(3), startTime: '13:00:00',
-  paymentMethod: 'GCash', depositAcknowledged: true, idempotencyKey: crypto.randomUUID(), ...overrides,
+  paymentMethod: 'GCash', depositAcknowledged: true, idempotencyKey: crypto.randomUUID(),
+  nailColor: '#06', termsVersion: termsAndConditions.version, ...overrides,
 })
 
 describe('Shared rules', () => {
@@ -43,21 +45,21 @@ describe('Mock backend', () => {
     await expect(call('POST', '/bookings', { body: booking({ startTime: '10:30:00' }) }))
       .rejects.toMatchObject({ status: 400, errors: { startTime: ["Appointments can't start before the 11:00 AM opening time."] } })
 
-    // Plain takes 60 minutes: 11:00 → 12:00, so the next appointment can start at 12:30.
+    // Plain takes 2 hours: 11:00 → 1:00 PM, so the next appointment can start at 1:30 PM.
     const { booking: first } = await call('POST', '/bookings', { body: booking({ startTime: '11:00:00' }) })
-    expect(first).toMatchObject({ endTime: '12:00:00', durationMinutes: 60 })
+    expect(first).toMatchObject({ endTime: '13:00:00', durationMinutes: 120 })
     const day = await call('GET', '/slots', { query: { date: dateFromToday(3), serviceId: '1' } })
-    expect(day.slots.find((s) => s.startTime === '12:00:00')).toMatchObject({ status: 'Break', note: 'Break until 12:30 PM' })
-    expect(day.slots.find((s) => s.startTime === '12:30:00').status).toBe('Open')
+    expect(day.slots.find((s) => s.startTime === '13:00:00')).toMatchObject({ status: 'Break', note: 'Break until 1:30 PM' })
+    expect(day.slots.find((s) => s.startTime === '13:30:00').status).toBe('Open')
 
     await signIn({ username: 'ana_lim', password: 'ClientPass123' })
-    await expect(call('POST', '/bookings', { body: booking({ startTime: '12:00:00' }) })).rejects.toMatchObject({ status: 409, code: 'slot_unavailable' })
-    await call('POST', '/bookings', { body: booking({ startTime: '12:30:00' }) })
+    await expect(call('POST', '/bookings', { body: booking({ startTime: '13:00:00' }) })).rejects.toMatchObject({ status: 409, code: 'slot_unavailable' })
+    await call('POST', '/bookings', { body: booking({ startTime: '13:30:00' }) })
   })
 
   it('lets the administrator change the closing time, but never cut a booking short', async () => {
     await signIn(CLIENT)
-    await call('POST', '/bookings', { body: booking({ startTime: '19:00:00' }) }) // ends 8:00 PM
+    await call('POST', '/bookings', { body: booking({ startTime: '18:00:00' }) }) // ends 8:00 PM
     expect(await call('GET', '/salon-hours')).toMatchObject({ openingTime: '11:00:00', closingTime: '21:00:00', bufferMinutes: 30 })
 
     await signIn(ADMIN)
@@ -99,6 +101,43 @@ describe('Mock backend', () => {
       .rejects.toMatchObject({ code: 'reschedule_window_passed' })
   })
 
+  it('needs the current Terms version, a listed colour, and no add-ons with Plain', async () => {
+    await signIn(CLIENT)
+    await expect(call('POST', '/bookings', { body: booking({ termsVersion: '0.1' }) })).rejects.toMatchObject({ code: 'terms_outdated' })
+    await expect(call('POST', '/bookings', { body: booking({ nailColor: 'Gold' }) })).rejects.toMatchObject({ status: 400 })
+    await expect(call('POST', '/bookings', { body: booking({ addOns: [{ addOnId: 2, nailCount: 1, hand: 'Both' }] }) }))
+      .rejects.toMatchObject({ status: 400 })
+  })
+
+  it('books a removal before a new set as one longer appointment', async () => {
+    await signIn(CLIENT)
+    const day = await call('GET', '/slots', { query: { date: dateFromToday(20), serviceId: '2', removalServiceId: '4' } })
+    expect(day.durationMinutes).toBe(240)
+    const { booking: created } = await call('POST', '/bookings', { body: booking({ serviceId: 2, removalServiceId: 4, bookingDate: dateFromToday(20), startTime: '11:00:00' }) })
+    expect(created).toMatchObject({ durationMinutes: 240, endTime: '15:00:00', totalPrice: 500, removalServiceName: 'My Work' })
+  })
+
+  it('lists dates closed all day, and asks "Others" for a reason', async () => {
+    await signIn(ADMIN)
+    await call('POST', '/admin/blocked-slots', { body: { date: dateFromToday(21), startTime: null, reason: 'Holiday' } })
+    expect(await call('GET', '/slots/closed-dates')).toContain(dateFromToday(21))
+
+    await signIn(CLIENT)
+    const { booking: created } = await call('POST', '/bookings', { body: booking({ bookingDate: dateFromToday(22) }) })
+    await expect(call('POST', `/bookings/${created.id}/cancel`, { body: { reason: 'Others', explanation: ' ' } })).rejects.toMatchObject({ status: 400 })
+    await call('POST', `/bookings/${created.id}/cancel`, { body: { reason: 'Others', explanation: 'Moving abroad' } })
+    await signIn(ADMIN)
+    expect((await call('GET', `/admin/bookings/${created.id}`)).cancellation.explanation).toBe('Moving abroad')
+  })
+
+  it('accepts 09 and +639 mobile numbers only', () => {
+    expect(validatePhone('09171234567')).toBeNull()
+    expect(validatePhone('+639171234567')).toBeNull()
+    expect(validatePhone('08171234567')).toMatch(/09 or \+639/)
+    expect(validatePhone('+63917123456')).toMatch(/too short/)
+    expect(validatePhone('0917-123-4567')).toMatch(/only contain numbers/)
+  })
+
   it('end to end: sign up, book, pay, cancel, administrator sees the cancellation (7.11)', async () => {
     await call('POST', '/auth/register', { body: { firstName: 'Kim', lastName: 'Uy', username: 'kim.uy', email: 'kim@example.test',
       phoneNumber: '09335556677', password: 'KimPass123', confirmPassword: 'KimPass123', acceptTerms: true } })
@@ -107,7 +146,7 @@ describe('Mock backend', () => {
     await signIn({ username: 'kim.uy', password: 'KimPass123' })
 
     const { booking: created, receipt } = await call('POST', '/bookings', { body: booking({ serviceId: 3, addOns: [{ addOnId: 5, nailCount: 2, hand: 'Right' }] }) })
-    expect(created).toMatchObject({ status: 'Pending', totalPrice: 280, balanceDue: 130 }) // deposit paid; Leyah confirms later
+    expect(created).toMatchObject({ status: 'Pending', totalPrice: 280, balanceDue: 130, nailColor: '#06' }) // deposit paid; Leyah confirms later
     expect(receipt.referenceNumber).toMatch(/^GC-/)
     await call('POST', `/bookings/${created.id}/cancel`, { body: { reason: 'ChangeOfSchedule' } })
 

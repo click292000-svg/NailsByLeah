@@ -6,18 +6,22 @@ namespace NailsByLeah.Api.Tests.Integration;
 
 /// <summary>
 /// No-shows, recording the balance paid after a service, and the dashboard's upcoming list. This class has its own
-/// database because the no-show test moves the clock forward; each test books a different time on the current day.
+/// database because the no-show test moves the clock forward. Each test books its own time; today fits three Plain
+/// appointments (2 hours plus the break) and a removal.
 /// </summary>
 public sealed class NoShowAndBalanceTests(ApiFactory factory) : IClassFixture<ApiFactory>
 {
     private const int Plain = 1; // ₱300, so ₱150 is left after the deposit
+    private const int RemovalMyWork = 4; // 1 hour
 
     private DateOnly Today => DateOnly.FromDateTime(factory.Clock.GetUtcNow().AddHours(8).DateTime);
 
-    private async Task<(HttpClient Admin, BookingResponse Booking)> ConfirmedBookingToday(int hour, PaymentOption option = PaymentOption.Deposit)
+    private async Task<(HttpClient Admin, BookingResponse Booking)> ConfirmedBookingToday(
+        int hour, int minute = 0, PaymentOption option = PaymentOption.Deposit, int service = Plain, int daysAhead = 0)
     {
         var user = await factory.CreateClientAsync();
-        var booked = await user.Client.BookAsync(TestHelpers.NewBooking((Today, new TimeOnly(hour, 0)), Plain) with { PaymentOption = option });
+        var booked = await user.Client.BookAsync(
+            TestHelpers.NewBooking((Today.AddDays(daysAhead), new TimeOnly(hour, minute)), service) with { PaymentOption = option });
         var admin = await factory.CreateAdminClientAsync();
         await admin.ConfirmAsync(booked.Booking.Id);
         return (admin, booked.Booking);
@@ -28,13 +32,14 @@ public sealed class NoShowAndBalanceTests(ApiFactory factory) : IClassFixture<Ap
     [Fact]
     public async Task No_show_is_only_possible_once_the_appointment_time_has_arrived()
     {
-        var (admin, booking) = await ConfirmedBookingToday(19);
+        // Tomorrow, so today's times stay free for the other tests.
+        var (admin, booking) = await ConfirmedBookingToday(11, daysAhead: 1);
 
         await (await admin.PostAsync(Url(booking.Id, "no-show"), null)).ShouldHaveStatus(HttpStatusCode.Conflict);
 
-        var date = Today;
-        factory.Clock.Advance(TimeSpan.FromDays(1));
-        admin = await factory.CreateAdminClientAsync(); // a day later, the earlier sign-in has expired
+        var date = Today.AddDays(1);
+        factory.Clock.Advance(TimeSpan.FromDays(2));
+        admin = await factory.CreateAdminClientAsync(); // days later, the earlier sign-in has expired
         var response = await admin.PostAsync(Url(booking.Id, "no-show"), null);
         await response.ShouldHaveStatus(HttpStatusCode.OK);
         var marked = await response.ReadAsync<BookingResponse>();
@@ -53,7 +58,7 @@ public sealed class NoShowAndBalanceTests(ApiFactory factory) : IClassFixture<Ap
     [Fact]
     public async Task Balance_can_be_recorded_when_completing_with_its_reference()
     {
-        var (admin, booking) = await ConfirmedBookingToday(13);
+        var (admin, booking) = await ConfirmedBookingToday(13, 30);
 
         var response = await admin.PostJsonAsync(Url(booking.Id, "complete"), new CompleteBookingRequest(true, "  GC-777 "));
         await response.ShouldHaveStatus(HttpStatusCode.OK);
@@ -71,7 +76,7 @@ public sealed class NoShowAndBalanceTests(ApiFactory factory) : IClassFixture<Ap
     [Fact]
     public async Task Balance_can_be_recorded_later_and_only_once()
     {
-        var (admin, booking) = await ConfirmedBookingToday(15);
+        var (admin, booking) = await ConfirmedBookingToday(16);
         var date = Today;
         await (await admin.PostAsync(Url(booking.Id, "complete"), null)).ShouldHaveStatus(HttpStatusCode.OK);
 
@@ -93,7 +98,7 @@ public sealed class NoShowAndBalanceTests(ApiFactory factory) : IClassFixture<Ap
     [Fact]
     public async Task A_full_payment_has_no_balance_to_record()
     {
-        var (admin, booking) = await ConfirmedBookingToday(17, PaymentOption.Full);
+        var (admin, booking) = await ConfirmedBookingToday(18, 30, PaymentOption.Full, RemovalMyWork);
 
         var response = await admin.PostJsonAsync(Url(booking.Id, "complete"), new CompleteBookingRequest(true, null));
         await response.ShouldHaveStatus(HttpStatusCode.OK);
@@ -136,5 +141,28 @@ public sealed class NoShowAndBalanceTests(ApiFactory factory) : IClassFixture<Ap
         Assert.Contains(upcoming, b => b.Id == soon.Booking.Id);
         Assert.DoesNotContain(upcoming, b => b.Id == later.Booking.Id);
         Assert.All(upcoming, b => Assert.True(b.Status is "Pending" or "Confirmed"));
+    }
+
+    [Fact]
+    public async Task Dashboard_shows_a_chosen_day_with_its_next_client_and_lists_payments_to_check()
+    {
+        var user = await factory.CreateClientAsync();
+        var day = Today.AddDays(5);
+        var booked = await user.Client.BookAsync(TestHelpers.NewBooking((day, new TimeOnly(11, 0)), Plain));
+        var admin = await factory.CreateAdminClientAsync();
+
+        var dashboard = await admin.GetAsync<DashboardResponse>($"/api/admin/dashboard?date={day:yyyy-MM-dd}");
+
+        Assert.Equal(day, dashboard.Date);
+        Assert.Contains(dashboard.TodaysBookings, b => b.Id == booked.Booking.Id);
+        Assert.Equal(booked.Booking.Id, dashboard.NextBooking?.Id);
+        Assert.Contains(dashboard.Attention, a => a.Kind == "CheckPayment" && a.Booking.Id == booked.Booking.Id);
+
+        await admin.ConfirmAsync(booked.Booking.Id);
+        var after = await admin.GetAsync<DashboardResponse>("/api/admin/dashboard");
+        Assert.DoesNotContain(after.Attention, a => a.Booking.Id == booked.Booking.Id); // confirmed and still ahead
+
+        var tooFar = await admin.GetAsync($"/api/admin/dashboard?date={Today.AddYears(2):yyyy-MM-dd}");
+        await tooFar.ShouldHaveStatus(HttpStatusCode.BadRequest);
     }
 }

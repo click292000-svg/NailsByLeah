@@ -5,9 +5,15 @@
  * @param {{id:number,name:string,category:string,price:number}} service main service
  * @param {{addOn:{id:number,name:string,price:number}, nailCount:number}[]} addOns Stone add-ons, priced per nail
  * @param {number} deposit booking deposit
+ * @param {{id:number,name:string,price:number}|null} removal a removal done before the main service, if any
  */
-export function calculateQuote(service, addOns, deposit) {
+export function calculateQuote(service, addOns, deposit, removal = null) {
   const lines = []
+  // A removal before a new set comes first, as it does in the appointment.
+  if (removal) {
+    lines.push({ itemId: removal.id, name: `Removal (${removal.name})`, category: 'Removal', pricingUnit: 'per service',
+      unitPrice: removal.price, quantity: 1, lineTotal: removal.price })
+  }
   if (service) {
     lines.push({ itemId: service.id, name: service.name, category: service.category, pricingUnit: 'per service',
       unitPrice: service.price, quantity: 1, lineTotal: service.price })

@@ -48,6 +48,7 @@ export const api = {
     login: (body) => post('/auth/login', body),
     logout: () => post('/auth/logout'),
     me: () => get('/auth/me'),
+    updateProfile: (body) => put('/auth/me', body),
     forgotPassword: (email) => post('/auth/forgot-password', { email }),
     validateResetToken: (token) => post('/auth/reset-password/validate', { token }),
     resetPassword: (body) => post('/auth/reset-password', body),
@@ -55,7 +56,10 @@ export const api = {
   catalog: {
     get: () => get('/services'),
     /** Start times for a date; with a serviceId each time also says whether that service fits there. */
-    slots: (date, serviceId) => get('/slots', serviceId ? { date, serviceId } : { date }),
+    slots: (date, serviceId, removalServiceId) =>
+      get('/slots', { date, ...(serviceId && { serviceId }), ...(serviceId && removalServiceId && { removalServiceId }) }),
+    /** Dates in the booking window that are closed all day. */
+    closedDates: () => get('/slots/closed-dates'),
     hours: () => get('/salon-hours'),
     lookups: () => get('/lookups'),
   },
@@ -83,8 +87,10 @@ export const api = {
     remove: (id) => del(`/reference-images/${id}`),
   },
   admin: {
-    dashboard: () => get('/admin/dashboard'),
+    dashboard: (date) => get('/admin/dashboard', date ? { date } : undefined),
     searchBookings: (query) => get('/admin/bookings', query),
+    /** Booking counts for each day of a month that has any: [{ date, count, activeCount }]. */
+    bookingCalendar: (year, month) => get('/admin/bookings/calendar', { year, month }),
     confirm: (id) => post(`/admin/bookings/${id}/confirm`),
     complete: (id, body) => post(`/admin/bookings/${id}/complete`, body),
     recordBalance: (id, body) => post(`/admin/bookings/${id}/balance`, body),
@@ -108,6 +114,9 @@ export const api = {
     activityLogs: (query) => get('/admin/activity-logs', query),
     feedback: (query) => get('/admin/feedback', query),
     findClient: (email) => post('/admin/clients/find', { email }),
+    searchClients: (body) => post('/admin/clients/search', body),
+    client: (id) => get(`/admin/clients/${id}`),
+    updateBlockedSlot: (id, body) => put(`/admin/blocked-slots/${id}`, body),
     deleteClientData: (id) => post(`/admin/clients/${id}/delete-data`),
   },
 }

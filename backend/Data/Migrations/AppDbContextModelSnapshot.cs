@@ -214,6 +214,11 @@ namespace NailsByLeah.Api.Data.Migrations
                         .HasColumnType("bit")
                         .HasColumnName("is_deleted");
 
+                    b.Property<string>("NailColor")
+                        .HasMaxLength(40)
+                        .HasColumnType("nvarchar(40)")
+                        .HasColumnName("nail_color");
+
                     b.Property<string>("Note")
                         .HasMaxLength(300)
                         .HasColumnType("nvarchar(300)")
@@ -228,6 +233,15 @@ namespace NailsByLeah.Api.Data.Migrations
                     b.Property<DateTime?>("ReminderSentAt")
                         .HasColumnType("datetime2")
                         .HasColumnName("reminder_sent_at");
+
+                    b.Property<decimal>("RemovalPrice")
+                        .HasPrecision(10, 2)
+                        .HasColumnType("decimal(10,2)")
+                        .HasColumnName("removal_price");
+
+                    b.Property<int?>("RemovalServiceId")
+                        .HasColumnType("int")
+                        .HasColumnName("removal_service_id");
 
                     b.Property<byte[]>("RowVersion")
                         .IsConcurrencyToken()
@@ -255,6 +269,15 @@ namespace NailsByLeah.Api.Data.Migrations
                         .HasColumnType("nvarchar(20)")
                         .HasColumnName("status");
 
+                    b.Property<DateTime?>("TermsAcceptedAt")
+                        .HasColumnType("datetime2")
+                        .HasColumnName("terms_accepted_at");
+
+                    b.Property<string>("TermsVersion")
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)")
+                        .HasColumnName("terms_version");
+
                     b.Property<DateTime>("UpdatedAt")
                         .HasColumnType("datetime2")
                         .HasColumnName("updated_at");
@@ -267,6 +290,9 @@ namespace NailsByLeah.Api.Data.Migrations
 
                     b.HasIndex("ConfirmedByUserId")
                         .HasDatabaseName("ix_bookings_confirmed_by_user_id");
+
+                    b.HasIndex("RemovalServiceId")
+                        .HasDatabaseName("ix_bookings_removal_service_id");
 
                     b.HasIndex("ServiceId")
                         .HasDatabaseName("ix_bookings_service_id");
@@ -291,6 +317,8 @@ namespace NailsByLeah.Api.Data.Migrations
                             t.HasCheckConstraint("ck_bookings_deposit_non_negative", "[deposit_amount] >= 0");
 
                             t.HasCheckConstraint("ck_bookings_duration_positive", "[duration_minutes] > 0");
+
+                            t.HasCheckConstraint("ck_bookings_removal_price_non_negative", "[removal_price] >= 0");
 
                             t.HasCheckConstraint("ck_bookings_service_price_non_negative", "[service_price] >= 0");
                         });
@@ -437,6 +465,10 @@ namespace NailsByLeah.Api.Data.Migrations
                         .HasColumnName("id");
 
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<bool>("AllowsAddOns")
+                        .HasColumnType("bit")
+                        .HasColumnName("allows_add_ons");
 
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("datetime2")
@@ -1042,8 +1074,9 @@ namespace NailsByLeah.Api.Data.Migrations
                         new
                         {
                             Id = 4,
+                            AllowsAddOns = false,
                             CreatedAt = new DateTime(2026, 11, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            DurationMinutes = 30,
+                            DurationMinutes = 60,
                             IsActive = true,
                             IsDeleted = false,
                             Name = "My Work",
@@ -1053,8 +1086,9 @@ namespace NailsByLeah.Api.Data.Migrations
                         new
                         {
                             Id = 5,
+                            AllowsAddOns = false,
                             CreatedAt = new DateTime(2026, 11, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            DurationMinutes = 45,
+                            DurationMinutes = 60,
                             IsActive = true,
                             IsDeleted = false,
                             Name = "Not My Work",
@@ -1080,8 +1114,9 @@ namespace NailsByLeah.Api.Data.Migrations
                         new
                         {
                             Id = 1,
+                            AllowsAddOns = false,
                             CreatedAt = new DateTime(2026, 11, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            DurationMinutes = 60,
+                            DurationMinutes = 120,
                             IsActive = true,
                             IsDeleted = false,
                             Name = "Plain",
@@ -1091,8 +1126,9 @@ namespace NailsByLeah.Api.Data.Migrations
                         new
                         {
                             Id = 2,
+                            AllowsAddOns = true,
                             CreatedAt = new DateTime(2026, 11, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            DurationMinutes = 90,
+                            DurationMinutes = 180,
                             IsActive = true,
                             IsDeleted = false,
                             Name = "With Design",
@@ -1102,8 +1138,9 @@ namespace NailsByLeah.Api.Data.Migrations
                         new
                         {
                             Id = 3,
+                            AllowsAddOns = true,
                             CreatedAt = new DateTime(2026, 11, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            DurationMinutes = 60,
+                            DurationMinutes = 180,
                             IsActive = true,
                             IsDeleted = false,
                             Name = "BIAB",
@@ -1150,6 +1187,12 @@ namespace NailsByLeah.Api.Data.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .HasConstraintName("fk_bookings_users_confirmed_by_user_id");
 
+                    b.HasOne("NailsByLeah.Api.Domain.RemovalService", "RemovalService")
+                        .WithMany()
+                        .HasForeignKey("RemovalServiceId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("fk_bookings_services_removal_service_id");
+
                     b.HasOne("NailsByLeah.Api.Domain.CatalogService", "Service")
                         .WithMany()
                         .HasForeignKey("ServiceId")
@@ -1160,6 +1203,8 @@ namespace NailsByLeah.Api.Data.Migrations
                     b.Navigation("Client");
 
                     b.Navigation("ConfirmedBy");
+
+                    b.Navigation("RemovalService");
 
                     b.Navigation("Service");
                 });

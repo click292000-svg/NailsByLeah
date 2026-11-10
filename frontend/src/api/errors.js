@@ -4,12 +4,14 @@
  * and per-field validation errors ({ username: ["Username is already taken."] }).
  */
 export class ApiError extends Error {
-  constructor({ status, message, code = null, errors = {} }) {
+  constructor({ status, message, code = null, errors = {}, retryAfterSeconds = null }) {
     super(message)
     this.name = 'ApiError'
     this.status = status
     this.code = code
     this.errors = errors ?? {}
+    /** Seconds to wait before asking again (429 "resend_cooldown"). */
+    this.retryAfterSeconds = retryAfterSeconds
   }
 
   /** First message for a field, or null. */
@@ -23,6 +25,7 @@ export class ApiError extends Error {
       message: problem?.detail || problem?.title || defaultMessage(status),
       code: problem?.code ?? null,
       errors: problem?.errors ?? {},
+      retryAfterSeconds: problem?.retryAfterSeconds ?? null,
     })
   }
 

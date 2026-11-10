@@ -9,7 +9,7 @@ const GROUPS = [
       { to: '/admin/bookings', label: 'Bookings' },
       { to: '/admin/services', label: 'Services' },
       { to: '/admin/schedule', label: 'Schedule' },
-      { to: '/admin/clients', label: 'Client data' },
+      { to: '/admin/clients', label: 'Clients' },
     ],
   },
   {
@@ -131,6 +131,7 @@ export function AdminNav({ user, onSignOut, menuOpen }) {
             <span>{user.email}</span>
             <span className="nav-account-role">Administrator</span>
           </div>
+          <NavLink to="/profile" className="nav-panel-link" onClick={close}>My profile</NavLink>
           <button type="button" className="nav-panel-link nav-signout" onClick={onSignOut}>Log out</button>
         </NavDropdown>
       </div>

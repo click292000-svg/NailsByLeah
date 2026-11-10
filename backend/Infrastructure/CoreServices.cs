@@ -145,9 +145,53 @@ public static class AuditActions
     public const string ServiceDeleted = "ServiceDeleted";
     public const string SlotBlocked = "SlotBlocked";
     public const string SlotUnblocked = "SlotUnblocked";
+    public const string SlotBlockChanged = "SlotBlockChanged";
     public const string SalonHoursChanged = "SalonHoursChanged";
     public const string ReferenceImageUploaded = "ReferenceImageUploaded";
     public const string ReferenceImageRemoved = "ReferenceImageRemoved";
     public const string FeedbackSubmitted = "FeedbackSubmitted";
     public const string ClientDataDeleted = "ClientDataDeleted";
+    public const string ProfileUpdated = "ProfileUpdated";
+}
+
+/// <summary>
+/// The wait between verification emails, kept per email address in memory (the API runs as one instance). Kept for
+/// addresses with no account too, so the wait itself can't reveal which emails are registered.
+/// </summary>
+public sealed class ResendCooldown(TimeProvider time, Microsoft.Extensions.Options.IOptions<NailsByLeah.Api.Configuration.AuthOptions> options)
+{
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<string, DateTimeOffset> _sentAt = new(StringComparer.Ordinal);
+
+    private TimeSpan Wait => TimeSpan.FromSeconds(options.Value.VerificationResendCooldownSeconds);
+
+    /// <summary>Starts the wait for this address, or throws <see cref="Errors.CooldownException"/> while one is running.</summary>
+    public void Start(string email)
+    {
+        var now = time.GetUtcNow();
+        while (true)
+        {
+            if (_sentAt.TryGetValue(email, out var last))
+            {
+                var left = last + Wait - now;
+                if (left > TimeSpan.Zero)
+                    throw new Errors.CooldownException((int)Math.Ceiling(left.TotalSeconds));
+                if (_sentAt.TryUpdate(email, now, last))
+                    break;
+            }
+            else if (_sentAt.TryAdd(email, now))
+                break;
+        }
+
+        // Forget addresses whose wait is long over, so the list can't grow without end.
+        if (_sentAt.Count > 1000)
+            foreach (var (key, sent) in _sentAt)
+                if (sent + Wait < now)
+                    _sentAt.TryRemove(key, out _);
+    }
+
+    /// <summary>A code was just sent another way (sign-up), so the wait starts now.</summary>
+    public void MarkSent(string email) => _sentAt[email] = time.GetUtcNow();
+
+    /// <summary>The email could not be queued, so the client may try again straight away.</summary>
+    public void Cancel(string email) => _sentAt.TryRemove(email, out _);
 }

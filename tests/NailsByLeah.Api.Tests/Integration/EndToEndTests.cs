@@ -25,7 +25,8 @@ public sealed class EndToEndTests(ApiFactory factory) : IClassFixture<ApiFactory
         var slot = day.Slots.First(s => s.Status == SlotStatuses.Open);
 
         var booked = await browser.BookAsync(new CreateBookingRequest(3, [new AddOnSelection(5, 2, NailHand.Right)], date, slot.StartTime,
-            PaymentMethod.Maya, DepositAcknowledged: true, Guid.NewGuid(), Note: "I'll bring a reference photo"));
+            PaymentMethod.Maya, DepositAcknowledged: true, Guid.NewGuid(), Note: "I'll bring a reference photo",
+            NailColor: TestHelpers.Color, TermsVersion: TestHelpers.TermsVersion));
         Assert.Equal("Pending", booked.Booking.Status); // confirmed later by the administrator
         Assert.Equal(280m, booked.Booking.TotalPrice); // BIAB 250 + Embossed Art 15 x 2
         Assert.Equal("Maya", booked.Receipt.Method);

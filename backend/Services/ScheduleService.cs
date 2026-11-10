@@ -16,7 +16,10 @@ public interface ISlotAvailability
     Task<SalonHoursResponse> GetHoursAsync(CancellationToken ct = default);
 
     /// <summary>One day's start times. With a service, each time says whether that service fits there.</summary>
-    Task<DaySlotsResponse> GetDayAsync(DateOnly date, int? serviceId, CancellationToken ct = default);
+    Task<DaySlotsResponse> GetDayAsync(DateOnly date, int? serviceId, CancellationToken ct = default, int? removalServiceId = null);
+
+    /// <summary>Dates from today to the end of the booking window that are closed all day.</summary>
+    Task<IReadOnlyList<DateOnly>> GetClosedDatesAsync(CancellationToken ct = default);
 
     /// <summary>
     /// Every rule for an appointment of <paramref name="durationMinutes"/> at this time, for a clear early answer.
@@ -37,6 +40,9 @@ public interface IScheduleManagement
 {
     Task<IReadOnlyList<BlockedSlotResponse>> GetBlockedAsync(DateOnly from, DateOnly to, CancellationToken ct = default);
     Task<BlockedSlotResponse> BlockAsync(int adminId, BlockSlotRequest request, CancellationToken ct = default);
+
+    /// <summary>Changes the date, times or reason of a blocked period, with the same checks as blocking it.</summary>
+    Task<BlockedSlotResponse> UpdateBlockAsync(int adminId, int id, BlockSlotRequest request, CancellationToken ct = default);
     Task UnblockAsync(int id, CancellationToken ct = default);
     Task<SalonHoursResponse> UpdateHoursAsync(int adminId, UpdateSalonHoursRequest request, CancellationToken ct = default);
 }
@@ -69,7 +75,19 @@ public sealed class ScheduleService(
     public async Task<SalonHoursResponse> GetHoursAsync(CancellationToken ct = default) =>
         new(_options.OpeningTime, (await settings.GetAsync(ct)).ClosingTime, Interval, Buffer);
 
-    public async Task<DaySlotsResponse> GetDayAsync(DateOnly date, int? serviceId, CancellationToken ct = default)
+    public async Task<IReadOnlyList<DateOnly>> GetClosedDatesAsync(CancellationToken ct = default)
+    {
+        var from = clock.Today;
+        var to = from.AddDays(_options.MaxDaysAhead);
+        var wholeDays = (await blockedSlots.GetInRangeAsync(from, to, ct)).Where(b => b.IsWholeDay).Select(b => b.Date).ToHashSet();
+        var closed = new List<DateOnly>();
+        for (var day = from; day <= to; day = day.AddDays(1))
+            if (wholeDays.Contains(day) || _options.ClosedDays.Contains(day.DayOfWeek))
+                closed.Add(day);
+        return closed;
+    }
+
+    public async Task<DaySlotsResponse> GetDayAsync(DateOnly date, int? serviceId, CancellationToken ct = default, int? removalServiceId = null)
     {
         var duration = Interval;
         if (serviceId is { } id)
@@ -78,6 +96,13 @@ public sealed class ScheduleService(
             if (service is null || !service.IsAvailable)
                 throw new ValidationAppException("serviceId", "The selected service is not available.");
             duration = service.DurationMinutes;
+            // A removal before the service makes the appointment longer, so fewer times fit.
+            if (removalServiceId is { } removalId && service is not RemovalService)
+            {
+                if (await catalog.FindServiceAsync(removalId, ct) is not RemovalService { IsAvailable: true } removal)
+                    throw new ValidationAppException("removalServiceId", "The selected removal is not available.");
+                duration += removal.DurationMinutes;
+            }
         }
 
         var closingTime = (await settings.GetAsync(ct)).ClosingTime;
@@ -169,7 +194,18 @@ public sealed class ScheduleService(
         return (await blockedSlots.GetInRangeAsync(from, to, ct)).Select(ToResponse).ToList();
     }
 
-    public async Task<BlockedSlotResponse> BlockAsync(int adminId, BlockSlotRequest request, CancellationToken ct = default)
+    public Task<BlockedSlotResponse> BlockAsync(int adminId, BlockSlotRequest request, CancellationToken ct = default) =>
+        SaveBlockAsync(adminId, request, existing: null, ct);
+
+    public async Task<BlockedSlotResponse> UpdateBlockAsync(int adminId, int id, BlockSlotRequest request, CancellationToken ct = default)
+    {
+        var existing = await blockedSlots.FindAsync(id, ct) ?? throw new NotFoundException("Blocked slot not found.");
+        if (existing.Date < clock.Today)
+            throw new ConflictException("A blocked time in the past can't be changed.", "invalid_status");
+        return await SaveBlockAsync(adminId, request, existing, ct);
+    }
+
+    private async Task<BlockedSlotResponse> SaveBlockAsync(int adminId, BlockSlotRequest request, BlockedSlot? existing, CancellationToken ct)
     {
         if (request.Date < clock.Today)
             throw new ValidationAppException("date", "Past dates cannot be blocked.");
@@ -187,23 +223,25 @@ public sealed class ScheduleService(
                 throw new ValidationAppException("endTime", $"The blocked time must end by closing time ({Format(closing)}).");
         }
 
+        // Checked on a copy, so a refused change leaves the saved block as it was.
         var slot = new BlockedSlot
         {
             Date = request.Date,
             StartTime = request.StartTime,
             EndTime = endTime,
             Reason = string.IsNullOrWhiteSpace(request.Reason) ? null : InputNormalizer.Text(request.Reason),
-            CreatedByUserId = adminId,
-            CreatedAt = clock.UtcNow,
+            CreatedByUserId = existing?.CreatedByUserId ?? adminId,
+            CreatedAt = existing?.CreatedAt ?? clock.UtcNow,
         };
+        var before = existing is null ? null : Describe(existing);
 
         // Under the same day lock as bookings, so a booking can't slip into the period while it is being blocked.
         await unitOfWork.ExecuteInTransactionAsync(async tx =>
         {
             await bookings.LockDayAsync(request.Date, tx);
 
-            var existing = await blockedSlots.GetForDateAsync(request.Date, tx);
-            if (existing.Any(b => b.IsWholeDay || (!slot.IsWholeDay && BlockedPeriod(b).Overlaps(BlockedPeriod(slot)))))
+            var others = (await blockedSlots.GetForDateAsync(request.Date, tx)).Where(b => b.Id != existing?.Id);
+            if (others.Any(b => b.IsWholeDay || (!slot.IsWholeDay && BlockedPeriod(b).Overlaps(BlockedPeriod(slot)))))
                 throw new ConflictException("This date or time is already blocked.", "already_blocked");
 
             var active = await bookings.GetActiveOnDateAsync(request.Date, tx);
@@ -211,13 +249,24 @@ public sealed class ScheduleService(
                 throw new ConflictException(
                     "There are active bookings in this period. Reschedule or cancel them before blocking it.", "has_active_bookings");
 
-            blockedSlots.Add(slot);
-            await unitOfWork.SaveChangesAsync(tx); // assigns the id for the activity log
-            audit.Record(AuditActions.SlotBlocked, nameof(BlockedSlot), slot.Id, Describe(slot));
-            return slot.Id;
+            if (existing is null)
+            {
+                blockedSlots.Add(slot);
+                await unitOfWork.SaveChangesAsync(tx); // assigns the id for the activity log
+                audit.Record(AuditActions.SlotBlocked, nameof(BlockedSlot), slot.Id, Describe(slot));
+                return slot.Id;
+            }
+
+            existing.Date = slot.Date;
+            existing.StartTime = slot.StartTime;
+            existing.EndTime = slot.EndTime;
+            existing.Reason = slot.Reason;
+            audit.Record(AuditActions.SlotBlockChanged, nameof(BlockedSlot), existing.Id, $"{before} -> {Describe(existing)}");
+            await unitOfWork.SaveChangesAsync(tx);
+            return existing.Id;
         }, ct);
 
-        return ToResponse(slot);
+        return ToResponse(existing ?? slot);
     }
 
     public async Task UnblockAsync(int id, CancellationToken ct = default)

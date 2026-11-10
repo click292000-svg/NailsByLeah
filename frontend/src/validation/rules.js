@@ -54,6 +54,21 @@ export const PASSWORD_DESCRIPTION =
 /** Removes everything except digits, e.g. "0917-123 4567" → "09171234567" (Ref 1.3). */
 export const digitsOnly = (value) => String(value ?? '').replace(/\D/g, '')
 
+/** A phone number as typed: digits, with a "+" allowed only at the start (+639…). */
+export const phoneChars = (value) => {
+  const text = String(value ?? '').trim()
+  return (text.startsWith('+') ? '+' : '') + digitsOnly(text)
+}
+
+/** +639171234567 becomes 09171234567, the form the salon stores (same as the backend). */
+export const normalizePhone = (value) => {
+  const text = String(value ?? '').trim()
+  return text.startsWith('+63') ? `0${text.slice(3)}` : text
+}
+
+/** How many characters a phone number may have: 11 for 09…, 13 for +639…. */
+export const phoneMaxLength = (value) => (String(value ?? '').startsWith('+') ? LIMITS.phoneDigits + 2 : LIMITS.phoneDigits)
+
 export const PASSWORD_RULES = [
   { id: 'length', label: 'At least 8 characters', test: (p) => p.length >= LIMITS.passwordMin },
   { id: 'letter', label: 'At least one letter', test: (p) => /\p{L}/u.test(p) },
@@ -94,15 +109,20 @@ export function validateEmail(value) {
 export const PHONE_MESSAGES = {
   required: 'Phone Number is required.',
   digitsOnly: 'Phone Number can only contain numbers (0–9), with no letters, spaces or symbols.',
+  notMobile: 'Enter a Philippine mobile number starting with 09 or +639, e.g. 09171234567.',
   tooShort: 'Phone Number is too short. Enter all 11 digits, e.g. 09171234567.',
   tooLong: 'Phone Number is too long. Enter exactly 11 digits, e.g. 09171234567.',
 }
 
-/** Contact number: exactly 11 digits and nothing else (Ref 1.3). */
+/**
+ * Contact number (Ref 1.3): a Philippine mobile number, 09XXXXXXXXX or +639XXXXXXXXX. This checks the format only;
+ * it can't tell whether the number works or belongs to the client.
+ */
 export function validatePhone(value) {
-  const text = String(value ?? '').trim()
+  const text = normalizePhone(value)
   if (!text) return PHONE_MESSAGES.required
   if (!/^\d+$/.test(text)) return PHONE_MESSAGES.digitsOnly
+  if (text.length >= 2 && !text.startsWith('09')) return PHONE_MESSAGES.notMobile
   if (text.length < LIMITS.phoneDigits) return PHONE_MESSAGES.tooShort
   if (text.length > LIMITS.phoneDigits) return PHONE_MESSAGES.tooLong
   return null

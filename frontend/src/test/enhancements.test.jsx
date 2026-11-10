@@ -1,6 +1,6 @@
 import { screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { CLIENT, renderApp, signIn, pickDate } from './helpers'
+import { CLIENT, readTermsAndAgree, renderApp, signIn, pickDate, pickShade } from './helpers'
 import { getDb } from './mockBackend/db'
 import { mockRequest } from './mockBackend/mockApi'
 import { dateFromToday } from '../lib/dates'
@@ -17,11 +17,12 @@ beforeAll(() => {
 
 describe('Design reference photos', () => {
   async function goToDesignStep(user) {
-    await user.click(await screen.findByRole('radio', { name: /With Design/ }))
-    await user.click(screen.getByRole('button', { name: 'Continue' }))
+    await user.click(await screen.findByRole('checkbox', { name: /With Design/ }))
+    await pickShade(user, '06')
+    await user.click(screen.getByRole('button', { name: /^Next:/ }))
     pickDate(dateFromToday(3))
     await user.click(await screen.findByRole('button', { name: /^11:00.*Available/ }))
-    await user.click(screen.getByRole('button', { name: 'Continue' }))
+    await user.click(screen.getByRole('button', { name: /^Next:/ }))
   }
 
   it('previews, validates and attaches photos to the booking', async () => {
@@ -41,9 +42,9 @@ describe('Design reference photos', () => {
     await user.upload(input, png('pink-flowers.png'))
     expect(await screen.findByRole('img', { name: /Design reference 1 \(pink-flowers.png\)/ })).toBeInTheDocument()
 
-    await user.click(screen.getByRole('button', { name: 'Continue' }))
+    await user.click(screen.getByRole('button', { name: /^Next:/ }))
     expect(within(screen.getByRole('list', { name: 'Design reference photos' })).getAllByRole('img')).toHaveLength(1)
-    await user.click(screen.getByRole('checkbox', { name: /I agree to the booking policy/ }))
+    await readTermsAndAgree(user)
     await user.click(screen.getByRole('button', { name: /Pay/ }))
 
     expect(await screen.findByRole('heading', { name: 'Booking received!' })).toBeInTheDocument()

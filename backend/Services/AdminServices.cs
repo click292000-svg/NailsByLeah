@@ -8,32 +8,73 @@ namespace NailsByLeah.Api.Services;
 
 public interface IDashboardService
 {
-    Task<DashboardResponse> GetAsync(CancellationToken ct = default);
+    Task<DashboardResponse> GetAsync(DateOnly? date = null, CancellationToken ct = default);
 }
 
-/// <summary>Today's bookings, pending bookings and collected deposits (Ref 11.1).</summary>
+/// <summary>
+/// The day's bookings, the next client, things that need Leyah's attention and the next 7 days (Ref 11.1).
+/// Another day can be chosen; the attention list and money figures are always as of now.
+/// </summary>
 public sealed class DashboardService(
     IBookingRepository bookings,
     IPaymentRepository payments,
     ISalonClock clock) : IDashboardService
 {
     private const int UpcomingDays = 7;
+    private const int BalanceLookbackDays = 30;
+    private const int MaxDaysAway = 366;
+    private static readonly string[] AttentionOrder = ["CheckPayment", "DatePassed", "BalanceNotRecorded"];
 
-    public async Task<DashboardResponse> GetAsync(CancellationToken ct = default)
+    public async Task<DashboardResponse> GetAsync(DateOnly? date = null, CancellationToken ct = default)
     {
         var today = clock.Today;
-        var todays = await bookings.GetForDateAsync(today, ct);
+        var now = clock.LocalNow;
+        var day = date ?? today;
+        if (Math.Abs(day.DayNumber - today.DayNumber) > MaxDaysAway)
+            throw new ValidationAppException("date", "Choose a date within a year of today.");
+
+        var daysBookings = await bookings.GetForDateAsync(day, ct);
         var (fromUtc, toUtc) = SalonDay.UtcRange(clock, today, today);
+        var nowTime = TimeOnly.FromDateTime(now);
+
+        bool IsOver(Booking b) => b.BookingDate < today || (b.BookingDate == today && b.EndTime <= nowTime);
+
+        // The next client: on today, the first appointment that hasn't ended (it may be under way); on a later day, the first one.
+        var next = day < today ? null : daysBookings
+            .Where(b => b.IsActive && (day > today || b.EndTime > nowTime))
+            .OrderBy(b => b.StartTime)
+            .FirstOrDefault();
+
+        var attention = new List<DashboardAttentionItem>();
+        foreach (var b in await bookings.GetAttentionCandidatesAsync(today, today.AddDays(-BalanceLookbackDays), ct))
+        {
+            var kind = b.Status switch
+            {
+                BookingStatus.Pending or BookingStatus.Confirmed when IsOver(b) => "DatePassed",
+                BookingStatus.Pending => "CheckPayment",
+                BookingStatus.Completed when b.BalanceDue > 0 => "BalanceNotRecorded",
+                _ => null,
+            };
+            if (kind is not null)
+                attention.Add(new DashboardAttentionItem(kind, BookingMapper.ToResponse(b, includeClient: true)));
+        }
+        // Most urgent first: a client who paid is waiting, then appointments left open, then money to note down.
+        // OrderBy is stable, so each group keeps its date order.
+        attention = attention.OrderBy(a => Array.IndexOf(AttentionOrder, a.Kind)).ToList();
 
         return new DashboardResponse(
             today,
-            todays.Count(b => b.Status != BookingStatus.Cancelled),
-            todays.Select(b => BookingMapper.ToResponse(b, includeClient: true)).ToList(),
+            daysBookings.Count(b => b.Status != BookingStatus.Cancelled),
+            daysBookings.Select(b => BookingMapper.ToResponse(b, includeClient: true)).ToList(),
             await bookings.CountByStatusAsync(BookingStatus.Pending, ct),
             await payments.SumSucceededAsync(fromUtc, toUtc, ct),
             await payments.SumSucceededAsync(null, null, ct),
-            (await bookings.GetUpcomingAsync(today.AddDays(1), today.AddDays(UpcomingDays), ct))
-                .Select(b => BookingMapper.ToResponse(b, includeClient: true)).ToList());
+            (await bookings.GetUpcomingAsync(day.AddDays(1), day.AddDays(UpcomingDays), ct))
+                .Select(b => BookingMapper.ToResponse(b, includeClient: true)).ToList(),
+            day,
+            now,
+            attention,
+            next is null ? null : BookingMapper.ToResponse(next, includeClient: true));
     }
 }
 

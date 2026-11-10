@@ -5,21 +5,21 @@ using NailsByLeah.Api.Domain;
 namespace NailsByLeah.Api.Data;
 
 /// <summary>
-/// The approved price list (Ref 4), inserted by the initial migration. The durations are starting estimates;
-/// Leyah changes them on the admin Services page.
+/// The approved price list (Ref 4), inserted by the initial migration. Durations as Leyah set them on 2026-11-10;
+/// she can change them on the admin Services page.
 /// </summary>
 internal sealed class PriceListSeed : IEntityTypeConfiguration<SoftGelService>, IEntityTypeConfiguration<RemovalService>
 {
     private static readonly DateTime SeededAt = new(2026, 11, 1, 0, 0, 0, DateTimeKind.Utc);
 
     public void Configure(EntityTypeBuilder<SoftGelService> b) => b.HasData(
-        new SoftGelService { Id = 1, Name = "Plain", Price = 300m, DurationMinutes = 60, CreatedAt = SeededAt, UpdatedAt = SeededAt },
-        new SoftGelService { Id = 2, Name = "With Design", Price = 400m, DurationMinutes = 90, CreatedAt = SeededAt, UpdatedAt = SeededAt },
-        new SoftGelService { Id = 3, Name = "BIAB", Price = 250m, DurationMinutes = 60, CreatedAt = SeededAt, UpdatedAt = SeededAt });
+        new SoftGelService { Id = 1, Name = "Plain", Price = 300m, DurationMinutes = 120, AllowsAddOns = false, CreatedAt = SeededAt, UpdatedAt = SeededAt },
+        new SoftGelService { Id = 2, Name = "With Design", Price = 400m, DurationMinutes = 180, CreatedAt = SeededAt, UpdatedAt = SeededAt },
+        new SoftGelService { Id = 3, Name = "BIAB", Price = 250m, DurationMinutes = 180, CreatedAt = SeededAt, UpdatedAt = SeededAt });
 
     public void Configure(EntityTypeBuilder<RemovalService> b) => b.HasData(
-        new RemovalService { Id = 4, Name = "My Work", Price = 100m, DurationMinutes = 30, CreatedAt = SeededAt, UpdatedAt = SeededAt },
-        new RemovalService { Id = 5, Name = "Not My Work", Price = 150m, DurationMinutes = 45, CreatedAt = SeededAt, UpdatedAt = SeededAt });
+        new RemovalService { Id = 4, Name = "My Work", Price = 100m, DurationMinutes = 60, AllowsAddOns = false, CreatedAt = SeededAt, UpdatedAt = SeededAt },
+        new RemovalService { Id = 5, Name = "Not My Work", Price = 150m, DurationMinutes = 60, AllowsAddOns = false, CreatedAt = SeededAt, UpdatedAt = SeededAt });
 
     internal sealed class AddOns : IEntityTypeConfiguration<StoneAddOn>
     {

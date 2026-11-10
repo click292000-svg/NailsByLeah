@@ -13,6 +13,9 @@ public sealed class AuthOptions
     public int PasswordResetTokenMinutes { get; set; } = 15;
     public int EmailVerificationCodeHours { get; set; } = 24;
     public int MaxVerificationAttempts { get; set; } = 5;
+
+    /// <summary>How long after a verification code is sent before another can be asked for.</summary>
+    public int VerificationResendCooldownSeconds { get; set; } = 60;
     public int BcryptWorkFactor { get; set; } = 12;
 }
 
@@ -21,6 +24,9 @@ public sealed class BookingOptions
     public const string Section = "Booking";
     public decimal DepositAmount { get; set; } = 150m;
     public int RescheduleMinimumHours { get; set; } = 24;
+
+    /// <summary>Nail colours a client can choose for a new set of nails. Leyah's list goes in appsettings.</summary>
+    public string[] NailColors { get; set; } = [];
 }
 
 public sealed class ScheduleOptions

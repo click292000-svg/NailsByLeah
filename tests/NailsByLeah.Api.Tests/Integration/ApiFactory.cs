@@ -26,7 +26,8 @@ public sealed class ApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
     public static readonly DateTimeOffset StartTime = new(2026, 11, 2, 0, 0, 0, TimeSpan.Zero);
     public static readonly DateOnly StartDate = new(2026, 11, 2);
     /// <summary>Two hours apart: room for the longest seeded service (90 minutes) plus the 30-minute break.</summary>
-    public static readonly TimeOnly[] SlotTimes = [new(11, 0), new(13, 0), new(15, 0), new(17, 0), new(19, 0)];
+    // Far enough apart for the longest seeded service (With Design or BIAB, 3 hours) plus the 30-minute break.
+    public static readonly TimeOnly[] SlotTimes = [new(11, 0), new(14, 30), new(18, 0)];
 
     private readonly string _databaseName = $"NailsByLeah_Tests_{Guid.NewGuid():N}";
 

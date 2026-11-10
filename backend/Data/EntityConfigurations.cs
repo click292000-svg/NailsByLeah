@@ -80,7 +80,12 @@ internal sealed class BookingConfiguration : IEntityTypeConfiguration<Booking>
             t.HasCheckConstraint("ck_bookings_duration_positive", "[duration_minutes] > 0");
             t.HasCheckConstraint("ck_bookings_amount_paid_non_negative", "[amount_paid] >= 0");
             t.HasCheckConstraint("ck_bookings_balance_received_non_negative", "[balance_received] >= 0");
+            t.HasCheckConstraint("ck_bookings_removal_price_non_negative", "[removal_price] >= 0");
         });
+
+        b.Property(x => x.NailColor).HasMaxLength(InputLimits.NailColorMaxLength);
+        b.Property(x => x.TermsVersion).HasMaxLength(20);
+        b.HasOne(x => x.RemovalService).WithMany().HasForeignKey(x => x.RemovalServiceId).OnDelete(DeleteBehavior.Restrict);
 
         b.Property(x => x.RowVersion).IsRowVersion();
         b.Property(x => x.Note).HasMaxLength(InputLimits.NoteMaxLength);

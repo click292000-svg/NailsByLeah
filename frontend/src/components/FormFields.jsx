@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Field } from './ui'
-import { LIMITS, PASSWORD_RULES, digitsOnly } from '../validation/rules'
+import { PASSWORD_RULES, LIMITS, phoneChars, phoneMaxLength } from '../validation/rules'
 import { api } from '../api'
 import { useDebouncedValue } from '../hooks/useAsync'
 
@@ -19,35 +19,40 @@ export function NameField({ label, value, onChange, error, ...props }) {
 const CONTROL_KEYS = new Set(['Backspace', 'Delete', 'Tab', 'Enter', 'Escape', 'ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End'])
 
 /**
- * Contact number: exactly 11 digits (Ref 1.3). Letters and symbols are blocked as they are typed,
- * pasted text keeps only its digits, and anything else that slips in (autofill, mobile keyboards)
- * is stripped on change. Typing stops at 11 digits; a pasted number that is too long is kept as is,
- * so the "too long" message shows instead of a silently cut-off (wrong) number.
+ * Contact number: a Philippine mobile number, 09XXXXXXXXX or +639XXXXXXXXX (Ref 1.3). Letters and symbols are
+ * blocked as they are typed (a "+" only at the start), pasted text keeps only its digits and a leading "+", and
+ * anything else that slips in (autofill, mobile keyboards) is stripped on change. Typing stops at 11 digits (13
+ * characters with +63); a pasted number that is too long is kept as is, so the "too long" message shows instead of
+ * a silently cut-off (wrong) number. The server stores it as 09XXXXXXXXX.
  * `onBlur` lets the form check the number once the user leaves the field.
  */
 export function PhoneField({ value, onChange, onBlur, error, label = 'Phone Number' }) {
   // Short-lived explanation of why a keystroke or part of a paste was ignored.
   const [notice, setNotice] = useState(null)
-  const max = LIMITS.phoneDigits
+  const max = phoneMaxLength(value)
   const insert = (input, text) => {
     const { selectionStart: start, selectionEnd: end } = input
-    const next = digitsOnly(value.slice(0, start ?? value.length) + text + value.slice(end ?? value.length))
-    setNotice(/\D/.test(text) ? 'Letters, spaces and symbols were removed from the pasted number.' : null)
+    const next = phoneChars(value.slice(0, start ?? value.length) + text + value.slice(end ?? value.length))
+    setNotice(/[^\d+]/.test(text.trim()) ? 'Letters, spaces and symbols were removed from the pasted number.' : null)
     onChange(next)
   }
-  const counter = `${value.length}/${max} digits`
+  const digits = value.startsWith('+63') ? value.length - 2 : value.length // +63 counts as the leading 0
+  const counter = `${digits}/${LIMITS.phoneDigits} digits`
   return (
-    <Field label={label} error={error} required counter={counter} hint={notice ?? 'Numbers only, exactly 11 digits, e.g. 09171234567'}>
+    <Field label={label} error={error} required counter={counter}
+      hint={notice ?? 'Philippine mobile number, e.g. 09171234567 or +639171234567'}>
       {(aria) => (
-        <input className="input" type="tel" inputMode="numeric" autoComplete="tel" pattern="[0-9]{11}" value={value} required
+        <input className="input" type="tel" inputMode="tel" autoComplete="tel" value={value} required
           onKeyDown={(e) => {
             if (e.ctrlKey || e.metaKey || e.altKey || CONTROL_KEYS.has(e.key)) return
+            const atStart = e.currentTarget.selectionStart === 0 && !value.startsWith('+')
+            if (e.key === '+' && atStart) return
             if (!/^\d$/.test(e.key)) {
               e.preventDefault()
-              setNotice('Only numbers (0–9) can be entered.')
+              setNotice(e.key === '+' ? 'A "+" can only go at the start, as in +639171234567.' : 'Only numbers (0–9) can be entered.')
             } else if (value.length >= max && e.currentTarget.selectionStart === e.currentTarget.selectionEnd) {
               e.preventDefault()
-              setNotice(`Phone numbers have exactly ${max} digits.`)
+              setNotice(`Phone numbers have exactly ${LIMITS.phoneDigits} digits (09…) or 13 characters with +63.`)
             }
           }}
           onPaste={(e) => {
@@ -56,7 +61,7 @@ export function PhoneField({ value, onChange, onBlur, error, label = 'Phone Numb
           }}
           onChange={(e) => {
             setNotice(null)
-            onChange(digitsOnly(e.target.value))
+            onChange(phoneChars(e.target.value))
           }}
           onBlur={onBlur}
           {...aria} />

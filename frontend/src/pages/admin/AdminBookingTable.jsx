@@ -4,7 +4,7 @@ import { useAsync } from '../../hooks/useAsync'
 import { errorMessage } from '../../api/errors'
 import { formatDate, formatTime } from '../../lib/format'
 import { startsAt, today } from '../../lib/dates'
-import { Alert, Button, EmptyState, Money, StatusBadge } from '../../components/ui'
+import { Alert, Button, EmptyState, Money, STATUS_LABELS } from '../../components/ui'
 import { BalanceDialog, CancelBookingDialog, NoShowDialog, RescheduleDialog } from '../../components/BookingDialogs'
 import { BookingDetails } from './BookingDetails'
 
@@ -13,11 +13,16 @@ const hasStarted = (b) => startsAt(b.bookingDate, b.startTime) <= new Date()
 // A cancelled booking or a no-show owes nothing more, so no balance is shown for them.
 const isClosed = (b) => b.status === 'Cancelled' || b.status === 'NoShow'
 
+/** Booking status as a small coloured dot and its name, kept apart from the payment pill. */
+export const StatusDot = ({ status }) => (
+  <span className={`status-dot status-dot-${String(status).toLowerCase()}`}>{STATUS_LABELS[status] ?? status}</span>
+)
+
 /**
  * Bookings table with the administrator actions Confirm, Complete, Record balance, No-show, Reschedule and Cancel (Ref 11.2).
  * On small screens each row becomes a card (cells carry data-label).
  */
-export function AdminBookingTable({ bookings, onChanged, emptyTitle = 'No bookings found', emptyText }) {
+export function AdminBookingTable({ bookings, onChanged, emptyTitle = 'No bookings found', emptyText, dayView = false }) {
   const lookups = useAsync(() => api.catalog.lookups(), [])
   const [dialog, setDialog] = useState(null)
   const [busyId, setBusyId] = useState(null)
@@ -50,12 +55,12 @@ export function AdminBookingTable({ bookings, onChanged, emptyTitle = 'No bookin
         <table className="data-table bookings-table">
           <thead>
             <tr>
-              <th>When</th>
+              <th>{dayView ? 'Time' : 'Date & time'}</th>
               <th>Client</th>
               <th>Service</th>
               <th>Payment</th>
               <th>Status</th>
-              <th><span className="sr-only">Actions</span></th>
+              <th className="actions-head">Action</th>
             </tr>
           </thead>
           <tbody>
@@ -64,17 +69,24 @@ export function AdminBookingTable({ bookings, onChanged, emptyTitle = 'No bookin
               const fullyPaid = b.payment?.option === 'Full' || b.balanceDue === 0
               return (
                 <tr key={b.id} className={`booking-row booking-row-${b.status.toLowerCase()}`}>
-                  <td data-label="When">
-                    <div className="when-cell">
-                      <span className="mini-date" aria-hidden="true">
-                        <small>{day.toLocaleDateString('en-PH', { month: 'short' })}</small>
-                        <b>{day.getDate()}</b>
+                  <td data-label={dayView ? 'Time' : 'When'}>
+                    {dayView ? (
+                      <span className="time-pill">
+                        <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></svg>
+                        <span>{formatTime(b.startTime)} –</span> <span>{formatTime(b.endTime)}</span>
                       </span>
-                      <span>
-                        <span className="when-day">{day.toLocaleDateString('en-PH', { weekday: 'short', month: 'short', day: 'numeric' })}</span>
-                        <span className="muted small">{formatTime(b.startTime)}</span>
-                      </span>
-                    </div>
+                    ) : (
+                      <div className="when-cell">
+                        <span className="mini-date" aria-hidden="true">
+                          <small>{day.toLocaleDateString('en-PH', { month: 'short' })}</small>
+                          <b>{day.getDate()}</b>
+                        </span>
+                        <span>
+                          <span className="when-day">{day.toLocaleDateString('en-PH', { weekday: 'short', month: 'short', day: 'numeric' })}</span>
+                          <span className="muted small">{formatTime(b.startTime)} – {formatTime(b.endTime)}</span>
+                        </span>
+                      </div>
+                    )}
                   </td>
                   <td data-label="Client">
                     <span className="cell-main">{b.client?.firstName} {b.client?.lastName}</span>
@@ -82,6 +94,7 @@ export function AdminBookingTable({ bookings, onChanged, emptyTitle = 'No bookin
                   </td>
                   <td data-label="Service">
                     <span className="cell-main">{b.serviceName}</span>
+                    {b.removalServiceName && <span className="muted small">+ Removal ({b.removalServiceName}) first</span>}
                     {b.addOns.length > 0 && <span className="muted small">+ {b.addOns.map((a) => `${a.name} (${a.handLabel.toLowerCase()} ×${a.nailCount})`).join(', ')}</span>}
                     {b.referenceImages?.length > 0 && (
                       <span className="muted small">📎 {b.referenceImages.length} design {b.referenceImages.length === 1 ? 'photo' : 'photos'}</span>
@@ -91,12 +104,12 @@ export function AdminBookingTable({ bookings, onChanged, emptyTitle = 'No bookin
                     <span className="cell-main"><Money amount={b.totalPrice} /></span>
                     {!isClosed(b) && (
                       <span className={fullyPaid ? 'pay-pill paid' : 'pay-pill due'}>
-                        {fullyPaid ? 'Paid in full' : <><Money amount={b.balanceDue} /> due</>}
+                        {fullyPaid ? '✓ Paid' : <><Money amount={b.balanceDue} /> due</>}
                       </span>
                     )}
                   </td>
                   <td data-label="Status">
-                    <StatusBadge status={b.status} />
+                    <StatusDot status={b.status} />
                     {b.cancellation && <span className="muted small status-note">{b.cancellation.reasonLabel}</span>}
                   </td>
                   <td className="actions-cell">

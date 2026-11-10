@@ -13,8 +13,12 @@ public sealed record PricedItem(Service Item, int Quantity);
 
 public sealed record PriceQuote(IReadOnlyList<QuoteLineResponse> Lines, decimal Total, decimal Deposit, decimal BalanceDue);
 
-/// <summary>A validated selection of one main service plus Stone add-ons.</summary>
-public sealed record ServiceSelection(CatalogService Service, IReadOnlyList<(StoneAddOn AddOn, int NailCount, NailHand Hand)> AddOns);
+/// <summary>A validated selection of one main service, an optional removal before it, and Stone add-ons.</summary>
+public sealed record ServiceSelection(CatalogService Service, IReadOnlyList<(StoneAddOn AddOn, int NailCount, NailHand Hand)> AddOns, RemovalService? Removal = null)
+{
+    /// <summary>The whole appointment: the removal first, then the main service.</summary>
+    public int DurationMinutes => Service.DurationMinutes + (Removal?.DurationMinutes ?? 0);
+}
 
 public interface IPriceService
 {
@@ -23,7 +27,7 @@ public interface IPriceService
 
     PriceQuote Calculate(ServiceSelection selection);
 
-    Task<ServiceSelection> ResolveSelectionAsync(int serviceId, IReadOnlyList<AddOnSelection>? addOns, CancellationToken ct = default);
+    Task<ServiceSelection> ResolveSelectionAsync(int serviceId, IReadOnlyList<AddOnSelection>? addOns, int? removalServiceId = null, CancellationToken ct = default);
 
 }
 
@@ -43,13 +47,27 @@ public sealed class PriceService(IServiceCatalogRepository catalog, IOptions<Boo
     }
 
     public PriceQuote Calculate(ServiceSelection selection) =>
-        Calculate([new PricedItem(selection.Service, 1), .. selection.AddOns.Select(a => new PricedItem(a.AddOn, a.NailCount))]);
+        Calculate([
+            .. selection.Removal is { } removal ? [new PricedItem(removal, 1)] : Array.Empty<PricedItem>(),
+            new PricedItem(selection.Service, 1),
+            .. selection.AddOns.Select(a => new PricedItem(a.AddOn, a.NailCount))]);
 
-    public async Task<ServiceSelection> ResolveSelectionAsync(int serviceId, IReadOnlyList<AddOnSelection>? addOns, CancellationToken ct = default)
+    public async Task<ServiceSelection> ResolveSelectionAsync(
+        int serviceId, IReadOnlyList<AddOnSelection>? addOns, int? removalServiceId = null, CancellationToken ct = default)
     {
         var service = await catalog.FindServiceAsync(serviceId, ct);
         if (service is not { IsAvailable: true })
             throw new ValidationAppException("serviceId", "The selected service is not available.");
+
+        RemovalService? removal = null;
+        if (removalServiceId is { } removalId)
+        {
+            if (service is RemovalService)
+                throw new ValidationAppException("removalServiceId", "A removal can only be added to a new set of nails, not to another removal.");
+            removal = await catalog.FindServiceAsync(removalId, ct) as RemovalService;
+            if (removal is not { IsAvailable: true })
+                throw new ValidationAppException("removalServiceId", "The selected removal is not available.");
+        }
 
         var requested = addOns ?? [];
         var found = requested.Count == 0
@@ -58,6 +76,8 @@ public sealed class PriceService(IServiceCatalogRepository catalog, IOptions<Boo
 
         if (service is RemovalService && requested.Count > 0)
             throw new ValidationAppException("addOns", "Stone add-ons can't be added to a removal service. Choose a Soft Gel service to add them.");
+        if (!service.TakesAddOns && requested.Count > 0)
+            throw new ValidationAppException("addOns", $"Stone add-ons aren't available with {service.Name}. Choose another service to add them.");
 
         var resolved = new List<(StoneAddOn, int, NailHand)>();
         foreach (var selection in requested)
@@ -67,7 +87,7 @@ public sealed class PriceService(IServiceCatalogRepository catalog, IOptions<Boo
             resolved.Add((addOn, selection.NailCount, selection.Hand ?? NailHand.Both));
         }
 
-        return new ServiceSelection(service, resolved);
+        return new ServiceSelection(service, resolved, removal);
     }
 }
 
@@ -93,7 +113,8 @@ public sealed class ServiceCatalogService(
     IUnitOfWork unitOfWork,
     IAuditLogger audit,
     ISalonClock clock,
-    IOptions<BookingOptions> bookingOptions) : IServiceCatalog, IServiceManagement
+    IOptions<BookingOptions> bookingOptions,
+    IOptions<LegalOptions> legalOptions) : IServiceCatalog, IServiceManagement
 {
     public Task<CatalogResponse> GetCatalogAsync(CancellationToken ct = default) => BuildAsync(includeInactive: false, ct);
 
@@ -110,6 +131,7 @@ public sealed class ServiceCatalogService(
         service.Name = name;
         service.Price = request.Price;
         service.DurationMinutes = request.DurationMinutes;
+        service.AllowsAddOns = request.AllowsAddOns && service is not RemovalService;
         service.CreatedAt = now;
         service.UpdatedAt = now;
         catalog.AddService(service);
@@ -133,6 +155,11 @@ public sealed class ServiceCatalogService(
         {
             details += $", {service.DurationMinutes} -> {minutes} min";
             service.DurationMinutes = minutes;
+        }
+        if (request.AllowsAddOns is { } allows && service is not RemovalService && allows != service.AllowsAddOns)
+        {
+            details += $", add-ons {(allows ? "allowed" : "not allowed")}";
+            service.AllowsAddOns = allows;
         }
         Apply(service, name, request);
         audit.Record(AuditActions.ServiceUpdated, "Service", service.Id, details);
@@ -188,7 +215,8 @@ public sealed class ServiceCatalogService(
 
     public static ServiceItemResponse ToResponse(Service s) =>
         new(s.Id, s.Category, s.CategoryLabel, s.Name, s.Price, s.PricingUnit, s.MaxQuantity, s.IsActive,
-            (s as CatalogService)?.DurationMinutes);
+            (s as CatalogService)?.DurationMinutes,
+            (s as CatalogService)?.TakesAddOns ?? false);
 
     private async Task<CatalogResponse> BuildAsync(bool includeInactive, CancellationToken ct)
     {
@@ -199,7 +227,9 @@ public sealed class ServiceCatalogService(
             addOns.Select(ToResponse).ToList(),
             bookingOptions.Value.DepositAmount,
             DepositRefundable: false,
-            Currency: "PHP");
+            Currency: "PHP",
+            bookingOptions.Value.NailColors,
+            legalOptions.Value.TermsVersion);
     }
 
     private void Apply(Service item, string name, UpdateServiceRequest request)

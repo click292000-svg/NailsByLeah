@@ -63,7 +63,7 @@ function CatalogHead({ kind }) {
       <span>Name</span>
       <span>{kind === 'addOn' ? 'Price per nail' : 'Price'}</span>
       <span>{kind === 'service' ? 'Length' : ''}</span>
-      <span>Offered</span>
+      <span>{kind === 'service' ? 'Offered · Stones' : 'Offered'}</span>
       <span />
     </div>
   )
@@ -74,11 +74,14 @@ function CatalogRow({ item, kind, onChanged }) {
   const [price, setPrice] = useState(String(item.price))
   const [duration, setDuration] = useState(String(item.durationMinutes ?? ''))
   const [isActive, setIsActive] = useState(item.isActive)
+  const [allowsAddOns, setAllowsAddOns] = useState(Boolean(item.allowsAddOns))
   const [errors, setErrors] = useState({})
   const [saving, setSaving] = useState(false)
   const isService = kind === 'service'
+  // Only a new set can take Stones; a removal never does.
+  const canTakeStones = isService && item.category === 'SoftGel'
   const dirty = name !== item.name || Number(price) !== item.price || isActive !== item.isActive
-    || (isService && Number(duration) !== item.durationMinutes)
+    || (isService && Number(duration) !== item.durationMinutes) || (canTakeStones && allowsAddOns !== Boolean(item.allowsAddOns))
 
   const save = async () => {
     const found = Object.fromEntries([['name', validateServiceName(name)], ['price', validatePrice(price)],
@@ -88,7 +91,7 @@ function CatalogRow({ item, kind, onChanged }) {
     setSaving(true)
     try {
       const body = { name, price: Number(price), isActive }
-      if (isService) await api.admin.updateService(item.id, { ...body, durationMinutes: Number(duration) })
+      if (isService) await api.admin.updateService(item.id, { ...body, durationMinutes: Number(duration), ...(canTakeStones && { allowsAddOns }) })
       else await api.admin.updateAddOn(item.id, body)
       onChanged(`${name} saved.`)
     } catch (err) {
@@ -144,6 +147,13 @@ function CatalogRow({ item, kind, onChanged }) {
           <span className="switch-track" aria-hidden="true" />
           <span className="switch-text" aria-hidden="true">{isActive ? 'Yes' : 'No'}</span>
         </label>
+        {canTakeStones && (
+          <label className="switch switch-sub" title="Whether clients can add Stones to this service">
+            <input type="checkbox" aria-label={`${item.name} takes Stones`} checked={allowsAddOns} onChange={(e) => setAllowsAddOns(e.target.checked)} />
+            <span className="switch-track" aria-hidden="true" />
+            <span className="switch-text" aria-hidden="true">{allowsAddOns ? 'Takes Stones' : 'No Stones'}</span>
+          </label>
+        )}
       </div>
       <div className="catalog-cell catalog-actions">
         <div className="row-actions">

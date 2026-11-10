@@ -44,7 +44,11 @@ export function AuthProvider({ children }) {
 
   const clearNotice = useCallback(() => setNotice(null), [])
 
-  const value = useMemo(() => ({ user, ready, login, logout, notice, clearNotice }), [user, ready, login, logout, notice, clearNotice])
+  /** After the profile is saved, so the greeting and menus show the new name straight away. */
+  const updateUser = useCallback((profile) => setUser(profile), [])
+
+  const value = useMemo(() => ({ user, ready, login, logout, notice, clearNotice, updateUser }),
+    [user, ready, login, logout, notice, clearNotice, updateUser])
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
 }
 

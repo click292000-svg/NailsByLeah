@@ -47,6 +47,11 @@ public abstract class CatalogService : Service
 
     /// <summary>How long the service takes. Administrators change it in the app; it decides which times can be booked.</summary>
     public int DurationMinutes { get; set; } = DefaultDurationMinutes;
+
+    /// <summary>Whether Stone add-ons can be chosen with it. Plain has none; a removal never does.</summary>
+    public bool AllowsAddOns { get; set; } = true;
+
+    public virtual bool TakesAddOns => AllowsAddOns;
 }
 
 public sealed class SoftGelService : CatalogService
@@ -61,6 +66,15 @@ public sealed class RemovalService : CatalogService
     public const string CategoryKey = "Removal";
     public override string Category => CategoryKey;
     public override string CategoryLabel => "Removal";
+
+    /// <summary>Taking off old nails comes before a new set, so it never has add-ons of its own.</summary>
+    public override bool TakesAddOns => false;
+}
+
+public static class CatalogServiceExtensions
+{
+    /// <summary>A new set of nails needs a colour; a removal on its own doesn't.</summary>
+    public static bool NeedsColor(this CatalogService service) => service is not RemovalService;
 }
 
 /// <summary>

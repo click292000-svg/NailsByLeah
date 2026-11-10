@@ -41,7 +41,23 @@ describe('Phone Number field (7.1)', () => {
     await user.type(input, '091712345678')
     expect(input).toHaveValue('09171234567')
     expect(screen.getByText('11/11 digits')).toBeInTheDocument()
-    expect(screen.getByText('Phone numbers have exactly 11 digits.')).toBeInTheDocument()
+    expect(screen.getByText(/Phone numbers have exactly 11 digits/)).toBeInTheDocument()
+  })
+
+  it('takes +63 numbers, typed or pasted with spaces', async () => {
+    const user = userEvent.setup()
+    render(<Controlled Component={PhoneField} />)
+    const input = screen.getByLabelText(/Phone Number/)
+
+    await user.click(input)
+    await user.paste('+63 917 123 4567')
+    expect(input).toHaveValue('+639171234567')
+    expect(screen.getByText('11/11 digits')).toBeInTheDocument()
+    expect(validatePhone('+639171234567')).toBeNull()
+
+    await user.clear(input)
+    await user.type(input, '+6391712345678')
+    expect(input).toHaveValue('+639171234567') // stops at 13 characters
   })
 
   it('keeps a pasted number that is too long, so it is rejected instead of cut off', async () => {
@@ -50,9 +66,9 @@ describe('Phone Number field (7.1)', () => {
     const input = screen.getByLabelText(/Phone Number/)
 
     await user.click(input)
-    await user.paste('+63 917 123 4567')
-    expect(input).toHaveValue('639171234567')
-    expect(validatePhone('639171234567')).toBe(PHONE_MESSAGES.tooLong)
+    await user.paste('0917 123 45678')
+    expect(input).toHaveValue('091712345678')
+    expect(validatePhone('091712345678')).toBe(PHONE_MESSAGES.tooLong)
   })
 })
 
@@ -64,6 +80,10 @@ describe('Phone Number rule', () => {
     ['0917abc4567', PHONE_MESSAGES.digitsOnly],
     ['0917123456', PHONE_MESSAGES.tooShort],
     ['091712345678', PHONE_MESSAGES.tooLong],
+    ['+639171234567', null],
+    ['08171234567', PHONE_MESSAGES.notMobile],
+    ['639171234567', PHONE_MESSAGES.notMobile],
+    ['+63917123456', PHONE_MESSAGES.tooShort],
   ])('"%s" → %s', (value, message) => expect(validatePhone(value)).toBe(message))
 })
 

@@ -21,4 +21,4 @@ export const clearBookingDraft = () => api.bookingDraft.remove().catch(() => {})
 
 /** Whether a draft has anything worth resuming. */
 export const draftHasProgress = (draft) =>
-  Boolean(draft && (draft.serviceId || draft.date || draft.referenceImages?.length || Object.keys(draft.nails ?? {}).length))
+  Boolean(draft && (draft.serviceId || draft.removalId || draft.date || draft.referenceImages?.length || Object.keys(draft.nails ?? {}).length))

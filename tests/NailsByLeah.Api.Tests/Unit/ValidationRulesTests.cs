@@ -40,7 +40,10 @@ public sealed class ValidationRulesTests
     [InlineData("0917123456a", PhoneRule.DigitsOnly)]
     [InlineData("0917-123-4567", PhoneRule.DigitsOnly)]
     [InlineData("0917 123 4567", PhoneRule.DigitsOnly)]
-    [InlineData("+639171234567", PhoneRule.DigitsOnly)]
+    [InlineData("+639171234567", null)]
+    [InlineData("08171234567", PhoneRule.NotMobile)]
+    [InlineData("+63917123456", PhoneRule.TooShort)]
+    [InlineData("+63 917 123 4567", PhoneRule.DigitsOnly)]
     [InlineData("0917123456", PhoneRule.TooShort)]
     [InlineData("091712345678", PhoneRule.TooLong)]
     public void Phone_numbers_must_be_exactly_11_digits(string phone, string? expectedMessage)

@@ -10,6 +10,8 @@ namespace NailsByLeah.Api.Services;
 public interface IClientDataService
 {
     Task<ClientDataResponse> FindByEmailAsync(string email, CancellationToken ct = default);
+    Task<ClientDataResponse> GetAsync(int clientId, CancellationToken ct = default);
+    Task<PagedResponse<ClientListItemResponse>> SearchAsync(ClientSearchRequest request, CancellationToken ct = default);
     Task EraseAsync(int clientId, CancellationToken ct = default);
 }
 
@@ -34,6 +36,25 @@ public sealed class ClientDataService(
     public async Task<ClientDataResponse> FindByEmailAsync(string email, CancellationToken ct = default)
     {
         var client = await users.FindByEmailAsync(InputNormalizer.Email(email), ct);
+        return await SummarizeAsync(client, ct);
+    }
+
+    public async Task<ClientDataResponse> GetAsync(int clientId, CancellationToken ct = default) =>
+        await SummarizeAsync(await users.GetByIdAsync(clientId, ct), ct);
+
+    public async Task<PagedResponse<ClientListItemResponse>> SearchAsync(ClientSearchRequest request, CancellationToken ct = default)
+    {
+        var page = Math.Max(1, request.Page);
+        var pageSize = Math.Clamp(request.PageSize, 1, 100);
+        var search = string.IsNullOrWhiteSpace(request.Search) ? null : InputNormalizer.Text(request.Search);
+        var (items, total) = await users.SearchClientsAsync(search, page, pageSize, ct);
+        return new PagedResponse<ClientListItemResponse>(
+            items.Select(u => new ClientListItemResponse(u.Id, u.Username, u.FirstName, u.LastName, u.Email, u.PhoneNumber, u.EmailVerified, u.CreatedAt)).ToList(),
+            page, pageSize, total);
+    }
+
+    private async Task<ClientDataResponse> SummarizeAsync(User? client, CancellationToken ct)
+    {
         if (client is null || client.Role != UserRole.Client)
             throw new NotFoundException(NotFoundMessage);
 

@@ -5,6 +5,11 @@
 import { ApiError } from '../../api/errors'
 import { getDb, saveDb, nextId } from './db'
 import { schedule, policies } from '../../content/salon'
+import { termsAndConditions } from '../../content/legal'
+
+// Same as Booking:NailColors in backend/appsettings.json.
+// Same as Booking:NailColors in appsettings.json: the colour chart's shades #01–#58, then "not sure".
+export const NAIL_COLORS = [...Array.from({ length: 58 }, (_, i) => `#${String(i + 1).padStart(2, '0')}`), 'Not sure yet (decide at the salon)']
 import { lookups, reasonLabel } from './data/lookups'
 import { categoryLabels } from './data/services'
 import * as rules from '../../validation/rules'
@@ -90,7 +95,8 @@ function usableResetToken(db, token) {
 // ---------------------------------------------------------------- catalog and pricing
 
 const serviceItem = (s) => ({ id: s.id, category: s.category, categoryLabel: categoryLabels[s.category], name: s.name,
-  price: s.price, pricingUnit: 'per service', maxQuantity: 1, isActive: s.isActive, durationMinutes: s.durationMinutes })
+  price: s.price, pricingUnit: 'per service', maxQuantity: 1, isActive: s.isActive, durationMinutes: s.durationMinutes,
+  allowsAddOns: s.category !== 'Removal' && s.allowsAddOns !== false })
 const addOnItem = (a) => ({ id: a.id, category: 'Stone', categoryLabel: categoryLabels.Stone, name: a.name,
   price: a.price, pricingUnit: 'per nail', maxQuantity: rules.LIMITS.maxNailsPerAddOn, isActive: a.isActive })
 
@@ -102,13 +108,21 @@ function catalog(db, includeInactive) {
     depositAmount: policies.depositAmount,
     depositRefundable: false,
     currency: 'PHP',
+    nailColors: NAIL_COLORS,
+    termsVersion: termsAndConditions.version,
   }
 }
 
 /** Like the backend: bookings must say which hand each add-on goes on; price quotes may leave it out. */
-function resolveSelection(db, serviceId, selections = [], { requireHand = false } = {}) {
+function resolveSelection(db, serviceId, selections = [], { requireHand = false, removalServiceId = null } = {}) {
   const service = db.services.find((s) => s.id === Number(serviceId) && !s.isDeleted && s.isActive)
   if (!service) invalid('serviceId', 'The selected service is not available.')
+  let removal = null
+  if (removalServiceId != null) {
+    if (service.category === 'Removal') invalid('removalServiceId', 'A removal can only be added to a new set of nails, not to another removal.')
+    removal = db.services.find((s) => s.id === Number(removalServiceId) && s.category === 'Removal' && !s.isDeleted && s.isActive)
+    if (!removal) invalid('removalServiceId', 'The selected removal is not available.')
+  }
   if (new Set(selections.map((a) => a.addOnId)).size !== selections.length)
     invalid('addOns', 'Each add-on can only be selected once.')
   const addOns = selections.map(({ addOnId, nailCount, hand }) => {
@@ -124,13 +138,15 @@ function resolveSelection(db, serviceId, selections = [], { requireHand = false 
   })
   if (service.category === 'Removal' && addOns.length)
     invalid('addOns', "Stone add-ons can't be added to a removal service. Choose a Soft Gel service to add them.")
-  return { service, addOns }
+  if (!serviceItem(service).allowsAddOns && addOns.length)
+    invalid('addOns', `Stone add-ons aren't available with ${service.name}. Choose another service to add them.`)
+  return { service, addOns, removal, durationMinutes: service.durationMinutes + (removal?.durationMinutes ?? 0) }
 }
 
 const HAND_LABELS = { Left: 'Left hand', Right: 'Right hand', Both: 'Both hands' }
 const PAYMENT_OPTION_LABELS = { Deposit: 'Booking deposit', Full: 'Full payment' }
 
-const quoteFor = (selection) => calculateQuote(selection.service, selection.addOns, policies.depositAmount)
+const quoteFor = (selection) => calculateQuote(selection.service, selection.addOns, policies.depositAmount, selection.removal)
 
 // ---------------------------------------------------------------- schedule
 
@@ -184,15 +200,18 @@ const activeOn = (db, date) => db.bookings.filter((b) => isActive(b) && b.bookin
 const blocksFor = (db, date) => db.blockedSlots.filter((s) => !s.isDeleted && s.date === date)
 const dayOfWeek = (date) => startsAt(date, '00:00:00').getDay()
 
-function serviceDuration(db, serviceId) {
+function serviceDuration(db, serviceId, removalServiceId) {
   if (serviceId == null || serviceId === '') return schedule.slotIntervalMinutes
   const service = db.services.find((s) => s.id === Number(serviceId) && !s.isDeleted && s.isActive)
   if (!service) invalid('serviceId', 'The selected service is not available.')
-  return service.durationMinutes
+  if (removalServiceId == null || removalServiceId === '' || service.category === 'Removal') return service.durationMinutes
+  const removal = db.services.find((s) => s.id === Number(removalServiceId) && s.category === 'Removal' && !s.isDeleted && s.isActive)
+  if (!removal) invalid('removalServiceId', 'The selected removal is not available.')
+  return service.durationMinutes + removal.durationMinutes
 }
 
-function daySlots(db, date, serviceId) {
-  const duration = serviceDuration(db, serviceId)
+function daySlots(db, date, serviceId, removalServiceId) {
+  const duration = serviceDuration(db, serviceId, removalServiceId)
   const starts = slotStarts(db)
   const blocks = blocksFor(db, date)
   const closing = toMinutes(closingTime(db))
@@ -252,13 +271,17 @@ function ensureBookable(db, date, startTime, duration, movingBookingId = null) {
 
 // ---------------------------------------------------------------- bookings
 
+// Most urgent first: a client who paid is waiting, then appointments left open, then money to note down.
+const ATTENTION_ORDER = ['CheckPayment', 'DatePassed', 'BalanceNotRecorded']
+
 function bookingResponse(db, b, includeClient) {
   const service = db.services.find((s) => s.id === b.serviceId)
+  const removal = b.removalServiceId ? db.services.find((s) => s.id === b.removalServiceId) : null
   const addOnLines = db.bookingAddOns.filter((a) => a.bookingId === b.id).map((line) => ({
     addOnId: line.addOnId, name: db.addOns.find((a) => a.id === line.addOnId)?.name ?? 'Add-on',
     nailCount: line.nailCount, linePrice: line.linePrice, hand: line.hand ?? 'Both', handLabel: HAND_LABELS[line.hand ?? 'Both'],
   }))
-  const totalPrice = b.servicePrice + addOnLines.reduce((sum, line) => sum + line.linePrice, 0)
+  const totalPrice = b.servicePrice + (b.removalPrice ?? 0) + addOnLines.reduce((sum, line) => sum + line.linePrice, 0)
   const cancellation = db.cancellations.find((c) => c.bookingId === b.id)
   const client = db.users.find((u) => u.id === b.clientId)
   return {
@@ -269,6 +292,8 @@ function bookingResponse(db, b, includeClient) {
     balanceDue: Math.max(0, totalPrice - (b.amountPaid ?? b.depositAmount) - (b.balanceReceived ?? 0)),
     payment: { ...paymentInfo(db, b), balanceReceived: b.balanceReceived ?? 0, balanceReceivedAt: b.balanceReceivedAt ?? null, balanceReference: b.balanceReference ?? null },
     note: b.note ?? null, createdAt: b.createdAt,
+    removalServiceId: b.removalServiceId ?? null, removalServiceName: removal?.name ?? null, removalPrice: b.removalPrice ?? 0,
+    nailColor: b.nailColor ?? null, termsVersion: b.termsVersion ?? null, termsAcceptedAt: b.termsAcceptedAt ?? null,
     cancellation: cancellation ? {
       reason: cancellation.reason, reasonLabel: reasonLabel(cancellation.reason), explanation: cancellation.explanation,
       cancelledByRole: db.users.find((u) => u.id === cancellation.cancelledByUserId)?.role ?? '', cancelledAt: cancellation.cancelledAt,
@@ -277,6 +302,39 @@ function bookingResponse(db, b, includeClient) {
       username: client.username, email: client.email, phoneNumber: client.phoneNumber } : null,
     referenceImages: db.referenceImages.filter((r) => r.bookingId === b.id && !r.isDeleted).map(referenceImageResponse),
   }
+}
+
+/** Same checks as the backend for a new or changed blocked time. `ignoreId` is the block being changed. */
+function checkedBlock(db, admin, body, ignoreId) {
+  if (!body.date) invalid('date', 'Select a date to block.')
+  if (body.date < today()) invalid('date', 'Past dates cannot be blocked.')
+  if (body.endTime && !body.startTime) invalid('startTime', 'Choose when the blocked period starts.')
+  if (body.endTime && body.startTime && body.endTime <= body.startTime) invalid('endTime', 'The end time must be after the start time.')
+  const startTime = body.startTime || null
+  const endTime = startTime ? body.endTime || addMinutesToTime(startTime, schedule.slotIntervalMinutes) : null
+  if (startTime && (!onGrid(startTime) || !onGrid(endTime) || endTime <= startTime))
+    invalid('startTime', 'Please choose one of the appointment times.')
+  if (endTime && endTime > closingTime(db)) invalid('endTime', `The blocked time must end by closing time (${clockText(closingTime(db))}).`)
+  if ((body.reason ?? '').length > rules.LIMITS.blockReasonMax) invalid('reason', `Reason must be ${rules.LIMITS.blockReasonMax} characters or fewer.`)
+
+  const row = { id: null, date: body.date, startTime, endTime, reason: body.reason?.trim() || null,
+    createdByUserId: admin.id, createdAt: nowIso(), isDeleted: false }
+  if (blocksFor(db, body.date).filter((b) => b.id !== ignoreId).some((b) => b.startTime === null || (startTime && overlaps(blockPeriod(b), blockPeriod(row)))))
+    conflict('This date or time is already blocked.', 'already_blocked')
+  if (activeOn(db, body.date).some((b) => !startTime || overlaps(period(b.startTime, b.durationMinutes), blockPeriod(row))))
+    conflict('There are active bookings in this period. Reschedule or cancel them before blocking it.', 'has_active_bookings')
+  return row
+}
+
+/** Same shape as the backend ClientDataResponse. */
+function clientSummary(db, client) {
+  if (!client) notFound('No client account was found with that email address.')
+  const bookings = db.bookings.filter((b) => b.clientId === client.id)
+  return { id: client.id, firstName: client.firstName, lastName: client.lastName, username: client.username, email: client.email,
+    phoneNumber: client.phoneNumber, bookingCount: bookings.length,
+    activeBookingCount: bookings.filter((b) => ['Pending', 'Confirmed'].includes(b.status)).length,
+    photoCount: db.referenceImages.filter((r) => r.clientId === client.id && !r.isDeleted).length,
+    feedbackCount: db.feedback.filter((f) => f.clientId === client.id).length }
 }
 
 // Same shape as the backend BookingPaymentResponse.
@@ -382,6 +440,7 @@ function createBooking(db, user, body) {
   if (!lookups.paymentMethods.some((m) => m.value === body.paymentMethod)) invalid('paymentMethod', 'Select GCash or Maya.')
   if (body.paymentOption != null && !Object.hasOwn(PAYMENT_OPTION_LABELS, body.paymentOption)) invalid('paymentOption', 'Choose to pay the deposit or the full amount.')
   if (String(body.note ?? '').length > rules.LIMITS.noteMax) invalid('note', `Your note must be ${rules.LIMITS.noteMax} characters or fewer.`)
+  if (!body.termsVersion) invalid('termsVersion', 'Please read and agree to the booking policy and Terms & Conditions.')
 
   // Repeated Pay click: return the original booking instead of charging again (Ref 12.4).
   const earlier = db.payments.find((p) => p.idempotencyKey === body.idempotencyKey)
@@ -391,9 +450,16 @@ function createBooking(db, user, body) {
     return { status: 200, data: { booking: bookingResponse(db, b, false), receipt: receipt(db, earlier) } }
   }
 
-  const selection = resolveSelection(db, body.serviceId, body.addOns ?? [], { requireHand: true })
+  if (body.termsVersion !== termsAndConditions.version)
+    conflict('The booking policy and Terms & Conditions have been updated. Please read them again and agree before paying.', 'terms_outdated')
+  const selection = resolveSelection(db, body.serviceId, body.addOns ?? [], { requireHand: true, removalServiceId: body.removalServiceId ?? null })
+  let nailColor = null
+  if (selection.service.category !== 'Removal') {
+    if (!String(body.nailColor ?? '').trim()) invalid('nailColor', 'Choose a nail colour.')
+    nailColor = NAIL_COLORS.find((c) => same(c, String(body.nailColor).trim())) ?? invalid('nailColor', 'Choose one of the listed colours.')
+  }
   const referenceImages = attachReferenceImages(db, user, body.referenceImageIds)
-  ensureBookable(db, body.bookingDate, body.startTime, selection.service.durationMinutes)
+  ensureBookable(db, body.bookingDate, body.startTime, selection.durationMinutes)
 
   // Simulated GCash / Maya charge. Booking, payment and slot are saved together or not at all (Ref 6.1).
   if (db.flags.failNextPayment) {
@@ -409,7 +475,9 @@ function createBooking(db, user, body) {
   const amount = option === 'Full' ? quote.fullAmount : quote.deposit
   const createdAt = nowIso()
   const booking = { id: nextId('bookings'), clientId: user.id, serviceId: selection.service.id, servicePrice: selection.service.price,
-    depositAmount: quote.deposit, bookingDate: body.bookingDate, startTime: body.startTime, durationMinutes: selection.service.durationMinutes,
+    depositAmount: quote.deposit, bookingDate: body.bookingDate, startTime: body.startTime, durationMinutes: selection.durationMinutes,
+    removalServiceId: selection.removal?.id ?? null, removalPrice: selection.removal?.price ?? 0, nailColor,
+    termsVersion: termsAndConditions.version, termsAcceptedAt: createdAt,
     note: String(body.note ?? '').trim() || null, paymentOption: option, amountPaid: amount,
     confirmedAt: null, confirmedByUserId: null,
     status: 'Pending', createdAt, updatedAt: createdAt, reminderSentAt: null, isDeleted: false }
@@ -510,6 +578,10 @@ function updateCatalogRow(db, user, row, body, entityType) {
     details += `, ${row.durationMinutes} -> ${body.durationMinutes} min`
     row.durationMinutes = Number(body.durationMinutes)
   }
+  if (entityType === 'Service' && body.allowsAddOns != null && row.category !== 'Removal' && Boolean(body.allowsAddOns) !== serviceItem(row).allowsAddOns) {
+    details += `, add-ons ${body.allowsAddOns ? 'allowed' : 'not allowed'}`
+    row.allowsAddOns = Boolean(body.allowsAddOns)
+  }
   Object.assign(row, { name, price: Number(body.price), isActive: Boolean(body.isActive), updatedAt: nowIso() })
   audit(db, user.id, 'ServiceUpdated', entityType, row.id, details)
   saveDb()
@@ -525,12 +597,12 @@ const routes = [
     const taken = {}
     if (db.users.some((u) => same(u.username, body.username))) taken.username = 'Username is already taken.'
     if (db.users.some((u) => same(u.email, body.email))) taken.email = 'An account with this email address already exists.'
-    if (db.users.some((u) => u.phoneNumber === body.phoneNumber.trim())) taken.phoneNumber = 'This phone number is already registered.'
+    if (db.users.some((u) => u.phoneNumber === rules.normalizePhone(body.phoneNumber))) taken.phoneNumber = 'This phone number is already registered.'
     if (Object.keys(taken).length) invalidMany(taken)
 
     const createdAt = nowIso()
     const user = { id: nextId('users'), firstName: body.firstName.trim(), lastName: body.lastName.trim(), username: body.username.trim(),
-      email: body.email.trim().toLowerCase(), phoneNumber: body.phoneNumber.trim(), password: body.password, role: 'Client',
+      email: body.email.trim().toLowerCase(), phoneNumber: rules.normalizePhone(body.phoneNumber), password: body.password, role: 'Client',
       emailVerified: false, termsVersion: policies.termsVersion, termsAcceptedAt: createdAt, failedLoginCount: 0, lockoutEndUtc: null,
       securityStamp: randomHex(8), createdAt, updatedAt: createdAt, isDeleted: false }
     db.users.push(user)
@@ -538,6 +610,8 @@ const routes = [
     db.userTokens.push({ id: nextId('userTokens'), userId: user.id, purpose: 'EmailVerification', token: code,
       expiresAt: new Date(Date.now() + policies.emailVerificationCodeHours * 60 * MINUTE).toISOString(), consumedAt: null, failedAttempts: 0, createdAt })
     audit(db, user.id, 'UserRegistered', 'User', user.id, `Terms v${policies.termsVersion} accepted`)
+    db.resendSentAt ??= {}
+    db.resendSentAt[user.email] = Date.now() // the wait for another code starts with this one
     sendEmail(db, user.email, 'Verify your Nails by Leyah account', `Hi ${user.firstName}, your verification code is ${code}. It expires in 24 hours.`, { code })
     saveDb()
     return { status: 201, data: { userId: user.id, message: 'Registration successful. Check your email for the verification code to activate your account.' } }
@@ -573,6 +647,12 @@ const routes = [
   }],
 
   ['POST', '/auth/resend-verification', (db, { body }) => {
+    // Another code a minute after the last, for every address (same as the server's ResendCooldown).
+    const key = String(body.email ?? '').trim().toLowerCase()
+    db.resendSentAt ??= {}
+    const left = Math.ceil(((db.resendSentAt[key] ?? 0) + 60_000 - Date.now()) / 1000)
+    if (left > 0) throw new ApiError({ status: 429, message: `Please wait ${left} seconds before asking for another code.`, code: 'resend_cooldown', retryAfterSeconds: left })
+    db.resendSentAt[key] = Date.now()
     const user = db.users.find((u) => same(u.email, body.email) && !u.isDeleted)
     if (user && !user.emailVerified) {
       db.userTokens.filter((t) => t.userId === user.id && t.purpose === 'EmailVerification' && !t.consumedAt).forEach((t) => { t.consumedAt = nowIso() })
@@ -623,6 +703,21 @@ const routes = [
   }],
 
   ['GET', '/auth/me', (db) => profile(requireUser(db))],
+  ['PUT', '/auth/me', (db, { body }) => {
+    const user = requireUser(db)
+    const errors = Object.fromEntries([
+      ['firstName', rules.validateName(body.firstName, 'First Name')],
+      ['lastName', rules.validateName(body.lastName, 'Last Name')],
+      ['phoneNumber', rules.validatePhone(body.phoneNumber)],
+    ].filter(([, m]) => m))
+    if (Object.keys(errors).length) invalidMany(errors)
+    const phone = rules.normalizePhone(body.phoneNumber)
+    if (db.users.some((u) => u.id !== user.id && u.phoneNumber === phone)) invalid('phoneNumber', 'This phone number is already registered.')
+    Object.assign(user, { firstName: body.firstName.trim(), lastName: body.lastName.trim(), phoneNumber: phone, updatedAt: nowIso() })
+    audit(db, user.id, 'ProfileUpdated', 'User', user.id, 'Changed profile')
+    saveDb()
+    return profile(user)
+  }],
 
   ['POST', '/auth/forgot-password', (db, { body }) => {
     const emailError = rules.validateEmail(body.email)
@@ -661,7 +756,13 @@ const routes = [
   ['GET', '/services', (db) => catalog(db, false)],
   ['GET', '/slots', (db, { query }) => {
     if (!/^\d{4}-\d{2}-\d{2}$/.test(query.date ?? '')) invalid('date', 'Select a date.')
-    return daySlots(db, query.date, query.serviceId)
+    return daySlots(db, query.date, query.serviceId, query.removalServiceId)
+  }],
+  ['GET', '/slots/closed-dates', (db) => {
+    const closed = []
+    for (let day = today(), i = 0; i <= schedule.maxDaysAhead; i++, day = addDays(day, 1))
+      if (blocksFor(db, day).some((b) => b.startTime == null)) closed.push(day)
+    return closed
   }],
   ['GET', '/salon-hours', (db) => salonHours(db)],
   ['GET', '/lookups', () => structuredClone(lookups)],
@@ -736,17 +837,26 @@ const routes = [
   }],
 
   // A client's request to delete their personal data (same rules as ClientDataService)
+  ['POST', '/admin/clients/search', (db, { body }) => {
+    requireUser(db, 'Administrator')
+    const text = String(body.search ?? '').trim().toLowerCase()
+    const page = Math.max(1, Number(body.page ?? 1))
+    const pageSize = Math.min(100, Math.max(1, Number(body.pageSize ?? 20)))
+    const matches = db.users.filter((u) => u.role === 'Client' && !u.isDeleted)
+      .filter((u) => !text || [u.username, u.email, u.phoneNumber, `${u.firstName} ${u.lastName}`].some((v) => v.toLowerCase().includes(text)))
+      .sort((a, b) => a.username.localeCompare(b.username))
+    return { items: matches.slice((page - 1) * pageSize, page * pageSize).map((u) => ({ id: u.id, username: u.username, firstName: u.firstName,
+      lastName: u.lastName, email: u.email, phoneNumber: u.phoneNumber, emailVerified: u.emailVerified, createdAt: u.createdAt })),
+      page, pageSize, totalCount: matches.length }
+  }],
+  ['GET', '/admin/clients/:id', (db, { params }) => {
+    requireUser(db, 'Administrator')
+    return clientSummary(db, db.users.find((u) => u.id === Number(params.id) && u.role === 'Client' && !u.isDeleted))
+  }],
   ['POST', '/admin/clients/find', (db, { body }) => {
     requireUser(db, 'Administrator')
     const email = String(body.email ?? '').trim().toLowerCase()
-    const client = db.users.find((u) => u.email?.toLowerCase() === email && u.role === 'Client' && !u.isDeleted)
-    if (!client) notFound('No client account was found with that email address.')
-    const bookings = db.bookings.filter((b) => b.clientId === client.id)
-    return { id: client.id, firstName: client.firstName, lastName: client.lastName, username: client.username, email: client.email,
-      phoneNumber: client.phoneNumber, bookingCount: bookings.length,
-      activeBookingCount: bookings.filter((b) => ['Pending', 'Confirmed'].includes(b.status)).length,
-      photoCount: db.referenceImages.filter((r) => r.clientId === client.id && !r.isDeleted).length,
-      feedbackCount: db.feedback.filter((f) => f.clientId === client.id).length }
+    return clientSummary(db, db.users.find((u) => u.email?.toLowerCase() === email && u.role === 'Client' && !u.isDeleted))
   }],
   ['POST', '/admin/clients/:id/delete-data', (db, { params }) => {
     const admin = requireUser(db, 'Administrator')
@@ -803,29 +913,50 @@ const routes = [
     const user = requireUser(db, 'Client')
     const booking = ownedBooking(db, user, params.id)
     if (!lookups.clientCancellationReasons.some((r) => r.value === body.reason)) invalid('reason', 'Select a cancellation reason.')
+    const ownReason = body.reason === 'Others' ? String(body.explanation ?? '').trim() : null
+    if (body.reason === 'Others' && !ownReason) invalid('explanation', 'Please tell us the reason.')
     if (startsAt(booking.bookingDate, booking.startTime) <= new Date())
       conflict('This appointment has already started or passed and can no longer be cancelled.', 'invalid_status')
-    cancelBooking(db, user, booking, body.reason, null)
+    cancelBooking(db, user, booking, body.reason, ownReason)
     return bookingResponse(db, booking, false)
   }],
 
   // Administrator
-  ['GET', '/admin/dashboard', (db) => {
+  ['GET', '/admin/dashboard', (db, { query }) => {
     requireUser(db, 'Administrator')
-    const day = today()
-    const [from, to] = utcRangeForDay(day)
-    const todays = db.bookings.filter((b) => !b.isDeleted && b.bookingDate === day).sort((a, b) => a.startTime.localeCompare(b.startTime))
+    const current = today()
+    const day = query.date || current
+    if (Math.abs(new Date(day) - new Date(current)) > 366 * 86_400_000) invalid('date', 'Choose a date within a year of today.')
+    const [from, to] = utcRangeForDay(current)
+    const clock = new Date()
+    const pad = (n) => String(n).padStart(2, '0')
+    const nowTime = `${pad(clock.getHours())}:${pad(clock.getMinutes())}:${pad(clock.getSeconds())}`
+    const live = db.bookings.filter((b) => !b.isDeleted)
+    const byTime = (a, b) => (a.bookingDate + a.startTime).localeCompare(b.bookingDate + b.startTime)
+    const isActive = (b) => b.status === 'Pending' || b.status === 'Confirmed'
+    const view = (b) => bookingResponse(db, b, true)
+    const days = live.filter((b) => b.bookingDate === day).sort(byTime).map(view)
+    const isOver = (b) => b.bookingDate < current || (b.bookingDate === current && b.endTime <= nowTime)
+    const next = day < current ? null : days.find((b) => isActive(b) && (day > current || b.endTime > nowTime)) ?? null
+    const attention = live.sort(byTime).map(view).flatMap((b) => {
+      if (isActive(b) && isOver(b)) return [{ kind: 'DatePassed', booking: b }]
+      if (b.status === 'Pending') return [{ kind: 'CheckPayment', booking: b }]
+      if (b.status === 'Completed' && b.balanceDue > 0 && b.bookingDate >= addDays(current, -30)) return [{ kind: 'BalanceNotRecorded', booking: b }]
+      return []
+    }).sort((a, b) => ATTENTION_ORDER.indexOf(a.kind) - ATTENTION_ORDER.indexOf(b.kind))
     const paid = db.payments.filter((p) => p.status === 'Succeeded')
     return {
-      today: day,
-      todaysBookingCount: todays.filter((b) => b.status !== 'Cancelled').length,
-      todaysBookings: todays.map((b) => bookingResponse(db, b, true)),
-      pendingBookingCount: db.bookings.filter((b) => !b.isDeleted && b.status === 'Pending').length,
+      today: current,
+      date: day,
+      now: `${current}T${nowTime}`,
+      todaysBookingCount: days.filter((b) => b.status !== 'Cancelled').length,
+      todaysBookings: days,
+      pendingBookingCount: live.filter((b) => b.status === 'Pending').length,
       depositsCollectedToday: paid.filter((p) => p.paidAt >= from && p.paidAt < to).reduce((s, p) => s + p.amount, 0),
       totalDepositsCollected: paid.reduce((s, p) => s + p.amount, 0),
-      upcomingBookings: db.bookings.filter((b) => !b.isDeleted && ['Pending', 'Confirmed'].includes(b.status) && b.bookingDate > day && b.bookingDate <= addDays(day, 7))
-        .sort((a, b) => (a.bookingDate + a.startTime).localeCompare(b.bookingDate + b.startTime))
-        .map((b) => bookingResponse(db, b, true)),
+      upcomingBookings: live.filter((b) => isActive(b) && b.bookingDate > day && b.bookingDate <= addDays(day, 7)).sort(byTime).map(view),
+      attention,
+      nextBooking: next,
     }
   }],
   ['GET', '/admin/bookings', (db, { query }) => {
@@ -833,13 +964,29 @@ const routes = [
     const page = Math.max(1, Number(query.page) || 1)
     const pageSize = Math.min(100, Math.max(1, Number(query.pageSize) || 20))
     const name = String(query.clientName ?? '').trim().toLowerCase()
+    const serviceId = query.serviceId ? Number(query.serviceId) : null
     const matches = db.bookings.filter((b) => {
       if (b.isDeleted || (query.date && b.bookingDate !== query.date) || (query.status && b.status !== query.status)) return false
+      if (serviceId && b.serviceId !== serviceId && b.removalServiceId !== serviceId) return false
       if (!name) return true
       const c = db.users.find((u) => u.id === b.clientId)
-      return [c.firstName, c.lastName, `${c.firstName} ${c.lastName}`, c.username].some((v) => v.toLowerCase().includes(name))
+      const service = db.services.find((s) => s.id === b.serviceId)?.name ?? ''
+      const references = db.payments.filter((p) => p.bookingId === b.id).map((p) => p.referenceNumber)
+      return [c.firstName, c.lastName, `${c.firstName} ${c.lastName}`, c.username, service, ...references].some((v) => v.toLowerCase().includes(name))
     }).sort((a, b) => b.bookingDate.localeCompare(a.bookingDate) || a.startTime.localeCompare(b.startTime))
     return { items: matches.slice((page - 1) * pageSize, page * pageSize).map((b) => bookingResponse(db, b, true)), page, pageSize, totalCount: matches.length }
+  }],
+  ['GET', '/admin/bookings/calendar', (db, { query }) => {
+    requireUser(db, 'Administrator')
+    const month = `${query.year}-${String(query.month).padStart(2, '0')}`
+    if (!(Number(query.month) >= 1 && Number(query.month) <= 12)) invalid('month', 'Choose a valid month.')
+    const days = {}
+    for (const b of db.bookings.filter((x) => !x.isDeleted && x.bookingDate.startsWith(month))) {
+      days[b.bookingDate] ??= { date: b.bookingDate, count: 0, activeCount: 0 }
+      days[b.bookingDate].count++
+      if (isActive(b)) days[b.bookingDate].activeCount++
+    }
+    return Object.values(days).sort((a, b) => a.date.localeCompare(b.date))
   }],
   ['GET', '/admin/bookings/:id', (db, { params }) => {
     requireUser(db, 'Administrator')
@@ -977,28 +1124,23 @@ const routes = [
   }],
   ['POST', '/admin/blocked-slots', (db, { body }) => {
     const admin = requireUser(db, 'Administrator')
-    if (!body.date) invalid('date', 'Select a date to block.')
-    if (body.date < today()) invalid('date', 'Past dates cannot be blocked.')
-    if (body.endTime && !body.startTime) invalid('startTime', 'Choose when the blocked period starts.')
-    if (body.endTime && body.startTime && body.endTime <= body.startTime) invalid('endTime', 'The end time must be after the start time.')
-    const startTime = body.startTime || null
-    const endTime = startTime ? body.endTime || addMinutesToTime(startTime, schedule.slotIntervalMinutes) : null
-    if (startTime && (!onGrid(startTime) || !onGrid(endTime) || endTime <= startTime))
-      invalid('startTime', 'Please choose one of the appointment times.')
-    if (endTime && endTime > closingTime(db)) invalid('endTime', `The blocked time must end by closing time (${clockText(closingTime(db))}).`)
-    if ((body.reason ?? '').length > rules.LIMITS.blockReasonMax) invalid('reason', `Reason must be ${rules.LIMITS.blockReasonMax} characters or fewer.`)
-
-    const row = { id: null, date: body.date, startTime, endTime, reason: body.reason?.trim() || null,
-      createdByUserId: admin.id, createdAt: nowIso(), isDeleted: false }
-    if (blocksFor(db, body.date).some((b) => b.startTime === null || (startTime && overlaps(blockPeriod(b), blockPeriod(row)))))
-      conflict('This date or time is already blocked.', 'already_blocked')
-    if (activeOn(db, body.date).some((b) => !startTime || overlaps(period(b.startTime, b.durationMinutes), blockPeriod(row))))
-      conflict('There are active bookings in this period. Reschedule or cancel them before blocking it.', 'has_active_bookings')
+    const row = checkedBlock(db, admin, body, null)
     row.id = nextId('blockedSlots')
     db.blockedSlots.push(row)
     audit(db, admin.id, 'SlotBlocked', 'BlockedSlot', row.id, describeBlock(row))
     saveDb()
     return { status: 201, data: blockedSlotResponse(row) }
+  }],
+  ['PUT', '/admin/blocked-slots/:id', (db, { params, body }) => {
+    const admin = requireUser(db, 'Administrator')
+    const existing = db.blockedSlots.find((s) => s.id === Number(params.id) && !s.isDeleted) ?? notFound('Blocked slot not found.')
+    if (existing.date < today()) conflict("A blocked time in the past can't be changed.", 'invalid_status')
+    const row = checkedBlock(db, admin, body, existing.id)
+    const before = describeBlock(existing)
+    Object.assign(existing, { date: row.date, startTime: row.startTime, endTime: row.endTime, reason: row.reason })
+    audit(db, admin.id, 'SlotBlockChanged', 'BlockedSlot', existing.id, `${before} -> ${describeBlock(existing)}`)
+    saveDb()
+    return blockedSlotResponse(existing)
   }],
   ['DELETE', '/admin/blocked-slots/:id', (db, { params }) => {
     const admin = requireUser(db, 'Administrator')

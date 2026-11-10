@@ -17,6 +17,15 @@ export function RequireRole({ role, children }) {
   return children
 }
 
+/** Any signed-in user, client or administrator (their own profile). */
+export function SignedIn({ children }) {
+  const { user, ready } = useAuth()
+  const location = useLocation()
+  if (!ready) return <PageLoader />
+  if (!user) return <Navigate to="/login" replace state={{ from: location.pathname + location.search }} />
+  return children
+}
+
 /** Login, registration and password pages are for signed-out visitors only. */
 export function GuestOnly({ children }) {
   const { user, ready } = useAuth()

@@ -12,29 +12,47 @@ function Calendar({ initial = '', onChange = () => {} }) {
 }
 
 describe('Booking time list', () => {
-  const date = dateFromToday(5)
+  const date = dateFromToday(3) // nothing booked that day
   const show = (selectedTime = '') => {
     const onTimeChange = vi.fn()
     render(<SlotPicker date={date} onDateChange={() => {}} selectedTime={selectedTime} onTimeChange={onTimeChange} serviceId={1} />)
     return onTimeChange
   }
 
-  it('groups the times by part of the day and shows only the start time on each button', async () => {
+  it('groups the times by part of the day and shows when each one would end', async () => {
     const onTimeChange = show()
     const morning = await screen.findByRole('group', { name: 'Morning' })
 
     expect(within(screen.getByRole('group', { name: 'Evening' })).getByRole('button', { name: /^5:00 PM/ })).toBeInTheDocument()
     const first = within(morning).getAllByRole('button')[0]
-    expect(first).toHaveTextContent(/^11:00 AM$/)
+    expect(first).toHaveTextContent(/^11:00 AMEnds 1:00 PM$/)
     expect(first).toHaveAccessibleName(/^11:00 AM – .*PM Available$/)
     fireEvent.click(first)
     expect(onTimeChange).toHaveBeenCalledWith('11:00:00')
   })
 
+  it('marks the last time of the day and leaves out times that would end after closing', async () => {
+    show()
+    const evening = await screen.findByRole('group', { name: 'Evening' })
+
+    // Plain takes 2 hours and the salon closes at 9:00 PM, so 7:00 PM is the last start.
+    expect(screen.getByText(/The last time you can start on this day is/)).toHaveTextContent('7:00 PM, ending at 9:00 PM closing.')
+    expect(within(evening).getByRole('button', { name: /^7:00 PM .*last time today/ })).toHaveTextContent('Last time')
+    expect(within(evening).queryByRole('button', { name: /^7:30 PM/ })).toBeNull()
+    expect(within(evening).queryByRole('button', { name: /^8:30 PM/ })).toBeNull()
+  })
+
+  it('says why a time before another appointment cannot be chosen', async () => {
+    render(<SlotPicker date={dateFromToday(5)} onDateChange={() => {}} selectedTime="" onTimeChange={() => {}} serviceId={1} />)
+    // Seeded booking #10 is at 1:00 PM that day; Plain at 11:00 would end at 1:00 PM with no break before it.
+    const morning = await screen.findByRole('group', { name: 'Morning' })
+    expect(within(morning).getAllByRole('button')[0]).toHaveTextContent('Runs into 1 PM')
+  })
+
   it('confirms the whole appointment, with its end time, once a time is chosen', async () => {
     show('11:00:00')
 
-    expect(await screen.findByText('11:00 AM – 12:00 PM')).toBeInTheDocument()
+    expect(await screen.findByText('11:00 AM – 1:00 PM')).toBeInTheDocument() // Plain takes 2 hours
   })
 })
 

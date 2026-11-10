@@ -42,6 +42,7 @@ public static class ServiceRegistration
 
         services.AddSingleton(TimeProvider.System);
         services.AddSingleton<ISalonClock, SalonClock>();
+        services.AddSingleton<ResendCooldown>();
         services.AddHttpContextAccessor();
         services.AddScoped<ICurrentUser, HttpCurrentUser>();
 

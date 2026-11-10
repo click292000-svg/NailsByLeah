@@ -60,10 +60,10 @@ public sealed class BookingTests(ApiFactory factory) : IClassFixture<ApiFactory>
     {
         var user = await factory.CreateClientAsync();
 
-        var booked = await user.Client.BookAsync(TestHelpers.NewBooking(factory.NextSlot(), SoftGelPlain, addOns: new AddOnSelection(FrenchTip, 3, NailHand.Right)));
+        var booked = await user.Client.BookAsync(TestHelpers.NewBooking(factory.NextSlot(), SoftGelWithDesign, addOns: new AddOnSelection(FrenchTip, 3, NailHand.Right)));
 
-        Assert.Equal(345m, booked.Booking.TotalPrice);
-        Assert.Equal(195m, booked.Booking.BalanceDue);
+        Assert.Equal(445m, booked.Booking.TotalPrice); // With Design 400 + French Tip 15 x 3
+        Assert.Equal(295m, booked.Booking.BalanceDue);
     }
 
     [Fact] // 9.1.6
@@ -231,7 +231,7 @@ public sealed class BookingTests(ApiFactory factory) : IClassFixture<ApiFactory>
     public async Task Administrator_can_complete_todays_booking_but_not_a_future_one()
     {
         var user = await factory.CreateClientAsync();
-        var today = await user.Client.BookAsync(TestHelpers.NewBooking((ApiFactory.StartDate, new TimeOnly(14, 0))));
+        var today = await user.Client.BookAsync(TestHelpers.NewBooking((ApiFactory.StartDate, new TimeOnly(13, 30))));
         var future = await user.Client.BookAsync(TestHelpers.NewBooking(factory.NextSlot()));
         var admin = await factory.CreateAdminClientAsync();
         await admin.ConfirmAsync(today.Booking.Id);
@@ -315,7 +315,7 @@ public sealed class BookingTests(ApiFactory factory) : IClassFixture<ApiFactory>
     public async Task Reminder_is_sent_once_for_appointments_within_24_hours()
     {
         var user = await factory.CreateClientAsync();
-        var soon = await user.Client.BookAsync(TestHelpers.NewBooking((ApiFactory.StartDate, new TimeOnly(12, 0))));
+        var soon = await user.Client.BookAsync(TestHelpers.NewBooking((ApiFactory.StartDate, new TimeOnly(11, 0))));
         var later = await user.Client.BookAsync(TestHelpers.NewBooking(factory.NextSlot()));
         var admin = await factory.CreateAdminClientAsync();
         await admin.ConfirmAsync(soon.Booking.Id);

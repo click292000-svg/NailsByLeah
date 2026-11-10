@@ -1,11 +1,12 @@
 import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { ADMIN, CLIENT, renderApp, signIn, pickDate } from './helpers'
+import { ADMIN, CLIENT, renderApp, signIn, pickDate, pickShade } from './helpers'
 import { getDb } from './mockBackend/db'
 import { mockRequest } from './mockBackend/mockApi'
 import { dateFromToday } from '../lib/dates'
 import { users } from './mockBackend/data/users'
 import { formatDate } from '../lib/format'
+import { termsAndConditions } from '../content/legal'
 
 describe('Customer feedback', () => {
   it('saves a 5-star rating without a comment and thanks the client', async () => {
@@ -63,13 +64,14 @@ describe('Open, Booked and Closed times', () => {
 
     await signIn(CLIENT)
     renderApp('/book')
-    await user.click(await screen.findByRole('radio', { name: /Plain/ }))
-    await user.click(screen.getByRole('button', { name: 'Continue' }))
+    await user.click(await screen.findByRole('checkbox', { name: /Plain/ }))
+    await pickShade(user, '06')
+    await user.click(screen.getByRole('button', { name: /^Next:/ }))
     pickDate(dateFromToday(4))
 
     expect(await screen.findByRole('button', { name: /^2:00.*Closed/ })).toBeDisabled()
     await expect(mockRequest('POST', '/bookings', { body: {
-      serviceId: 1, addOns: [], bookingDate: dateFromToday(4), startTime: '14:00:00',
+      serviceId: 1, addOns: [], bookingDate: dateFromToday(4), startTime: '14:00:00', nailColor: '#06', termsVersion: termsAndConditions.version,
       paymentMethod: 'GCash', depositAcknowledged: true, idempotencyKey: crypto.randomUUID(),
     } })).rejects.toMatchObject({ status: 409, code: 'slot_unavailable' })
   })
@@ -97,37 +99,105 @@ describe('Open, Booked and Closed times', () => {
   })
 })
 
+describe('Changing a closed time', () => {
+  it('the administrator moves a closed period and the client calendar and times follow', async () => {
+    const user = userEvent.setup()
+    const day = dateFromToday(12)
+    await signIn(ADMIN)
+    await mockRequest('POST', '/admin/blocked-slots', { body: { date: day, startTime: '11:00:00', endTime: '12:00:00', reason: 'Errand' } })
+    renderApp('/admin/schedule')
+    if (day.slice(0, 7) !== dateFromToday(0).slice(0, 7)) await user.click(await screen.findByRole('button', { name: 'Next month' }))
+    await user.click(await screen.findByRole('gridcell', { name: new RegExp(`^${formatDate(day)}`) }))
+
+    await user.click(await screen.findByRole('button', { name: /^Change 11:00 AM – 12:00 PM/ }))
+    const form = screen.getByRole('form', { name: 'Change closed time' })
+    await user.selectOptions(within(form).getByLabelText('Close from'), '15:00:00')
+    await user.selectOptions(within(form).getByLabelText('Until'), '16:00:00')
+    await user.clear(within(form).getByLabelText(/Reason/))
+    await user.type(within(form).getByLabelText(/Reason/), 'Dentist')
+    await user.click(within(form).getByRole('button', { name: 'Save' }))
+
+    expect(await screen.findByText('Closed time changed to 3:00 PM – 4:00 PM.')).toBeInTheDocument()
+    const grid = await screen.findByRole('group', { name: 'Times' })
+    await waitFor(() => expect(within(grid).getByRole('button', { name: /^3:30 PM,/ })).toHaveAccessibleName(/Closed/))
+    expect(within(grid).getByRole('button', { name: /^11:00 AM,/ })).toHaveAccessibleName(/Open/)
+    expect(getDb().blockedSlots.filter((b) => b.date === day && !b.isDeleted)).toHaveLength(1)
+  })
+
+  it('a day closed all day is crossed out on the client calendar', async () => {
+    const day = dateFromToday(13)
+    await signIn(ADMIN)
+    await mockRequest('POST', '/admin/blocked-slots', { body: { date: day, startTime: null, reason: 'Holiday' } })
+    await signIn(CLIENT)
+    const user = userEvent.setup()
+    renderApp('/book')
+    await user.click(await screen.findByRole('checkbox', { name: /^My Work/ }))
+    await user.click(screen.getByRole('button', { name: /^Next:/ }))
+    if (day.slice(0, 7) !== dateFromToday(0).slice(0, 7)) await user.click(await screen.findByRole('button', { name: 'Next month' }))
+
+    const closed = await screen.findByRole('radio', { name: `${formatDate(day)}, closed` })
+    expect(closed).toBeDisabled()
+  })
+})
+
 describe('Hands for Stone add-ons', () => {
-  it('Stone add-ons are switched off for a removal', async () => {
+  it('Stones are switched off and cleared for Plain', async () => {
     const user = userEvent.setup()
     await signIn(CLIENT)
     renderApp('/book')
 
-    await user.click(await screen.findByRole('radio', { name: /With Design/ }))
+    await user.click(await screen.findByRole('checkbox', { name: /With Design/ }))
     await user.click(screen.getByRole('checkbox', { name: /Chrome/ }))
-    await user.click(screen.getByRole('radio', { name: /^My Work/ }))
+    await user.click(screen.getByRole('checkbox', { name: /Plain/ }))
 
-    expect(screen.getByText(/aren.t available with a removal/)).toBeInTheDocument()
+    expect(screen.getByText(/Stones aren.t available with Plain/)).toBeInTheDocument()
     expect(screen.getByRole('checkbox', { name: /Chrome/ })).toBeDisabled()
+    expect(screen.getByRole('checkbox', { name: /Chrome/ })).not.toBeChecked()
+    expect(within(screen.getByRole('complementary')).queryByText(/Chrome/)).toBeNull() // not charged
+
+    // Back to With Design: the earlier Chrome is gone, not quietly restored.
+    await user.click(screen.getByRole('checkbox', { name: /With Design/ }))
     expect(screen.getByRole('checkbox', { name: /Chrome/ })).not.toBeChecked()
   })
 
-  it('one hand stops at 5 nails; more needs both hands', async () => {
+  it('a removal goes with a new set in one appointment, both charged and timed', async () => {
     const user = userEvent.setup()
     await signIn(CLIENT)
     renderApp('/book')
-    await user.click(await screen.findByRole('radio', { name: /With Design/ }))
-    await user.click(screen.getByRole('checkbox', { name: /Chrome/ }))
-    await user.click(screen.getByRole('radio', { name: 'Left hand' }))
 
-    for (let i = 0; i < 4; i++) await user.click(screen.getByRole('button', { name: 'More nails for Chrome' }))
-    expect(screen.getByText('5 nails')).toBeInTheDocument()
+    await user.click(await screen.findByRole('checkbox', { name: /With Design/ }))
+    await user.click(screen.getByRole('checkbox', { name: /^My Work/ }))
+    const aside = within(screen.getByRole('complementary'))
+    expect(aside.getByText('Removal – My Work')).toBeInTheDocument()
+    expect(aside.getByText('Total').nextSibling).toHaveTextContent('₱500.00')
+    expect(aside.getByText('~ 4 hr')).toBeInTheDocument()
+
+    // Only one removal at a time, and a removal alone needs no colour.
+    await user.click(screen.getByRole('checkbox', { name: /^Not My Work/ }))
+    expect(screen.getByRole('checkbox', { name: /^My Work/ })).not.toBeChecked()
+    await user.click(screen.getByRole('checkbox', { name: /With Design/ }))
+    expect(screen.queryByRole('radiogroup', { name: 'Nail colour' })).toBeNull()
+    await user.click(screen.getByRole('button', { name: /^Next:/ }))
+    expect(await screen.findByRole('radiogroup', { name: /Choose a date/ })).toBeInTheDocument()
+  })
+
+  it('choosing a hand fills its nails: both hands 10, one hand 5 and no more', async () => {
+    const user = userEvent.setup()
+    await signIn(CLIENT)
+    renderApp('/book')
+    await user.click(await screen.findByRole('checkbox', { name: /With Design/ }))
+    await user.click(screen.getByRole('checkbox', { name: /Chrome/ }))
+    expect(screen.getByText('10 nails')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'More nails for Chrome' })).toBeDisabled()
 
+    await user.click(screen.getByRole('radio', { name: 'Left hand' }))
+    expect(screen.getByText('5 nails')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'More nails for Chrome' })).toBeDisabled()
+    await user.click(screen.getByRole('button', { name: 'Fewer nails for Chrome' }))
+    expect(screen.getByText('4 nails')).toBeInTheDocument()
+
     await user.click(screen.getByRole('radio', { name: 'Both hands' }))
-    await user.click(screen.getByRole('button', { name: 'More nails for Chrome' }))
-    expect(screen.getByText('6 nails')).toBeInTheDocument()
-    expect(screen.getByRole('radio', { name: 'Left hand' })).toBeDisabled()
+    expect(screen.getByText('10 nails')).toBeInTheDocument()
   })
 })
 
@@ -137,17 +207,19 @@ describe('Booking drafts', () => {
     await signIn(CLIENT)
     const first = renderApp('/book')
 
-    await user.click(await screen.findByRole('radio', { name: /With Design/ }))
+    await user.click(await screen.findByRole('checkbox', { name: /With Design/ }))
     await user.click(screen.getByRole('checkbox', { name: /Chrome/ }))
     await user.click(screen.getByRole('radio', { name: 'Right hand' }))
-    await user.click(screen.getByRole('button', { name: 'Continue' }))
+    await pickShade(user, '46')
+    await user.click(screen.getByRole('button', { name: /^Next:/ }))
     await user.click(screen.getByRole('button', { name: /Back to service/ }))
 
     // Going back keeps every choice.
-    expect(screen.getByRole('radio', { name: /With Design/ })).toBeChecked()
+    expect(screen.getByRole('checkbox', { name: /With Design/ })).toBeChecked()
     expect(screen.getByRole('radio', { name: 'Right hand' })).toHaveAttribute('aria-checked', 'true')
-    await user.click(screen.getByRole('button', { name: 'Continue' }))
-    await waitFor(() => expect(getDb().bookingDrafts.find((d) => d.clientId === 2)?.data).toMatchObject({ step: 1, serviceId: 2, hands: { 2: 'Right' } }))
+    expect(screen.getByRole('button', { name: 'Colour #46 – Plum-Grey. Change colour' })).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: /^Next:/ }))
+    await waitFor(() => expect(getDb().bookingDrafts.find((d) => d.clientId === 2)?.data).toMatchObject({ step: 1, serviceId: 2, color: '#46', hands: { 2: 'Right' } }))
     first.unmount()
 
     // It is a draft, not a booking: no appointment was created, and My bookings offers to continue it.
@@ -163,7 +235,7 @@ describe('Booking drafts', () => {
     expect(await screen.findByText(/We restored the booking you saved as a draft/)).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: /Back to service/ }))
     expect(screen.getByRole('radio', { name: 'Right hand' })).toHaveAttribute('aria-checked', 'true')
-    expect(within(screen.getByRole('complementary')).getByText(/Chrome — Right hand/)).toBeInTheDocument()
+    expect(within(screen.getByRole('complementary')).getByText(/Right hand · /)).toBeInTheDocument()
   })
 
   it('drafts belong to their own client', async () => {
@@ -180,7 +252,7 @@ describe('Booking drafts', () => {
 
 describe('Deposit or full payment', () => {
   it('a paid booking stays Pending until the administrator verifies and confirms it', async () => {
-    // The first day from 6 days ahead where 3:00 PM is open for this 90-minute service.
+    // The first day from 6 days ahead where 3:00 PM is open for this 3-hour service.
     let ahead = 6
     const openAt3 = async (day) => (await mockRequest('GET', '/slots', { query: { date: dateFromToday(day), serviceId: 2 } }))
       .slots.some((s) => s.startTime === '15:00:00' && s.status === 'Open')
@@ -189,6 +261,7 @@ describe('Deposit or full payment', () => {
     const { booking } = await mockRequest('POST', '/bookings', { body: {
       serviceId: 2, addOns: [{ addOnId: 2, nailCount: 2, hand: 'Right' }], bookingDate: dateFromToday(ahead), startTime: '15:00:00',
       paymentMethod: 'GCash', paymentOption: 'Full', depositAcknowledged: true, idempotencyKey: crypto.randomUUID(),
+      nailColor: '#51', termsVersion: termsAndConditions.version,
     } })
     expect(booking).toMatchObject({ status: 'Pending', totalPrice: 420, balanceDue: 0, payment: { option: 'Full', amountPaid: 420, verified: false } })
 

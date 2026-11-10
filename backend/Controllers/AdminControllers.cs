@@ -16,7 +16,7 @@ namespace NailsByLeah.Api.Controllers;
 public sealed class AdminDashboardController(IDashboardService dashboard) : ControllerBase
 {
     [HttpGet]
-    public Task<DashboardResponse> Get(CancellationToken ct) => dashboard.GetAsync(ct);
+    public Task<DashboardResponse> Get([FromQuery] DateOnly? date, CancellationToken ct) => dashboard.GetAsync(date, ct);
 }
 
 [ApiController]
@@ -31,6 +31,11 @@ public sealed class AdminBookingsController(IAdminBookingService bookings) : Con
 
     [HttpGet("{id:int}")]
     public Task<BookingResponse> Get(int id, CancellationToken ct) => bookings.GetAsync(id, ct);
+
+    /// <summary>How many bookings each day of a month has, for the calendar on the Bookings page.</summary>
+    [HttpGet("calendar")]
+    public Task<IReadOnlyList<BookingCalendarDayResponse>> Calendar([FromQuery] int year, [FromQuery] int month, CancellationToken ct) =>
+        bookings.GetCalendarAsync(year, month, ct);
 
     [HttpPost("{id:int}/confirm")]
     public Task<BookingResponse> Confirm(int id, CancellationToken ct) => bookings.ConfirmAsync(User.GetUserId(), id, ct);
@@ -66,6 +71,13 @@ public sealed class AdminClientDataController(IClientDataService clients) : Cont
     /// <summary>POST so the client's email stays out of addresses, which web servers and proxies log.</summary>
     [HttpPost("find")]
     public Task<ClientDataResponse> Find(EmailRequest request, CancellationToken ct) => clients.FindByEmailAsync(request.Email, ct);
+
+    /// <summary>Every client, A to Z by username, one page at a time. POST keeps the search text out of logged addresses.</summary>
+    [HttpPost("search")]
+    public Task<PagedResponse<ClientListItemResponse>> Search(ClientSearchRequest request, CancellationToken ct) => clients.SearchAsync(request, ct);
+
+    [HttpGet("{id:int}")]
+    public Task<ClientDataResponse> Get(int id, CancellationToken ct) => clients.GetAsync(id, ct);
 
     /// <summary>Permanently erases the client's personal data. Refused while they have an open booking.</summary>
     [HttpPost("{id:int}/delete-data")]
@@ -143,6 +155,10 @@ public sealed class AdminScheduleController(IScheduleManagement schedule) : Cont
     [HttpPost]
     public async Task<ActionResult<BlockedSlotResponse>> Block(BlockSlotRequest request, CancellationToken ct) =>
         StatusCode(StatusCodes.Status201Created, await schedule.BlockAsync(User.GetUserId(), request, ct));
+
+    [HttpPut("{id:int}")]
+    public Task<BlockedSlotResponse> Update(int id, BlockSlotRequest request, CancellationToken ct) =>
+        schedule.UpdateBlockAsync(User.GetUserId(), id, request, ct);
 
     [HttpDelete("{id:int}")]
     public async Task<IActionResult> Unblock(int id, CancellationToken ct)

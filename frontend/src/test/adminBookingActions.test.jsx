@@ -33,13 +33,23 @@ const menuFor = async (user, name) => {
   await user.click(within(await waitFor(() => row(name))).getByRole('button', { name: /More actions/ }))
 }
 
+/** The dashboard's "Needs your attention" row for a booking. */
+const attentionRow = (bookingId) => waitFor(() => {
+  const card = screen.getByRole('heading', { name: 'Needs your attention' }).closest('.card')
+  const item = within(card).getAllByRole('listitem').find((li) => within(li).queryByRole('button', { name: new RegExp(`booking #${bookingId}\\.`) }))
+  expect(item).toBeTruthy()
+  return item
+})
+
 describe('Completing a booking and its balance', () => {
   it('records the balance and reference when Leyah says it was paid', async () => {
     const user = userEvent.setup()
-    const booking = stage({ bookingDate: today(), startTime: '00:00:00', status: 'Confirmed' })
+    const booking = stage({ bookingDate: addDays(today(), -1), startTime: '11:00:00', status: 'Confirmed' })
     await openDashboard()
 
-    await user.click(within(await waitFor(() => row('Testa Client'))).getByRole('button', { name: 'Complete' }))
+    const item = await attentionRow(booking.id)
+    expect(item).toHaveTextContent('Date passed, still confirmed')
+    await user.click(within(item).getByRole('button', { name: 'Complete' }))
     const dialog = screen.getByRole('dialog', { name: 'Complete booking' })
     expect(within(dialog).getByRole('radio', { name: 'Balance received' })).toBeChecked()
     await user.type(within(dialog).getByLabelText(/GCash reference/), 'GC-555')
@@ -52,12 +62,15 @@ describe('Completing a booking and its balance', () => {
     expect(saved.balanceReceived).toBeGreaterThan(0)
   })
 
-  it('can complete without the balance, then record it later from the menu', async () => {
+  it('can complete without the balance, then record it later from Needs your attention', async () => {
     const user = userEvent.setup()
-    const booking = stage({ bookingDate: today(), startTime: '00:00:00', status: 'Confirmed' })
+    const booking = stage({ bookingDate: addDays(today(), -1), startTime: '11:00:00', status: 'Confirmed' })
+    // Only this booking owes money, so its row is among the first five shown.
+    getDb().bookings.forEach((b) => { if (b.status === 'Completed') b.isDeleted = true })
+    saveDb()
     await openDashboard()
 
-    await user.click(within(await waitFor(() => row('Testa Client'))).getByRole('button', { name: 'Complete' }))
+    await user.click(within(await attentionRow(booking.id)).getByRole('button', { name: 'Complete' }))
     const dialog = screen.getByRole('dialog', { name: 'Complete booking' })
     await user.click(within(dialog).getByRole('radio', { name: 'Not paid yet' }))
     expect(within(dialog).queryByLabelText(/GCash reference/)).toBeNull()
@@ -65,8 +78,9 @@ describe('Completing a booking and its balance', () => {
     expect(await screen.findByText(`Booking #${booking.id} marked as completed.`)).toBeInTheDocument()
     expect(getDb().bookings.find((b) => b.id === booking.id).balanceReceived ?? 0).toBe(0)
 
-    await menuFor(user, 'Testa Client')
-    await user.click(screen.getByRole('menuitem', { name: 'Record balance' }))
+    const owing = await attentionRow(booking.id)
+    expect(owing).toHaveTextContent('Balance not recorded · Testa Client')
+    await user.click(within(owing).getByRole('button', { name: 'Record' }))
     await user.click(within(screen.getByRole('dialog', { name: 'Record balance' })).getByRole('button', { name: 'Record balance' }))
 
     expect(await screen.findByText(`Balance recorded for booking #${booking.id}.`)).toBeInTheDocument()
@@ -75,10 +89,10 @@ describe('Completing a booking and its balance', () => {
 
   it('completes straight away when nothing is left to pay', async () => {
     const user = userEvent.setup()
-    const booking = stage({ bookingDate: today(), startTime: '00:00:00', status: 'Confirmed', amountPaid: 5000, paymentOption: 'Full' })
+    const booking = stage({ bookingDate: addDays(today(), -1), startTime: '11:00:00', status: 'Confirmed', amountPaid: 5000, paymentOption: 'Full' })
     await openDashboard()
 
-    await user.click(within(await waitFor(() => row('Testa Client'))).getByRole('button', { name: 'Complete' }))
+    await user.click(within(await attentionRow(booking.id)).getByRole('button', { name: 'Complete' }))
 
     expect(await screen.findByText(`Booking #${booking.id} marked as completed.`)).toBeInTheDocument()
     expect(screen.queryByRole('dialog')).toBeNull()
@@ -88,11 +102,10 @@ describe('Completing a booking and its balance', () => {
 describe('No-shows', () => {
   it('asks first, then marks a booking whose time has arrived', async () => {
     const user = userEvent.setup()
-    const booking = stage({ bookingDate: today(), startTime: '00:00:00', status: 'Confirmed' })
+    const booking = stage({ bookingDate: addDays(today(), -1), startTime: '11:00:00', status: 'Confirmed' })
     await openDashboard()
 
-    await menuFor(user, 'Testa Client')
-    await user.click(screen.getByRole('menuitem', { name: 'Mark as no-show' }))
+    await user.click(within(await attentionRow(booking.id)).getByRole('button', { name: 'No-show' }))
     const dialog = screen.getByRole('dialog', { name: 'Mark as no-show' })
     expect(dialog).toHaveTextContent("deposit is kept. This can't be undone.")
     await user.click(within(dialog).getByRole('button', { name: 'Mark as no-show' }))
@@ -104,8 +117,10 @@ describe('No-shows', () => {
   it('is not offered before the appointment time', async () => {
     const user = userEvent.setup()
     stage({ bookingDate: dateFromToday(2), startTime: '11:00:00', status: 'Confirmed' })
-    await openDashboard()
+    await signIn(ADMIN)
+    renderApp('/admin/bookings')
 
+    await screen.findByRole('heading', { name: 'Find bookings' })
     await menuFor(user, 'Testa Client')
 
     expect(screen.queryByRole('menuitem', { name: 'Mark as no-show' })).toBeNull()
@@ -139,14 +154,69 @@ describe('Booking details', () => {
   })
 })
 
-describe('Dashboard: next 7 days', () => {
-  it('lists upcoming bookings and warns about one that still needs confirming soon', async () => {
-    stage({ bookingDate: addDays(today(), 1), startTime: '11:00:00', status: 'Pending' })
+describe('Dashboard', () => {
+  it('lists upcoming bookings and asks Leyah to check a payment, then confirms it', async () => {
+    const user = userEvent.setup()
+    const booking = stage({ bookingDate: addDays(today(), 1), startTime: '11:00:00', status: 'Pending' })
+    await openDashboard()
+    await user.click(screen.getByRole('button', { name: 'Quiet day' })) // the full overview, whatever the day
+
+    const week = screen.getByRole('heading', { name: 'Next 7 days' }).closest('.card')
+    const line = within(week).getByRole('button', { name: /Testa Client, Pending/ })
+    expect(line).toHaveTextContent('Testa Client · ')
+
+    const item = await attentionRow(booking.id)
+    expect(item).toHaveTextContent('Check payment · Testa Client')
+    await user.click(within(item).getByRole('button', { name: 'Confirm' }))
+
+    expect(await screen.findByText(`Booking #${booking.id} confirmed.`)).toBeInTheDocument()
+    expect(getDb().bookings.find((b) => b.id === booking.id).status).toBe('Confirmed')
+  })
+
+  it('shows the next client with the colour, Stones and note, and another day from the date stepper', async () => {
+    const user = userEvent.setup()
+    const day = addDays(today(), 3)
+    stage({ bookingDate: day, startTime: '11:00:00', status: 'Confirmed', nailColor: '#06', note: 'Short almond' })
     await openDashboard()
 
-    const card = screen.getByRole('heading', { name: 'Next 7 days' }).closest('.card')
-    expect(within(card).getAllByText('Testa Client').length).toBeGreaterThan(0)
-    expect(within(card).getByText(/in the next 2 days still needs? confirming/)).toBeInTheDocument()
+    for (let i = 0; i < 3; i++) await user.click(await screen.findByRole('button', { name: 'Next day' }))
+    const card = (await screen.findByRole('heading', { name: /First client/ })).closest('.card')
+
+    expect(card).toHaveTextContent('11:00 AM')
+    expect(card).toHaveTextContent('Testa Client')
+    expect(card).toHaveTextContent('#06')
+    expect(card).toHaveTextContent('Short almond')
+    expect(within(card).getByText(/in \d+ days?/)).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Today' }))
+    expect(await screen.findByRole('heading', { name: 'Next client' })).toBeInTheDocument()
+  })
+
+  it('says all caught up when nothing needs Leyah', async () => {
+    const db = getDb()
+    db.bookings.forEach((b) => { if (b.status === 'Pending' || b.status === 'Completed' || b.bookingDate <= today()) b.isDeleted = true })
+    saveDb()
+    await openDashboard()
+
+    expect(await screen.findByText('All caught up')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Quiet day' })).toHaveAttribute('aria-pressed', 'true')
+  })
+
+  it('switches to the busy-day view with the whole day in time order, and back', async () => {
+    const user = userEvent.setup()
+    stage({ bookingDate: today(), startTime: '23:00:00', status: 'Confirmed' })
+    getDb().bookings.forEach((b) => { if (b.status === 'Pending' || b.status === 'Completed' || (b.bookingDate < today())) b.isDeleted = true })
+    saveDb()
+    await openDashboard()
+
+    await user.click(screen.getByRole('button', { name: 'Busy day' }))
+    const day = screen.getByRole('heading', { name: 'Today’s schedule' }).closest('.card')
+    expect(within(day).getByRole('button', { name: /11:00 PM to .*Testa Client, Confirmed/ })).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: 'Next 7 days' })).toBeNull()
+    expect(screen.queryByText('Moved to other pages')).toBeNull()
+
+    await user.click(screen.getByRole('button', { name: 'Quiet day' }))
+    expect(screen.getByRole('heading', { name: 'Next 7 days' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Quiet day' })).toHaveAttribute('aria-pressed', 'true')
   })
 })
 

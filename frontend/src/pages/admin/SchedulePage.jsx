@@ -148,6 +148,37 @@ function OpeningHoursCard({ onSaved }) {
 
 const TAG_TEXT = { Open: 'Open', Booked: 'Booked', Break: 'Break', Closed: 'Closed', Past: 'Past', TooShort: 'Short gap' }
 
+/**
+ * Changes a closed time in place: its times (not for a whole day) and its reason. The server checks it again like a
+ * new one, so it can't be moved onto a booking or another closed time; the error then shows above.
+ */
+function EditBlock({ block, starts, closingTime, saving, onSave, onCancel }) {
+  const [from, setFrom] = useState(block.startTime ?? '')
+  const [to, setTo] = useState(block.endTime ?? (block.startTime ? addMinutesToTime(block.startTime, 30) : ''))
+  const [reason, setReason] = useState(block.reason ?? '')
+  const fromOptions = starts.map((t) => ({ value: t, label: formatTime(t) }))
+  const toOptions = [...starts, closingTime].filter((t) => t && from && t > from).map((t) => ({ value: t, label: formatTime(t) }))
+  const submit = (e) => {
+    e.preventDefault()
+    onSave(block.isWholeDay ? { startTime: null, endTime: null, reason: reason.trim() || null } : { startTime: from, endTime: to, reason: reason.trim() || null })
+  }
+  return (
+    <form className="stack block-edit-form" onSubmit={submit} aria-label="Change closed time">
+      {!block.isWholeDay && (
+        <div className="block-period">
+          <SelectField label="Close from" value={from} options={fromOptions} onChange={(e) => { setFrom(e.target.value); setTo('') }} />
+          <SelectField label="Until" value={to} placeholder="End" options={toOptions} disabled={!from} onChange={(e) => setTo(e.target.value)} />
+        </div>
+      )}
+      <TextField label="Reason (optional)" maxLength={LIMITS.blockReasonMax} value={reason} onChange={(e) => setReason(e.target.value)} />
+      <div className="row">
+        <Button type="submit" size="sm" loading={saving} disabled={!block.isWholeDay && (!from || !to)}>Save</Button>
+        <Button variant="ghost" size="sm" onClick={onCancel} disabled={saving}>Cancel</Button>
+      </div>
+    </form>
+  )
+}
+
 /** "12 open · 3 booked · 1 break · 1 closed" for the day, so the grid can be read at a glance. */
 function TimeCounts({ slots }) {
   const count = (...statuses) => slots.filter((s) => statuses.includes(s.status)).length
@@ -156,7 +187,10 @@ function TimeCounts({ slots }) {
 }
 
 function DayPanel({ date, blocks, onChanged }) {
-  const slots = useAsync(() => api.catalog.slots(date), [date, blocks.length])
+  // Reloaded whenever the day's closed times change, including an edited one (same count, new times).
+  const blocksKey = JSON.stringify(blocks.map((b) => [b.id, b.startTime, b.endTime]))
+  const slots = useAsync(() => api.catalog.slots(date), [date, blocksKey])
+  const [editing, setEditing] = useState(null) // id of the closed time being changed
   const [reason, setReason] = useState('')
   const [from, setFrom] = useState('')
   const [to, setTo] = useState('')
@@ -187,6 +221,11 @@ function DayPanel({ date, blocks, onChanged }) {
   const block = (startTime, endTime, options) => run(startTime ? `${startTime}-${endTime ?? ''}` : 'day',
     () => api.admin.blockSlot({ date, startTime, endTime, reason: reason.trim() || null }),
     startTime ? `${span(startTime, endTime ?? addMinutesToTime(startTime, 30))} on ${formatDate(date)} closed.` : `${formatDate(date)} closed.`, options)
+
+  const save = (b, changes) => run(`edit-${b.id}`, async () => {
+    await api.admin.updateBlockedSlot(b.id, { date, ...changes })
+    setEditing(null)
+  }, b.isWholeDay ? `${formatDate(date)}: reason saved.` : `Closed time changed to ${span(changes.startTime, changes.endTime)}.`)
 
   const reopen = (b, options) => run(`un-${b.id}`, () => api.admin.unblockSlot(b.id),
     b.isWholeDay ? `${formatDate(date)} reopened.` : `${span(b.startTime, b.endTime ?? addMinutesToTime(b.startTime, 30))} reopened.`, options)
@@ -245,18 +284,27 @@ function DayPanel({ date, blocks, onChanged }) {
         <div className="stack day-closures">
           <h3>Closed on this day</h3>
           <ul className="block-list">
-            {blocks.map((b) => (
+            {blocks.map((b) => (editing === b.id ? (
+              <li key={b.id} className="block-edit">
+                <EditBlock block={b} starts={starts} closingTime={slots.data?.closingTime} saving={busy === `edit-${b.id}`}
+                  onSave={(changes) => save(b, changes)} onCancel={() => setEditing(null)} />
+              </li>
+            ) : (
               <li key={b.id}>
                 <span>
                   <strong>{b.isWholeDay ? 'Whole day' : b.endTime ? span(b.startTime, b.endTime) : formatTime(b.startTime)}</strong>
                   {b.reason && <span className="muted"> — {b.reason}</span>}
                 </span>
                 {!isPast && (
-                  <Button variant="ghost" size="sm" loading={busy === `un-${b.id}`}
-                    onClick={() => reopen(b)}>Reopen</Button>
+                  <span className="block-actions">
+                    <Button variant="ghost" size="sm" disabled={Boolean(busy)} onClick={() => { setError(null); setEditing(b.id) }}
+                      aria-label={`Change ${b.isWholeDay ? 'whole day' : span(b.startTime, b.endTime ?? addMinutesToTime(b.startTime, 30))}`}>Change</Button>
+                    <Button variant="ghost" size="sm" loading={busy === `un-${b.id}`}
+                      onClick={() => reopen(b)}>Reopen</Button>
+                  </span>
                 )}
               </li>
-            ))}
+            )))}
           </ul>
         </div>
       )}

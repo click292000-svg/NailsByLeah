@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Link, useLocation, useSearchParams } from 'react-router'
 import { api } from '../../api'
 import { PasswordField, PasswordRules } from '../../components/FormFields'
@@ -6,6 +6,43 @@ import { Alert, Button, Card, PageLoader, TextField } from '../../components/ui'
 import { ApiError, errorMessage, fieldErrors } from '../../api/errors'
 import { useAsync } from '../../hooks/useAsync'
 import { hasErrors, validateEmail, validateResetPassword, validateVerificationCode } from '../../validation/rules'
+
+// Another code can be asked for a minute after the last one. The server enforces it; the page remembers when the
+// wait ends (also across a refresh) only to show the countdown.
+export const RESEND_WAIT_SECONDS = 60
+const waitKey = (email) => `nbl.resendAt.${email.trim().toLowerCase()}`
+const readWaitEnd = (email) => {
+  try {
+    return Number(localStorage.getItem(waitKey(email))) || 0
+  } catch {
+    return 0
+  }
+}
+const saveWaitEnd = (email, seconds) => {
+  try {
+    localStorage.setItem(waitKey(email), String(Date.now() + seconds * 1000))
+  } catch {
+    // Without storage the countdown just starts over after a refresh; the server still enforces the wait.
+  }
+}
+
+/** Seconds left before another code can be asked for, counting down once a second. */
+function useResendCountdown(email) {
+  const [now, setNow] = useState(() => Date.now())
+  const [, setBump] = useState(0)
+  const left = email ? Math.max(0, Math.ceil((readWaitEnd(email) - now) / 1000)) : 0
+  useEffect(() => {
+    if (left <= 0) return undefined
+    const timer = setInterval(() => setNow(Date.now()), 1000)
+    return () => clearInterval(timer)
+  }, [left])
+  const start = (seconds = RESEND_WAIT_SECONDS) => {
+    saveWaitEnd(email, seconds)
+    setNow(Date.now())
+    setBump((n) => n + 1)
+  }
+  return [left, start]
+}
 
 /** Enter the 6-digit code sent after registration (Ref 9.1). */
 export function VerifyEmailPage() {
@@ -18,6 +55,12 @@ export function VerifyEmailPage() {
   const [failure, setFailure] = useState(null)
   const [submitting, setSubmitting] = useState(false)
   const [resending, setResending] = useState(false)
+  const [waitLeft, startWait] = useResendCountdown(email)
+
+  // Sign-up has just sent the first code, so the wait starts now.
+  useEffect(() => {
+    if (location.state?.registered && email && !readWaitEnd(email)) startWait()
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   const submit = async (e) => {
     e.preventDefault()
@@ -44,12 +87,16 @@ export function VerifyEmailPage() {
       setErrors({ email: emailError })
       return
     }
+    if (waitLeft > 0) return
     setResending(true)
+    setFailure(null)
     try {
       await api.auth.resendVerification(email)
       setStatus('resent')
+      startWait()
     } catch (err) {
-      setFailure(errorMessage(err))
+      if (err instanceof ApiError && err.code === 'resend_cooldown') startWait(err.retryAfterSeconds ?? RESEND_WAIT_SECONDS)
+      else setFailure(errorMessage(err))
     } finally {
       setResending(false)
     }
@@ -82,7 +129,10 @@ export function VerifyEmailPage() {
           <TextField label="Verification code" inputMode="numeric" autoComplete="one-time-code" maxLength={6} value={code} required
             error={errors.code} onChange={(e) => setCode(e.target.value.replace(/\D/g, ''))} />
           <Button type="submit" loading={submitting} className="btn-block">Verify email</Button>
-          <Button variant="ghost" onClick={resend} loading={resending}>Send a new code</Button>
+          <Button variant="ghost" onClick={resend} loading={resending} disabled={waitLeft > 0} aria-describedby="resend-wait">
+            {waitLeft > 0 ? `Resend code in ${waitLeft} second${waitLeft === 1 ? '' : 's'}` : 'Send a new code'}
+          </Button>
+          {waitLeft > 0 && <p id="resend-wait" className="muted small resend-wait">You can ask for another code once the countdown ends.</p>}
         </form>
       </Card>
     </div>

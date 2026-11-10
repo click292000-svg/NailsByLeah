@@ -98,7 +98,8 @@ public sealed class EmailNotificationService(
         return $"""
             Client: {booking.Client.FirstName} {booking.Client.LastName} (@{booking.Client.Username})
             Contact: {booking.Client.Email}, {booking.Client.PhoneNumber}
-            Service: {booking.Service.CategoryLabel} - {booking.Service.Name}
+            Service: {booking.Service.CategoryLabel} - {booking.ServiceDescription}
+            Colour: {booking.NailColor ?? "None"}
             Add-ons: {addOns}
             Date: {booking.BookingDate:dddd, MMMM d, yyyy}
             Time: {booking.StartTime:h\:mm tt} - {booking.EndTime:h\:mm tt}
@@ -140,7 +141,7 @@ public sealed class EmailNotificationService(
 
             We received your booking and payment. Leyah will check it and confirm your appointment; you will get another email when she does.
 
-            Service: {booking.Service.CategoryLabel} - {booking.Service.Name}
+            Service: {booking.Service.CategoryLabel} - {booking.ServiceDescription}
             Date: {booking.BookingDate:dddd, MMMM d, yyyy}
             Time: {booking.StartTime:h\:mm tt} - {booking.EndTime:h\:mm tt}
             Total: PHP {booking.TotalPrice:0.00}
@@ -157,7 +158,7 @@ public sealed class EmailNotificationService(
 
             Leyah has confirmed your appointment.
 
-            Service: {booking.Service.CategoryLabel} - {booking.Service.Name}
+            Service: {booking.Service.CategoryLabel} - {booking.ServiceDescription}
             Date: {booking.BookingDate:dddd, MMMM d, yyyy}
             Time: {booking.StartTime:h\:mm tt} - {booking.EndTime:h\:mm tt}
             Paid online: PHP {booking.AmountPaid:0.00}
@@ -173,7 +174,7 @@ public sealed class EmailNotificationService(
 
             This is a reminder of your appointment:
 
-            Service: {booking.Service.CategoryLabel} - {booking.Service.Name}
+            Service: {booking.Service.CategoryLabel} - {booking.ServiceDescription}
             Date: {booking.BookingDate:dddd, MMMM d, yyyy}
             Time: {booking.StartTime:h\:mm tt}
             Balance due at the salon: PHP {booking.BalanceDue:0.00}

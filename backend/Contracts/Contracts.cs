@@ -40,6 +40,15 @@ public sealed record ClientDataResponse(
     int Id, string FirstName, string LastName, string Username, string Email, string PhoneNumber,
     int BookingCount, int ActiveBookingCount, int PhotoCount, int FeedbackCount);
 
+/// <summary>What a signed-in user may change about themselves. Username and email stay as they are.</summary>
+public sealed record UpdateProfileRequest(string FirstName, string LastName, string PhoneNumber);
+
+/// <summary>Search text is optional; clients come back A to Z by username.</summary>
+public sealed record ClientSearchRequest(string? Search, int Page = 1, int PageSize = 20);
+
+public sealed record ClientListItemResponse(
+    int Id, string Username, string FirstName, string LastName, string Email, string PhoneNumber, bool EmailVerified, DateTime CreatedAt);
+
 public sealed record UserProfileResponse(
     int Id, string FirstName, string LastName, string Username, string Email, string PhoneNumber, string Role);
 
@@ -47,14 +56,17 @@ public sealed record UserProfileResponse(
 
 public sealed record ServiceItemResponse(
     int Id, string Category, string CategoryLabel, string Name, decimal Price, string PricingUnit, int MaxQuantity, bool IsActive,
-    int? DurationMinutes = null); // minutes for main services; null for add-ons
+    int? DurationMinutes = null, // minutes for main services; null for add-ons
+    bool AllowsAddOns = false); // whether Stone add-ons can be chosen with this service
 
 public sealed record CatalogResponse(
     IReadOnlyList<ServiceItemResponse> Services,
     IReadOnlyList<ServiceItemResponse> AddOns,
     decimal DepositAmount,
     bool DepositRefundable,
-    string Currency);
+    string Currency,
+    IReadOnlyList<string>? NailColors = null,
+    string TermsVersion = "");
 
 /// <summary>Hand is required when booking (Left or Right for up to 5 nails, Both for any number); price quotes ignore it.</summary>
 public sealed record AddOnSelection(int AddOnId, int NailCount, NailHand? Hand = null);
@@ -64,12 +76,12 @@ public sealed record QuoteLineResponse(
     int ItemId, string Name, string Category, string PricingUnit, decimal UnitPrice, int Quantity, decimal LineTotal);
 
 
-public sealed record CreateServiceRequest(string Category, string Name, decimal Price, int DurationMinutes = CatalogService.DefaultDurationMinutes);
+public sealed record CreateServiceRequest(string Category, string Name, decimal Price, int DurationMinutes = CatalogService.DefaultDurationMinutes, bool AllowsAddOns = true);
 
 public sealed record CreateAddOnRequest(string Name, decimal Price);
 
 /// <summary>Also used for add-ons, which have no duration. Leaving DurationMinutes out keeps the current one.</summary>
-public sealed record UpdateServiceRequest(string Name, decimal Price, bool IsActive, int? DurationMinutes = null);
+public sealed record UpdateServiceRequest(string Name, decimal Price, bool IsActive, int? DurationMinutes = null, bool? AllowsAddOns = null);
 
 // ---- Schedule ----
 
@@ -125,11 +137,15 @@ public sealed record CreateBookingRequest(
     Guid IdempotencyKey,
     IReadOnlyList<int>? ReferenceImageIds = null,
     string? Note = null, // typed note for Leyah, optional
-    PaymentOption PaymentOption = PaymentOption.Deposit); // the amount is worked out by the server, never sent by the browser
+    PaymentOption PaymentOption = PaymentOption.Deposit, // the amount is worked out by the server, never sent by the browser
+    int? RemovalServiceId = null, // a removal before the main service, in the same appointment
+    string? NailColor = null, // required when the service takes add-ons, from the catalog's list
+    string? TermsVersion = null); // the Terms version the client read and agreed to; must be the current one
 
 public sealed record RescheduleRequest(DateOnly BookingDate, TimeOnly StartTime);
 
-public sealed record ClientCancelRequest(ClientCancellationReason Reason);
+/// <summary>Explanation is required with Others.</summary>
+public sealed record ClientCancelRequest(ClientCancellationReason Reason, string? Explanation = null);
 
 public sealed record AdminCancelRequest(AdminCancellationReason Reason, string? Explanation);
 
@@ -166,7 +182,13 @@ public sealed record BookingResponse(
     IReadOnlyList<ReferenceImageResponse> ReferenceImages,
     int DurationMinutes,
     string? Note = null, // what the client typed for Leyah; null when there is no note
-    BookingPaymentResponse? Payment = null);
+    BookingPaymentResponse? Payment = null,
+    int? RemovalServiceId = null,
+    string? RemovalServiceName = null,
+    decimal RemovalPrice = 0,
+    string? NailColor = null,
+    string? TermsVersion = null,
+    DateTime? TermsAcceptedAt = null);
 
 /// <summary>
 /// How the booking was paid. AmountPaid includes the deposit; BalanceDue on the booking is what is left for the salon.
@@ -206,10 +228,17 @@ public sealed class BookingSearchQuery
 {
     public DateOnly? Date { get; set; }
     public BookingStatus? Status { get; set; }
+    /// <summary>Client name or username, service name, or payment reference number.</summary>
     public string? ClientName { get; set; }
+
+    /// <summary>Bookings with this service, as the main service or the removal before it.</summary>
+    public int? ServiceId { get; set; }
     public int Page { get; set; } = 1;
     public int PageSize { get; set; } = 20;
 }
+
+/// <summary>One day of the admin booking calendar: how many bookings it has, and how many are still open.</summary>
+public sealed record BookingCalendarDayResponse(DateOnly Date, int Count, int ActiveCount);
 
 // ---- Booking drafts ----
 
@@ -238,7 +267,17 @@ public sealed record DashboardResponse(
     int PendingBookingCount,
     decimal DepositsCollectedToday,
     decimal TotalDepositsCollected,
-    IReadOnlyList<BookingResponse> UpcomingBookings);
+    IReadOnlyList<BookingResponse> UpcomingBookings,
+    DateOnly Date, // the day being looked at; Today unless another day was chosen
+    DateTime Now, // salon-local time, for "in 2 hr 15 min"
+    IReadOnlyList<DashboardAttentionItem> Attention,
+    BookingResponse? NextBooking);
+
+/// <summary>
+/// Something Leyah has to act on. Kind is CheckPayment (paid, not confirmed yet), DatePassed (the appointment is over but the
+/// booking is still Pending or Confirmed) or BalanceNotRecorded (completed in the last 30 days with money still owing).
+/// </summary>
+public sealed record DashboardAttentionItem(string Kind, BookingResponse Booking);
 
 public sealed record DailySalesReport(
     DateOnly Date,

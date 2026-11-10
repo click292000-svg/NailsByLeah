@@ -35,6 +35,8 @@ public sealed class GlobalExceptionHandler(IProblemDetailsService problemDetails
                 httpContext.Request.Method, httpContext.Request.Path, problem.Status, problem.Detail);
 
         httpContext.Response.StatusCode = problem.Status!.Value;
+        if (exception is CooldownException wait)
+            httpContext.Response.Headers.RetryAfter = wait.RetryAfterSeconds.ToString(System.Globalization.CultureInfo.InvariantCulture);
         return await problemDetails.TryWriteAsync(new ProblemDetailsContext
         {
             HttpContext = httpContext,
@@ -56,6 +58,8 @@ public sealed class GlobalExceptionHandler(IProblemDetailsService problemDetails
             problem.Extensions["code"] = ex.Code;
         if (ex is AccountLockedException locked)
             problem.Extensions["lockoutEndUtc"] = locked.LockoutEndUtc;
+        if (ex is CooldownException cooldown)
+            problem.Extensions["retryAfterSeconds"] = cooldown.RetryAfterSeconds;
         return problem;
     }
 }

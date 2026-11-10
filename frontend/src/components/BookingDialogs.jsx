@@ -7,8 +7,8 @@ import { formatDate, formatTime } from '../lib/format'
 import { LIMITS } from '../validation/rules'
 
 /**
- * Cancellation dialog. Clients pick from their reasons (Ref 2.5); administrators pick from theirs
- * and may add an optional explanation (Ref 3.1, 3.2).
+ * Cancellation dialog. Clients pick from their reasons (Ref 2.5), and "Others" asks them to write theirs;
+ * administrators pick from theirs and may add an optional explanation (Ref 3.1, 3.2).
  */
 export function CancelBookingDialog({ booking, reasons, allowExplanation = false, onSubmit, onClose }) {
   const [reason, setReason] = useState('')
@@ -16,6 +16,9 @@ export function CancelBookingDialog({ booking, reasons, allowExplanation = false
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState(null)
   const [fieldError, setFieldError] = useState(null)
+  const [explanationError, setExplanationError] = useState(null)
+  // A client choosing "Others" must say why; the listed reasons need no words.
+  const ownReason = !allowExplanation && reason === 'Others'
 
   const submit = async (e) => {
     e.preventDefault()
@@ -23,13 +26,18 @@ export function CancelBookingDialog({ booking, reasons, allowExplanation = false
       setFieldError('Select a cancellation reason.')
       return
     }
+    if (ownReason && !explanation.trim()) {
+      setExplanationError('Please tell us the reason.')
+      return
+    }
     setSaving(true)
     setError(null)
     try {
-      await onSubmit(allowExplanation ? { reason, explanation: explanation.trim() || null } : { reason })
+      await onSubmit(allowExplanation || ownReason ? { reason, explanation: explanation.trim() || null } : { reason })
     } catch (err) {
       setError(errorMessage(err))
       setFieldError(fieldErrors(err).reason ?? null)
+      setExplanationError(fieldErrors(err).explanation ?? null)
       setSaving(false)
     }
   }
@@ -43,7 +51,15 @@ export function CancelBookingDialog({ booking, reasons, allowExplanation = false
         <Alert kind="warning">The booking deposit is non-refundable.</Alert>
         {error && <Alert kind="error">{error}</Alert>}
         <SelectField label="Reason for cancelling" required value={reason} placeholder="Select a reason"
-          options={reasons} error={fieldError} onChange={(e) => { setReason(e.target.value); setFieldError(null) }} />
+          options={reasons} error={fieldError} onChange={(e) => { setReason(e.target.value); setFieldError(null); setExplanationError(null) }} />
+        {ownReason && (
+          <Field label="Your reason" required error={explanationError} counter={`${explanation.length}/${LIMITS.explanationMax}`}>
+            {(aria) => (
+              <textarea className="input" rows={3} maxLength={LIMITS.explanationMax} value={explanation} required autoFocus
+                placeholder="e.g. I have to travel that week" onChange={(e) => { setExplanation(e.target.value); setExplanationError(null) }} {...aria} />
+            )}
+          </Field>
+        )}
         {allowExplanation && (
           <Field label="Explanation (optional)" hint={`${explanation.length}/${LIMITS.explanationMax}`}>
             {(aria) => (
@@ -188,6 +204,7 @@ export function RescheduleDialog({ booking, onSubmit, onClose }) {
         </p>
         {error && <Alert kind="error">{error}</Alert>}
         <SlotPicker date={date} onDateChange={setDate} selectedTime={time} onTimeChange={setTime} serviceId={booking.serviceId}
+          removalServiceId={booking.removalServiceId ?? undefined}
           keepTime={date === booking.bookingDate ? booking.startTime : undefined} />
         <div className="modal-actions">
           <Button variant="secondary" onClick={onClose} disabled={saving}>Back</Button>

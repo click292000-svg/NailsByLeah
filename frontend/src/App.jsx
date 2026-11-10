@@ -18,6 +18,8 @@ import ClientDataPage from './pages/admin/ClientDataPage'
 import ActivityLogPage from './pages/admin/ActivityLogPage'
 import AdminFeedbackPage from './pages/admin/FeedbackPage'
 import FeedbackPage from './pages/client/FeedbackPage'
+import ProfilePage from './pages/ProfilePage'
+import { SignedIn } from './auth/RouteGuards'
 
 const client = (page) => <RequireRole role="Client">{page}</RequireRole>
 const admin = (page) => <RequireRole role="Administrator">{page}</RequireRole>
@@ -38,6 +40,7 @@ export function AppRoutes() {
         <Route path="book" element={client(<BookPage />)} />
         <Route path="bookings" element={client(<MyBookingsPage />)} />
         <Route path="feedback" element={client(<FeedbackPage />)} />
+        <Route path="profile" element={<SignedIn><ProfilePage /></SignedIn>} />
 
         <Route path="admin" element={admin(<DashboardPage />)} />
         <Route path="admin/bookings" element={admin(<BookingsPage />)} />

@@ -17,6 +17,12 @@ public interface IUserRepository
     Task<bool> UsernameExistsAsync(string username, CancellationToken ct = default);
     Task<bool> EmailExistsAsync(string email, CancellationToken ct = default);
     Task<bool> PhoneNumberExistsAsync(string phoneNumber, CancellationToken ct = default);
+
+    /// <summary>Another account (deleted ones included, as the unique index does) already uses this number.</summary>
+    Task<bool> PhoneNumberUsedByOtherAsync(string phoneNumber, int userId, CancellationToken ct = default);
+
+    /// <summary>Client accounts A to Z by username, filtered by username, name, email or phone.</summary>
+    Task<(List<User> Items, int Total)> SearchClientsAsync(string? search, int page, int pageSize, CancellationToken ct = default);
     void Add(User user);
 }
 
@@ -44,7 +50,7 @@ public interface IServiceCatalogRepository
 /// <summary>The part of a booking the schedule needs.</summary>
 public sealed record ScheduledAppointment(int BookingId, DateOnly Date, TimeOnly StartTime, int DurationMinutes);
 
-public sealed record BookingSearchCriteria(DateOnly? Date, BookingStatus? Status, string? ClientName, int Page, int PageSize);
+public sealed record BookingSearchCriteria(DateOnly? Date, BookingStatus? Status, string? ClientName, int Page, int PageSize, int? ServiceId = null);
 
 public interface IBookingRepository
 {
@@ -55,6 +61,9 @@ public interface IBookingRepository
     Task<(List<Booking> Items, int TotalCount)> SearchAsync(BookingSearchCriteria criteria, CancellationToken ct = default);
     Task<List<Booking>> GetForDateAsync(DateOnly date, CancellationToken ct = default);
     Task<List<Booking>> GetInDateRangeAsync(DateOnly from, DateOnly to, CancellationToken ct = default);
+
+    /// <summary>Per day between the dates: (date, all bookings, Pending or Confirmed ones). Counts only, no details.</summary>
+    Task<List<(DateOnly Date, int Count, int ActiveCount)>> CountByDayAsync(DateOnly from, DateOnly to, CancellationToken ct = default);
     /// <summary>Start and length of every Pending or Confirmed booking on the date.</summary>
     Task<List<ScheduledAppointment>> GetActiveOnDateAsync(DateOnly date, CancellationToken ct = default);
 
@@ -67,6 +76,8 @@ public interface IBookingRepository
 
     /// <summary>Pending or Confirmed bookings between the dates, soonest first, with their details.</summary>
     Task<List<Booking>> GetUpcomingAsync(DateOnly from, DateOnly to, CancellationToken ct = default);
+    /// <summary>Pending bookings, Confirmed ones up to today and Completed ones since balanceSince, oldest first.</summary>
+    Task<List<Booking>> GetAttentionCandidatesAsync(DateOnly today, DateOnly balanceSince, CancellationToken ct = default);
     Task<List<Booking>> GetDueForReminderAsync(DateOnly fromDate, DateOnly toDate, CancellationToken ct = default);
 
     /// <summary>
@@ -146,6 +157,22 @@ internal sealed class UserRepository(AppDbContext db) : IUserRepository
     public Task<bool> UsernameExistsAsync(string username, CancellationToken ct) => db.Users.AnyAsync(u => u.Username == username, ct);
     public Task<bool> EmailExistsAsync(string email, CancellationToken ct) => db.Users.AnyAsync(u => u.Email == email, ct);
     public Task<bool> PhoneNumberExistsAsync(string phoneNumber, CancellationToken ct) => db.Users.AnyAsync(u => u.PhoneNumber == phoneNumber, ct);
+    public Task<bool> PhoneNumberUsedByOtherAsync(string phoneNumber, int userId, CancellationToken ct) =>
+        db.Users.AnyAsync(u => u.PhoneNumber == phoneNumber && u.Id != userId, ct);
+
+    public async Task<(List<User> Items, int Total)> SearchClientsAsync(string? search, int page, int pageSize, CancellationToken ct)
+    {
+        var query = Live.Where(u => u.Role == UserRole.Client);
+        if (!string.IsNullOrWhiteSpace(search))
+        {
+            var text = search.Trim();
+            query = query.Where(u => u.Username.Contains(text) || u.Email.Contains(text) || u.PhoneNumber.Contains(text)
+                                     || (u.FirstName + " " + u.LastName).Contains(text));
+        }
+        var total = await query.CountAsync(ct);
+        var items = await query.OrderBy(u => u.Username).Skip((page - 1) * pageSize).Take(pageSize).AsNoTracking().ToListAsync(ct);
+        return (items, total);
+    }
 
     public void Add(User user) => db.Users.Add(user);
 }
@@ -201,6 +228,7 @@ internal sealed class BookingRepository(AppDbContext db) : IBookingRepository
     private IQueryable<Booking> WithDetails => Live
         .Include(b => b.Client)
         .Include(b => b.Service)
+        .Include(b => b.RemovalService)
         .Include(b => b.AddOns).ThenInclude(a => a.AddOn)
         .Include(b => b.Cancellation).ThenInclude(c => c!.CancelledBy)
         .Include(b => b.ConfirmedBy)
@@ -227,12 +255,15 @@ internal sealed class BookingRepository(AppDbContext db) : IBookingRepository
             query = query.Where(b => b.BookingDate == date);
         if (c.Status is { } status)
             query = query.Where(b => b.Status == status);
+        if (c.ServiceId is { } serviceId)
+            query = query.Where(b => b.ServiceId == serviceId || b.RemovalServiceId == serviceId);
         if (!string.IsNullOrWhiteSpace(c.ClientName))
         {
             var name = c.ClientName.Trim();
             query = query.Where(b =>
                 b.Client.FirstName.Contains(name) || b.Client.LastName.Contains(name) ||
-                (b.Client.FirstName + " " + b.Client.LastName).Contains(name) || b.Client.Username.Contains(name));
+                (b.Client.FirstName + " " + b.Client.LastName).Contains(name) || b.Client.Username.Contains(name) ||
+                b.Service.Name.Contains(name) || b.Payments.Any(p => p.ReferenceNumber.Contains(name)));
         }
 
         var total = await query.CountAsync(ct);
@@ -248,6 +279,16 @@ internal sealed class BookingRepository(AppDbContext db) : IBookingRepository
 
     public Task<List<Booking>> GetInDateRangeAsync(DateOnly from, DateOnly to, CancellationToken ct) =>
         WithDetails.Where(b => b.BookingDate >= from && b.BookingDate <= to).ToListAsync(ct);
+
+    public async Task<List<(DateOnly Date, int Count, int ActiveCount)>> CountByDayAsync(DateOnly from, DateOnly to, CancellationToken ct)
+    {
+        var rows = await Live.Where(b => b.BookingDate >= from && b.BookingDate <= to)
+            .GroupBy(b => b.BookingDate)
+            .Select(g => new { Date = g.Key, Count = g.Count(), Active = g.Count(b => b.Status == BookingStatus.Pending || b.Status == BookingStatus.Confirmed) })
+            .OrderBy(x => x.Date)
+            .ToListAsync(ct);
+        return rows.Select(r => (r.Date, r.Count, r.Active)).ToList();
+    }
 
     public Task<List<ScheduledAppointment>> GetActiveOnDateAsync(DateOnly date, CancellationToken ct) =>
         Active.Where(b => b.BookingDate == date)
@@ -272,6 +313,13 @@ internal sealed class BookingRepository(AppDbContext db) : IBookingRepository
 
     public Task<List<Booking>> GetUpcomingAsync(DateOnly from, DateOnly to, CancellationToken ct) =>
         WithDetails.Where(b => (b.Status == BookingStatus.Pending || b.Status == BookingStatus.Confirmed) && b.BookingDate >= from && b.BookingDate <= to)
+            .OrderBy(b => b.BookingDate).ThenBy(b => b.StartTime)
+            .ToListAsync(ct);
+
+    public Task<List<Booking>> GetAttentionCandidatesAsync(DateOnly today, DateOnly balanceSince, CancellationToken ct) =>
+        WithDetails.Where(b => b.Status == BookingStatus.Pending ||
+                               (b.Status == BookingStatus.Confirmed && b.BookingDate <= today) ||
+                               (b.Status == BookingStatus.Completed && b.BookingDate >= balanceSince))
             .OrderBy(b => b.BookingDate).ThenBy(b => b.StartTime)
             .ToListAsync(ct);
 

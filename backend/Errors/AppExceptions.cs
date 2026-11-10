@@ -47,6 +47,14 @@ public sealed class AccountLockedException(DateTime lockoutEndUtc)
     public DateTime LockoutEndUtc { get; } = lockoutEndUtc;
 }
 
+/// <summary>Asked again too soon, e.g. another verification code within a minute of the last one.</summary>
+public sealed class CooldownException(int retryAfterSeconds)
+    : AppException(StatusCodes.Status429TooManyRequests, "Too many requests",
+        $"Please wait {retryAfterSeconds} seconds before asking for another code.", "resend_cooldown")
+{
+    public int RetryAfterSeconds { get; } = retryAfterSeconds;
+}
+
 public sealed class PaymentFailedException(string detail)
     : AppException(StatusCodes.Status402PaymentRequired, "Payment failed", detail, "payment_failed");
 

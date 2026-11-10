@@ -59,7 +59,7 @@ describe('Admin navigation', () => {
     await user.keyboard('{ArrowDown}')
     expect(panel.getByRole('link', { name: 'Services' })).toHaveFocus()
     await user.keyboard('{End}')
-    expect(panel.getByRole('link', { name: 'Client data' })).toHaveFocus()
+    expect(panel.getByRole('link', { name: 'Clients' })).toHaveFocus()
     await user.keyboard('{ArrowDown}')
     expect(panel.getByRole('link', { name: 'Bookings' })).toHaveFocus()
 

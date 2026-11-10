@@ -10,21 +10,42 @@ const closeOpenBookings = () => getDb().bookings
   .forEach((b) => { b.status = 'Completed' })
 
 async function findClient(user) {
-  await user.type(await screen.findByLabelText(/Client's email address/), account().email)
-  await user.click(screen.getByRole('button', { name: 'Find client' }))
+  await user.type(await screen.findByLabelText(/Search clients/), account().email)
+  await user.click(await screen.findByRole('button', { name: `Open @${account().username}` }))
 }
 
-describe('Deleting a client\'s data', () => {
-  it('says so when no client has that email', async () => {
-    const user = userEvent.setup()
+describe('Client directory', () => {
+  it('lists every client A to Z by username, and nobody else', async () => {
     await signIn(ADMIN)
     renderApp('/admin/clients')
 
-    await user.type(await screen.findByLabelText(/Client's email address/), 'nobody@example.test')
-    await user.click(screen.getByRole('button', { name: 'Find client' }))
-
-    expect(await screen.findByText(/No client account was found/)).toBeInTheDocument()
+    const table = await screen.findByRole('table')
+    const usernames = within(table).getAllByRole('row').slice(1).map((r) => within(r).getAllByRole('cell')[0].textContent)
+    const expected = getDb().users.filter((u) => u.role === 'Client' && !u.isDeleted).map((u) => `@${u.username}`)
+      .sort((a, b) => a.localeCompare(b)).slice(0, 20)
+    expect(usernames).toEqual(expected)
+    expect(usernames).not.toContain(`@${ADMIN.username}`)
   })
+
+  it('finds clients by name, shows a new sign-up, and says when nothing matches', async () => {
+    const user = userEvent.setup()
+    await mockRequest('POST', '/auth/register', { body: { firstName: 'Zia', lastName: 'Lopez', username: 'zia.lopez', email: 'zia@example.test',
+      phoneNumber: '+639185551234', password: 'ZiaPass123', confirmPassword: 'ZiaPass123', acceptTerms: true } })
+    await signIn(ADMIN)
+    renderApp('/admin/clients')
+
+    await user.type(await screen.findByLabelText(/Search clients/), 'zia lopez')
+    const row = (await screen.findByRole('button', { name: 'Open @zia.lopez' })).closest('tr')
+    expect(row).toHaveTextContent('09185551234') // stored as 09…
+    expect(row).toHaveTextContent('(not verified)')
+
+    await user.clear(screen.getByLabelText(/Search clients/))
+    await user.type(screen.getByLabelText(/Search clients/), 'nobody-at-all')
+    expect(await screen.findByText('No clients match that search.')).toBeInTheDocument()
+  })
+})
+
+describe('Deleting a client\'s data', () => {
 
   it('refuses while the client has an open booking', async () => {
     const user = userEvent.setup()

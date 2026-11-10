@@ -90,6 +90,12 @@ public sealed class AuthController(
     public async Task<UserProfileResponse> Me(CancellationToken ct) =>
         ToProfile(await users.GetByIdAsync(User.GetUserId(), ct) ?? throw new UnauthorizedAppException("Please log in again."));
 
+    /// <summary>The signed-in user changes their own name and phone number; nobody can change another user's profile here.</summary>
+    [Authorize]
+    [HttpPut("me")]
+    public async Task<UserProfileResponse> UpdateMe(UpdateProfileRequest request, CancellationToken ct) =>
+        ToProfile(await registration.UpdateProfileAsync(User.GetUserId(), request, ct));
+
     [AllowAnonymous]
     [EnableRateLimiting(RateLimitPolicies.Email)]
     [HttpPost("forgot-password")]

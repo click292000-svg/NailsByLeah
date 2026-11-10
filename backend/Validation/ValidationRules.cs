@@ -26,6 +26,7 @@ public static class InputLimits
     public const int BlockReasonMaxLength = 200;
     public const int FeedbackCommentMaxLength = 1000;
     public const int NoteMaxLength = 300;
+    public const int NailColorMaxLength = 40;
     public const int BalanceReferenceMaxLength = 50;
 
     /// <summary>A saved booking draft (JSON): ample for a service, add-ons, a time, a note and three photo ids.</summary>
@@ -62,30 +63,43 @@ public static class InputNormalizer
 }
 
 /// <summary>
-/// Contact number rule: exactly 11 digits and nothing else. Letters, spaces and symbols are rejected
-/// rather than stripped (the form strips them from pasted text before sending). Messages match
-/// the frontend (src/validation/rules.js).
+/// Contact number rule: a Philippine mobile number, written 09XXXXXXXXX or +639XXXXXXXXX, stored as 09XXXXXXXXX.
+/// Letters, spaces and other symbols are rejected rather than stripped (the form strips them from pasted text before
+/// sending). This only checks the format: it can't tell whether the number works or is the client's own.
+/// Messages match the frontend (src/validation/rules.js).
 /// </summary>
 public static class PhoneRule
 {
     public const string Required = "Phone Number is required.";
     public const string DigitsOnly = "Phone Number can only contain numbers (0–9), with no letters, spaces or symbols.";
+    public const string NotMobile = "Enter a Philippine mobile number starting with 09 or +639, e.g. 09171234567.";
     public const string TooShort = "Phone Number is too short. Enter all 11 digits, e.g. 09171234567.";
     public const string TooLong = "Phone Number is too long. Enter exactly 11 digits, e.g. 09171234567.";
 
-    public static bool IsDigitsOnly(string? value) =>
-        !string.IsNullOrWhiteSpace(value) && InputNormalizer.Text(value).All(char.IsAsciiDigit);
+    private const string CountryPrefix = "+63";
 
-    public static bool IsValid(string? value) =>
-        IsDigitsOnly(value) && InputNormalizer.Text(value).Length == InputLimits.PhoneDigits;
+    public static bool IsDigitsOnly(string? value) =>
+        !string.IsNullOrWhiteSpace(value) && Local(value).All(char.IsAsciiDigit);
+
+    public static bool IsValid(string? value) => Problem(value) is null;
+
+    /// <summary>+639171234567 becomes 09171234567; anything else is only trimmed.</summary>
+    public static string Normalize(string? value) => Local(value);
+
+    private static string Local(string? value)
+    {
+        var text = InputNormalizer.Text(value);
+        return text.StartsWith(CountryPrefix, StringComparison.Ordinal) ? "0" + text[CountryPrefix.Length..] : text;
+    }
 
     /// <summary>The first problem with the value, or null when it is valid.</summary>
     public static string? Problem(string? value)
     {
         if (string.IsNullOrWhiteSpace(value)) return Required;
         if (!IsDigitsOnly(value)) return DigitsOnly;
-        var length = InputNormalizer.Text(value).Length;
-        return length < InputLimits.PhoneDigits ? TooShort : length > InputLimits.PhoneDigits ? TooLong : null;
+        var local = Local(value);
+        if (local.Length >= 2 && !local.StartsWith("09", StringComparison.Ordinal)) return NotMobile;
+        return local.Length < InputLimits.PhoneDigits ? TooShort : local.Length > InputLimits.PhoneDigits ? TooLong : null;
     }
 }
 
@@ -123,7 +137,7 @@ public static class ValidationRuleExtensions
             .EmailAddress().WithMessage("Enter a valid email address.")
             .MaximumLength(InputLimits.EmailMaxLength).WithMessage("Email address is too long.");
 
-    /// <summary>Exactly 11 digits (Ref 1.3); see <see cref="PhoneRule"/>.</summary>
+    /// <summary>A Philippine mobile number (Ref 1.3); see <see cref="PhoneRule"/>.</summary>
     public static IRuleBuilderOptionsConditions<T, string> PhoneNumber<T>(this IRuleBuilder<T, string> rule) =>
         rule.Custom((value, context) =>
         {

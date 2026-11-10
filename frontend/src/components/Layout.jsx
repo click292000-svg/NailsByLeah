@@ -68,7 +68,7 @@ export function Layout() {
               ))}
               {user ? (
                 <div className="nav-user">
-                  <span className="nav-greeting">Hi, {user.firstName}</span>
+                  <NavLink to="/profile" className="nav-greeting nav-profile-link" aria-label={`My profile (${user.firstName})`}>Hi, {user.firstName}</NavLink>
                   <button type="button" className="btn btn-ghost btn-sm" onClick={signOut}>Log out</button>
                 </div>
               ) : (

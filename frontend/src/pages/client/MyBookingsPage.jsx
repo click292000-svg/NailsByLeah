@@ -9,6 +9,7 @@ import { Alert, Button, EmptyState, Money, PageHeader, PageLoader, Spinner, Stat
 import { CancelBookingDialog, RescheduleDialog } from '../../components/BookingDialogs'
 import { Modal } from '../../components/Modal'
 import { Receipt } from '../../components/Receipt'
+import { colorLabel } from '../../lib/shades'
 import { ReferenceImageGallery } from '../../components/ReferenceImageGallery'
 import { clearBookingDraft, draftHasProgress, loadBookingDraft } from '../../lib/bookingDraft'
 
@@ -89,13 +90,16 @@ export default function MyBookingsPage() {
 function DraftCard({ draft, catalog, onDiscard }) {
   const [discarding, setDiscarding] = useState(false)
   const service = catalog.services.find((s) => s.id === draft.serviceId)
-  const addOnCount = Object.keys(draft.nails ?? {}).length
+  const removal = catalog.services.find((s) => s.id === draft.removalId)
+  // A Plain set takes no add-ons, so any left in an older draft aren't counted.
+  const addOnCount = service?.allowsAddOns ? Object.keys(draft.nails ?? {}).length : 0
+  const what = [service?.name, removal && `Removal (${removal.name})`].filter(Boolean).join(' + ')
   return (
     <section className="draft-card" aria-label="Unfinished booking">
       <div>
         <div className="draft-card-head">
           <span className="badge badge-draft">Draft</span>
-          <strong>{service?.name ?? 'Service not chosen yet'}</strong>
+          <strong>{what || 'Service not chosen yet'}</strong>
           {addOnCount > 0 && <span className="muted small">+ {addOnCount} add-on{addOnCount === 1 ? '' : 's'}</span>}
         </div>
         <p className="muted small">
@@ -119,7 +123,8 @@ function BookingCard({ booking: b, onAction }) {
       <div className="booking-card-head">
         <div>
           <div className="booking-when">{formatDate(b.bookingDate)} · {formatTime(b.startTime)}</div>
-          <div className="booking-what">{b.serviceName}</div>
+          <div className="booking-what">{b.serviceName}{b.removalServiceName && ` + Removal (${b.removalServiceName})`}</div>
+          {b.nailColor && <div className="muted small">Colour: {colorLabel(b.nailColor)}</div>}
         </div>
         <StatusBadge status={b.status} />
       </div>

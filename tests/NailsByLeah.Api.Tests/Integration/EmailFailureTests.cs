@@ -17,6 +17,7 @@ public sealed class EmailFailureTests(ApiFactory factory) : IClassFixture<ApiFac
         factory.Notifications.FailNextEmail();
 
         await (await client.PostJsonAsync("/api/auth/register", registration)).ShouldHaveStatus(HttpStatusCode.Created);
+        factory.Clock.Advance(TimeSpan.FromSeconds(61)); // another code can be asked for a minute after the first
         await (await client.PostJsonAsync("/api/auth/resend-verification", new EmailRequest(email))).ShouldHaveStatus(HttpStatusCode.OK);
 
         await (await client.PostJsonAsync("/api/auth/verify-email", new VerifyEmailRequest(email, factory.Notifications.VerificationCodeFor(email))))
@@ -40,7 +41,7 @@ public sealed class EmailFailureTests(ApiFactory factory) : IClassFixture<ApiFac
     {
         var user = await factory.CreateClientAsync();
         var admin = await factory.CreateAdminClientAsync();
-        var first = await user.Client.BookAsync(TestHelpers.NewBooking((ApiFactory.StartDate, new TimeOnly(12, 0))));
+        var first = await user.Client.BookAsync(TestHelpers.NewBooking((ApiFactory.StartDate, new TimeOnly(11, 0))));
         var second = await user.Client.BookAsync(TestHelpers.NewBooking((ApiFactory.StartDate, new TimeOnly(14, 0))));
         await admin.ConfirmAsync(first.Booking.Id);
         await admin.ConfirmAsync(second.Booking.Id);

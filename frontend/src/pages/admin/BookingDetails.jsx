@@ -1,6 +1,7 @@
 import { formatDate, formatDateTime, formatTime } from '../../lib/format'
 import { Button, Money, StatusBadge } from '../../components/ui'
 import { Modal } from '../../components/Modal'
+import { colorFor, colorLabel } from '../../lib/shades'
 import { ReferenceImageGallery } from '../../components/ReferenceImageGallery'
 
 function Section({ title, children, wide = false }) {
@@ -68,7 +69,16 @@ export function BookingDetails({ booking: b, onClose }) {
 
           <Section title="Service">
             <dl className="bd-rows">
+              {b.removalServiceName && (
+                <Row label={<>Removal ({b.removalServiceName})<span className="bd-sub">Before the new set</span></>}><Money amount={b.removalPrice} /></Row>
+              )}
               <Row label={b.serviceName}><Money amount={b.servicePrice} /></Row>
+              {b.nailColor && (
+                <Row label="Colour">
+                  {colorFor(b.nailColor) && <span className="bd-swatch" style={{ background: colorFor(b.nailColor) }} aria-hidden="true" />}
+                  {colorLabel(b.nailColor)}
+                </Row>
+              )}
               {b.addOns.map((a) => (
                 <Row key={a.addOnId} label={<>{a.name}<span className="bd-sub">{a.handLabel}, {a.nailCount} {a.nailCount === 1 ? 'nail' : 'nails'}</span></>}>
                   <Money amount={a.linePrice} />
@@ -101,6 +111,9 @@ export function BookingDetails({ booking: b, onClose }) {
                 </p>
               )}
               <p className="muted small">The <Money amount={b.depositAmount} /> deposit is non-refundable.</p>
+              {b.termsVersion && (
+                <p className="muted small">Booking policy and Terms v{b.termsVersion} agreed to{b.termsAcceptedAt ? ` on ${formatDateTime(b.termsAcceptedAt)}` : ''}.</p>
+              )}
             </div>
           </Section>
 
