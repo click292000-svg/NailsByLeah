@@ -1,6 +1,8 @@
 import { useState } from 'react'
 import { api } from '../../api'
 import { useAsync } from '../../hooks/useAsync'
+import { softGelSets } from '../../lib/services'
+import { ColorStockCard } from './BookingRulesCards'
 import { errorMessage, fieldErrors } from '../../api/errors'
 import { validateDuration, validatePrice, validateServiceName } from '../../validation/rules'
 import { Alert, Button, Card, Money, PageHeader, PageLoader, SelectField, TextField } from '../../components/ui'
@@ -18,11 +20,14 @@ export default function ServicesPage() {
     catalog.reload()
   }
 
-  // Main services are listed under their category (Soft Gel, Removal) instead of repeating it on every row.
+  // Main services are listed under their category (Soft Gel, Removal) instead of repeating it on every row. Soft Gel
+  // follows the booking page: Plain, Soft Gel Extension, BIAB, each with its "with design" version right under it.
   const groups = [...new Set(catalog.data.services.map((s) => s.category))]
     .map((value) => {
-      const items = catalog.data.services.filter((s) => s.category === value)
-      return { value, label: items[0].categoryLabel, items }
+      const items = value === 'SoftGel'
+        ? softGelSets(catalog.data.services).flatMap(({ base, design }) => [{ item: base }, ...(design ? [{ item: design, designOf: base }] : [])])
+        : catalog.data.services.filter((s) => s.category === value).map((item) => ({ item }))
+      return { value, label: items[0].item.categoryLabel, items }
     })
 
   return (
@@ -37,21 +42,23 @@ export default function ServicesPage() {
           {groups.map((g) => (
             <section key={g.value} className="catalog-group" aria-label={g.label}>
               <h3 className="list-group-title">{g.label}<span>{g.items.length}</span></h3>
-              {g.items.map((item) => <CatalogRow key={item.id} item={item} kind="service" onChanged={changed} />)}
+              {g.items.map(({ item, designOf }) => <CatalogRow key={item.id} item={item} designOf={designOf} kind="service" onChanged={changed} />)}
             </section>
           ))}
         </div>
         <NewItemForm kind="service" onCreated={changed} />
       </Card>
 
-      <Card title="Stone add-ons">
-        <p className="card-intro">Priced per nail and added to a Soft Gel service.</p>
+      <Card title="Nail art (add-ons)">
+        <p className="card-intro">Priced per nail and added to a set, the way clients see them under Nail Art when booking.</p>
         <div className="catalog">
           <CatalogHead kind="addOn" />
           {catalog.data.addOns.map((item) => <CatalogRow key={item.id} item={item} kind="addOn" onChanged={changed} />)}
         </div>
         <NewItemForm kind="addOn" onCreated={changed} />
       </Card>
+
+      <ColorStockCard />
     </div>
   )
 }
@@ -63,13 +70,13 @@ function CatalogHead({ kind }) {
       <span>Name</span>
       <span>{kind === 'addOn' ? 'Price per nail' : 'Price'}</span>
       <span>{kind === 'service' ? 'Length' : ''}</span>
-      <span>{kind === 'service' ? 'Offered · Stones' : 'Offered'}</span>
+      <span>{kind === 'service' ? 'Offered · Nail art' : 'Offered'}</span>
       <span />
     </div>
   )
 }
 
-function CatalogRow({ item, kind, onChanged }) {
+function CatalogRow({ item, kind, onChanged, designOf = null }) {
   const [name, setName] = useState(item.name)
   const [price, setPrice] = useState(String(item.price))
   const [duration, setDuration] = useState(String(item.durationMinutes ?? ''))
@@ -78,7 +85,7 @@ function CatalogRow({ item, kind, onChanged }) {
   const [errors, setErrors] = useState({})
   const [saving, setSaving] = useState(false)
   const isService = kind === 'service'
-  // Only a new set can take Stones; a removal never does.
+  // Only a new set can take nail art; a removal never does.
   const canTakeStones = isService && item.category === 'SoftGel'
   const dirty = name !== item.name || Number(price) !== item.price || isActive !== item.isActive
     || (isService && Number(duration) !== item.durationMinutes) || (canTakeStones && allowsAddOns !== Boolean(item.allowsAddOns))
@@ -115,9 +122,11 @@ function CatalogRow({ item, kind, onChanged }) {
   }
 
   return (
-    <div className={`catalog-row${dirty ? ' is-dirty' : ''}${isActive ? '' : ' is-inactive'}`}>
+    <div className={`catalog-row${dirty ? ' is-dirty' : ''}${isActive ? '' : ' is-inactive'}${designOf ? ' is-design' : ''}`}
+      title={designOf ? `The "With Design" option on ${designOf.name}` : undefined}>
       <div className="catalog-cell catalog-name">
         <input className="input input-compact" aria-label={`Name of ${item.name}`} value={name} onChange={(e) => setName(e.target.value)} />
+        {designOf && <span className="sr-only">The &ldquo;With Design&rdquo; option on {designOf.name}</span>}
         {errors.name && <div className="field-error">{errors.name}</div>}
       </div>
       <div className="catalog-cell" data-label={isService ? 'Price' : 'Price per nail'}>
@@ -141,17 +150,17 @@ function CatalogRow({ item, kind, onChanged }) {
           </>
         )}
       </div>
-      <div className="catalog-cell" data-label="Offered">
+      <div className="catalog-cell catalog-switches" data-label="Offered">
         <label className="switch">
           <input type="checkbox" aria-label={`${item.name} is offered`} checked={isActive} onChange={(e) => setIsActive(e.target.checked)} />
           <span className="switch-track" aria-hidden="true" />
           <span className="switch-text" aria-hidden="true">{isActive ? 'Yes' : 'No'}</span>
         </label>
         {canTakeStones && (
-          <label className="switch switch-sub" title="Whether clients can add Stones to this service">
-            <input type="checkbox" aria-label={`${item.name} takes Stones`} checked={allowsAddOns} onChange={(e) => setAllowsAddOns(e.target.checked)} />
+          <label className="switch switch-sub" title="Whether clients can add nail art to this service">
+            <input type="checkbox" aria-label={`${item.name} takes nail art`} checked={allowsAddOns} onChange={(e) => setAllowsAddOns(e.target.checked)} />
             <span className="switch-track" aria-hidden="true" />
-            <span className="switch-text" aria-hidden="true">{allowsAddOns ? 'Takes Stones' : 'No Stones'}</span>
+            <span className="switch-text" aria-hidden="true">{allowsAddOns ? 'Takes nail art' : 'No nail art'}</span>
           </label>
         )}
       </div>

@@ -87,7 +87,6 @@ function ClientPhotoCard({ onDone }) {
         <Button variant="secondary" size="sm" loading={busy} onClick={() => input.current?.click()}>{photo ? 'Change photo' : 'Upload photo'}</Button>
         {photo && <Button variant="ghost" size="sm" disabled={busy} onClick={() => run(() => api.auth.removePhoto(), 'Your photo was removed.')}>Remove</Button>}
       </div>
-      <p className="muted small">JPG, PNG or WebP. Only you and Leyah can see it; it helps her recognise you.</p>
     </Card>
   )
 }
@@ -148,7 +147,6 @@ function AccountCard() {
         <div><dt>Username</dt><dd>@{user.username}</dd></div>
         <div><dt>Email</dt><dd>{user.email}</dd></div>
       </dl>
-      <p className="muted small">Your username and email address sign you in, so they can&apos;t be changed here.</p>
     </Card>
   )
 }
@@ -257,7 +255,6 @@ function DetailsCard({ onDone }) {
         </div>
         <PhoneField value={values.phoneNumber} onChange={set('phoneNumber')} error={errors.phoneNumber}
           onBlur={() => values.phoneNumber && setErrors((e) => ({ ...e, phoneNumber: validatePhone(values.phoneNumber) ?? undefined }))} />
-        <p className="muted small">We only check that this looks like a Philippine mobile number; it isn&apos;t verified by text message.</p>
         <div className="row">
           <Button type="submit" loading={saving} disabled={!dirty}>Save changes</Button>
         </div>

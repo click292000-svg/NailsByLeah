@@ -1,10 +1,10 @@
 import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { jsPDF } from 'jspdf'
 import { ADMIN, renderApp, signIn } from './helpers'
 import { getDb, saveDb } from './mockBackend/db'
 import { addDays, dateFromToday, today } from '../lib/dates'
-import { buildSalesReportPdf, totalReceived } from '../lib/reportPdf'
+import ExcelJS from 'exceljs'
+import { buildSalesReportWorkbook, totalReceived } from '../lib/reportExcel'
 import { BookingDetails } from '../pages/admin/BookingDetails'
 import { StatusBadge } from '../components/ui'
 import { CancelBookingDialog } from '../components/BookingDialogs'
@@ -49,7 +49,8 @@ describe('Completing a booking and its balance', () => {
     await openDashboard()
 
     const item = await attentionRow(booking.id)
-    expect(item).toHaveTextContent('Date passed, still confirmed')
+    expect(item).toHaveTextContent('Did they come?')
+    expect(item).toHaveTextContent('date passed, still confirmed')
     await user.click(within(item).getByRole('button', { name: 'Complete' }))
     const dialog = screen.getByRole('dialog', { name: 'Complete booking' })
     expect(within(dialog).getByRole('radio', { name: 'Balance received' })).toBeChecked()
@@ -200,7 +201,6 @@ describe('Dashboard', () => {
     const user = userEvent.setup()
     const booking = stage({ bookingDate: addDays(today(), 1), startTime: '11:00:00', status: 'Pending' })
     await openDashboard()
-    await user.click(screen.getByRole('button', { name: 'Quiet day' })) // the full overview, whatever the day
 
     const week = screen.getByRole('heading', { name: 'Next 7 days' }).closest('.card')
     const line = within(week).getByRole('button', { name: /Testa Client, Pending/ })
@@ -228,7 +228,7 @@ describe('Dashboard', () => {
     expect(card).toHaveTextContent('#06')
     expect(card).toHaveTextContent('Short almond')
     expect(within(card).getByText(/in \d+ days?/)).toBeInTheDocument()
-    await user.click(screen.getByRole('button', { name: 'Today' }))
+    for (let i = 0; i < 3; i++) await user.click(screen.getByRole('button', { name: 'Previous day' }))
     expect(await screen.findByRole('heading', { name: 'Next client' })).toBeInTheDocument()
   })
 
@@ -239,61 +239,70 @@ describe('Dashboard', () => {
     await openDashboard()
 
     expect(await screen.findByText('All caught up')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Quiet day' })).toHaveAttribute('aria-pressed', 'true')
   })
 
-  it('switches to the busy-day view with the whole day in time order, and back', async () => {
-    const user = userEvent.setup()
+  it("shows the day's schedule beside the next 7 days, and the balance still to collect", async () => {
     stage({ bookingDate: today(), startTime: '23:00:00', status: 'Confirmed' })
     getDb().bookings.forEach((b) => { if (b.status === 'Pending' || b.status === 'Completed' || (b.bookingDate < today())) b.isDeleted = true })
     saveDb()
     await openDashboard()
 
-    await user.click(screen.getByRole('button', { name: 'Busy day' }))
-    const day = screen.getByRole('heading', { name: 'Today’s schedule' }).closest('.card')
+    const day = (await screen.findByRole('heading', { name: 'Today’s schedule' })).closest('.card')
     expect(within(day).getByRole('button', { name: /11:00 PM to .*Testa Client, Confirmed/ })).toBeInTheDocument()
-    expect(screen.queryByRole('heading', { name: 'Next 7 days' })).toBeNull()
-    expect(screen.queryByText('Moved to other pages')).toBeNull()
-
-    await user.click(screen.getByRole('button', { name: 'Quiet day' }))
     expect(screen.getByRole('heading', { name: 'Next 7 days' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Quiet day' })).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.getByText(/Balance to collect/)).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Busy day' })).toBeNull()
+    expect(screen.queryByText('Moved to other pages')).toBeNull()
   })
 })
 
-describe('Sales report PDF', () => {
+describe('Sales report Excel file', () => {
   const report = { bookingsMade: 4, bookingsCompleted: 3, bookingsCancelled: 1, bookingsNoShow: 2, depositsCollected: 1200, balancesReceived: 450, balancesUnpaid: 150, completedServicesValue: 1800 }
+  // The value beside a label in the Summary sheet's first column of figures.
+  const valueOf = (sheet, label) => {
+    let found
+    sheet.eachRow((row) => {
+      const cell = row.getCell(2).value
+      const text = typeof cell === 'object' && cell?.richText ? cell.richText[0].text : cell
+      if (text === label && found === undefined) found = row.getCell(3).value
+    })
+    return found
+  }
 
   it('adds online payments and balances into the total received', () => {
     expect(totalReceived(report)).toBe(1650)
   })
 
-  it('writes the figures, and the busy days of a month, with no client names', () => {
+  it('writes the figures, peso formatted, and the busy days of a month with a totals row', async () => {
     const days = [{ ...report, date: '2026-11-03' }, { date: '2026-11-04', bookingsMade: 0, bookingsCompleted: 0, bookingsCancelled: 0, bookingsNoShow: 0, depositsCollected: 0, balancesReceived: 0 }]
-    const text = buildSalesReportPdf(jsPDF, { period: 'November 2026', report: { ...report, days } }).output()
+    const book = buildSalesReportWorkbook(ExcelJS, { period: 'November 2026', report: { ...report, days } })
 
-    expect(text).toContain('November 2026')
-    expect(text).toContain('PHP 1,650.00') // total received
-    expect(text).toContain('PHP 150.00') // unpaid balances
-    expect(text).toContain('No-show')
-    expect(text).toContain('Tue, Nov 3')
-    expect(text).not.toContain('Wed, Nov 4') // nothing happened that day
-    expect(text).toContain('not an official receipt')
+    const summary = book.getWorksheet('Summary')
+    expect(summary.getCell('B3').value).toBe('Sales report · November 2026')
+    expect(valueOf(summary, 'Total received')).toBe(1650)
+    expect(valueOf(summary, 'Balances unpaid')).toBe(150)
+    expect(valueOf(summary, 'No-show')).toBe(2)
+
+    const daySheet = book.getWorksheet('Days')
+    expect(daySheet.getCell('A4').value).toBe('Tue, Nov 3') // Nov 4 had nothing, so it's left out
+    expect(daySheet.getCell('A5').value).toBe('Total')
+    expect(daySheet.getCell('F5').value).toMatchObject({ formula: 'SUM(F4:F4)', result: 1200 })
+    expect(daySheet.getCell('F4').numFmt).toContain('₱')
+
+    // The file is a real workbook: it opens again with the same figures.
+    const reopened = new ExcelJS.Workbook()
+    await reopened.xlsx.load(await book.xlsx.writeBuffer())
+    expect(valueOf(reopened.getWorksheet('Summary'), 'Total received')).toBe(1650)
   })
 
-  it('fits a full month on one page', () => {
-    const days = Array.from({ length: 31 }, (_, i) => ({ ...report, date: `2026-12-${String(i + 1).padStart(2, '0')}` }))
-    expect(buildSalesReportPdf(jsPDF, { period: 'December 2026', report: { ...report, days } }).getNumberOfPages()).toBe(1)
-  })
-
-  it('makes a daily report without a table of days', () => {
-    const text = buildSalesReportPdf(jsPDF, { period: 'Fri, Nov 6, 2026', report }).output()
-    expect(text).not.toContain('Days with activity')
+  it('makes a daily report without a sheet of days', () => {
+    const book = buildSalesReportWorkbook(ExcelJS, { period: 'Fri, Nov 6, 2026', report })
+    expect(book.worksheets.map((w) => w.name)).toEqual(['Summary'])
   })
 
   it('Reports offers the download once the figures have loaded', async () => {
     await signIn(ADMIN)
     renderApp('/admin/reports')
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Download PDF' })).toBeEnabled())
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Download Excel' })).toBeEnabled())
   })
 })

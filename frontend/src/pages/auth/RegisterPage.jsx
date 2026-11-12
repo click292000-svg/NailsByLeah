@@ -49,9 +49,20 @@ export default function RegisterPage() {
 
   return (
     <div className="auth-page">
-      <Card className="auth-card auth-card-wide">
-        <h1>Create your account</h1>
-        <p className="muted">Book appointments and keep track of your visits.</p>
+      {/* The same photo-and-form card as Log in. */}
+      <div className="login-split register-split">
+      <aside className="login-art" aria-hidden="true">
+        <img src="/img/service-plain.jpg" alt="" width="640" height="640" />
+        <div className="login-art-text">
+          <p className="login-art-name">Join Nails by Leyah</p>
+          <p>Save your details once, then book any time and keep your visits in one place.</p>
+        </div>
+      </aside>
+      <Card className="auth-card auth-card-wide login-card">
+        <div className="login-head">
+          <h1>Create your account</h1>
+          <p className="muted">Book appointments and keep track of your visits.</p>
+        </div>
         {failure && <Alert kind="error">{failure}</Alert>}
 
         <form onSubmit={submit} noValidate className="stack">
@@ -74,6 +85,11 @@ export default function RegisterPage() {
           {/* The password rules span both columns so they stay readable. */}
           <PasswordRules password={values.password} />
 
+          {!readBoth && (
+            <p className="terms-reminder" role="note">
+              Please read the <strong>Terms &amp; Conditions</strong> and the <strong>Privacy Policy</strong> before signing up.
+            </p>
+          )}
           <div className={errors.acceptTerms ? 'checkbox-field field-invalid' : 'checkbox-field'}>
             <label>
               <input type="checkbox" checked={values.acceptTerms} disabled={!readBoth}
@@ -97,6 +113,7 @@ export default function RegisterPage() {
           Already have an account? <Link to="/login">Log in</Link>
         </p>
       </Card>
+      </div>
 
       {openDocument && (
         <LegalDocumentModal document={openDocument.kind} onClose={() => setOpenDocument(null)}

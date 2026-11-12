@@ -11,6 +11,7 @@ const GROUPS = [
       { to: '/admin/services', label: 'Services' },
       { to: '/admin/schedule', label: 'Schedule' },
       { to: '/admin/clients', label: 'Clients' },
+      { to: '/admin/gallery', label: 'Gallery' },
     ],
   },
   {
@@ -129,8 +130,6 @@ export function AdminNav({ user, onSignOut, menuOpen }) {
           label={<><span className="nav-avatar" aria-hidden="true">{photo ? <img src={photo} alt="" /> : initial}</span><span className="sr-only">Account: </span><span className="nav-profile-name">{user.firstName}</span></>}>
           <div className="nav-account">
             <strong>{user.firstName} {user.lastName}</strong>
-            <span>@{user.username}</span>
-            <span>{user.email}</span>
             <span className="nav-account-role">Administrator</span>
           </div>
           <NavLink to="/profile" className="nav-panel-link" onClick={close}>My profile</NavLink>
@@ -143,7 +142,7 @@ export function AdminNav({ user, onSignOut, menuOpen }) {
 
 /**
  * A client's account menu, laid out like Leyah's: their photo (or initial) and first name, opening to who they are signed
- * in as, My profile and Log out (My bookings is already in the top bar). Clicking elsewhere or moving to another page closes it.
+ * in as (name and role), My profile and Log out (My bookings is already in the top bar). Clicking elsewhere or moving to another page closes it.
  */
 export function ClientAccountMenu({ user, photo, onSignOut }) {
   const { pathname } = useLocation()
@@ -169,8 +168,6 @@ export function ClientAccountMenu({ user, photo, onSignOut }) {
         label={<><span className="nav-avatar" aria-hidden="true">{photo ? <img src={photo} alt="" /> : initial}</span><span className="sr-only">Account: </span><span className="nav-profile-name">{user.firstName}</span></>}>
         <div className="nav-account">
           <strong>{user.firstName} {user.lastName}</strong>
-          <span>@{user.username}</span>
-          <span>{user.email}</span>
           <span className="nav-account-role">Client</span>
         </div>
         <NavLink to="/profile" className="nav-panel-link" onClick={close}>My profile</NavLink>

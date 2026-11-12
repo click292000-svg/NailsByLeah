@@ -65,6 +65,28 @@ public sealed class LookupsController(IOptions<LegalOptions> legal) : Controller
 }
 
 /// <summary>The salon's public details and Leyah's photo, for the website.</summary>
+/// <summary>The home page's Our Works gallery: Leyah's own photos, newest first.</summary>
+[ApiController]
+[AllowAnonymous]
+[Route("api/gallery")]
+public sealed class GalleryController(IGalleryService gallery) : ControllerBase
+{
+    [HttpGet]
+    public Task<IReadOnlyList<GalleryPhotoResponse>> List(CancellationToken ct) => gallery.GetAllAsync(ct);
+
+    /// <summary>The address carries a version (?v=), so a photo can be cached for long.</summary>
+    [HttpGet("{id:int}/photo")]
+    public async Task<IActionResult> Photo(int id, CancellationToken ct)
+    {
+        var photo = await gallery.OpenAsync(id, ct);
+        if (photo is null)
+            return NotFound();
+        Response.Headers.CacheControl = "public, max-age=604800";
+        Response.Headers["X-Content-Type-Options"] = "nosniff";
+        return File(photo.Value.Content, photo.Value.ContentType);
+    }
+}
+
 [ApiController]
 [AllowAnonymous]
 [Route("api/salon")]

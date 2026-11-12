@@ -15,6 +15,23 @@ describe('Home page', () => {
     expect(await within(pricing).findByText('₱250+')).toBeInTheDocument() // BIAB is the cheapest soft gel
     expect(within(pricing).getByText('₱100+')).toBeInTheDocument()
     expect(within(pricing).getByText('₱10+')).toBeInTheDocument()
+    // The sets as clients book them, with "With design" as the option on top.
+    expect(within(pricing).getByText('Plain • Soft Gel Extension • BIAB • With design (optional)')).toBeInTheDocument()
+  })
+
+  it('unfolds the full price list from the live prices, with the design versions and Rhinestone', async () => {
+    const user = userEvent.setup()
+    renderApp('/')
+    const pricing = screen.getByRole('region', { name: 'Pricing' })
+    await within(pricing).findByText('₱250+')
+    await user.click(within(pricing).getByRole('button', { name: 'View full price list' }))
+
+    const card = within(pricing).getByRole('article', { name: 'Nails price list' })
+    const row = (name) => within(card).getByText(name).closest('.pc-row')
+    expect(row('Soft Gel Extension')).toHaveTextContent('₱399')
+    expect(row('Plain with design')).toHaveTextContent('₱400')
+    expect(row('BIAB with design')).toHaveTextContent('₱350')
+    expect(row('Rhinestone')).toHaveTextContent('₱15')
   })
 
   it('sends guests to sign up when they book, and links Explore and Pricing to their sections', () => {

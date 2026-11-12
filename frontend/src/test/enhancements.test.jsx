@@ -16,9 +16,13 @@ beforeAll(() => {
 })
 
 describe('Design reference photos', () => {
+  // Design photos are added under "Choose a colour", on the first step.
   async function goToDesignStep(user) {
-    await user.click(await screen.findByRole('checkbox', { name: /With Design/ }))
+    await user.click(await screen.findByRole('checkbox', { name: /^With Design/ }))
     await pickShade(user, '06')
+  }
+
+  async function goToSummary(user) {
     await user.click(screen.getByRole('button', { name: /^Next:/ }))
     pickDate(dateFromToday(3))
     await user.click(await screen.findByRole('button', { name: /^11:00.*Available/ }))
@@ -42,7 +46,7 @@ describe('Design reference photos', () => {
     await user.upload(input, png('pink-flowers.png'))
     expect(await screen.findByRole('img', { name: /Design reference 1 \(pink-flowers.png\)/ })).toBeInTheDocument()
 
-    await user.click(screen.getByRole('button', { name: /^Next:/ }))
+    await goToSummary(user)
     expect(within(screen.getByRole('list', { name: 'Design reference photos' })).getAllByRole('img')).toHaveLength(1)
     await readTermsAndAgree(user)
     await user.click(screen.getByRole('button', { name: /Pay/ }))
@@ -59,7 +63,7 @@ describe('Design reference photos', () => {
     renderApp('/book')
     await goToDesignStep(user)
 
-    const list = screen.getByRole('list', { name: 'Your reference photos' })
+    const list = screen.getByRole('list', { name: 'Your design reference photos' })
     expect(list.querySelectorAll('.reference-empty')).toHaveLength(2)
     await user.upload(screen.getByLabelText(/Design reference photos/), png('glitter.png'))
     await screen.findByRole('img', { name: /glitter.png/ })
@@ -87,7 +91,7 @@ describe('Design reference photos', () => {
     renderApp('/book')
     expect(await screen.findByText(/We restored the booking you saved as a draft/)).toBeInTheDocument()
     expect(screen.getByRole('img', { name: /glitter.png/ })).toBeInTheDocument()
-    expect(screen.getByLabelText(/Note for Leyah/)).toBeInTheDocument() // back on the design step
+    expect(screen.getByLabelText(/Design reference photos/)).toBeInTheDocument() // back on the first step, where photos are added
   })
 })
 

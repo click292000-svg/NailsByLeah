@@ -137,6 +137,7 @@ public static class AuditActions
     public const string BookingCompleted = "BookingCompleted";
     public const string BookingCancelled = "BookingCancelled";
     public const string BookingNoShow = "BookingNoShow";
+    public const string ColorRequestDecided = "ColorRequestDecided";
     public const string BalanceReceived = "BalanceReceived";
     public const string RefundSent = "RefundSent";
     public const string SalonDetailsChanged = "SalonDetailsChanged";
@@ -157,6 +158,13 @@ public static class AuditActions
     public const string FeedbackSubmitted = "FeedbackSubmitted";
     public const string ClientDataDeleted = "ClientDataDeleted";
     public const string ProfileUpdated = "ProfileUpdated";
+    public const string BookingRulesChanged = "BookingRulesChanged";
+    public const string ColorStockChanged = "ColorStockChanged";
+    public const string ClientNoteChanged = "ClientNoteChanged";
+    public const string FeedbackReplied = "FeedbackReplied";
+    public const string GalleryPhotoAdded = "GalleryPhotoAdded";
+    public const string GalleryPhotoRemoved = "GalleryPhotoRemoved";
+    public const string BookingCreatedByAdmin = "BookingCreatedByAdmin";
 }
 
 /// <summary>

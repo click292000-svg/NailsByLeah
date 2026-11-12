@@ -8,6 +8,7 @@ import LoginPage from './pages/auth/LoginPage'
 import RegisterPage from './pages/auth/RegisterPage'
 import { ForgotPasswordPage, ResetPasswordPage, VerifyEmailPage } from './pages/auth/PasswordPages'
 import HomePage from './pages/client/HomePage'
+import GalleryPage from './pages/admin/GalleryPage'
 import BookPage from './pages/client/BookPage'
 import MyBookingsPage from './pages/client/MyBookingsPage'
 import DashboardPage from './pages/admin/DashboardPage'
@@ -51,6 +52,7 @@ export function AppRoutes() {
         <Route path="admin/feedback" element={admin(<AdminFeedbackPage />)} />
         <Route path="admin/activity" element={admin(<ActivityLogPage />)} />
         <Route path="admin/clients" element={admin(<ClientDataPage />)} />
+        <Route path="admin/gallery" element={admin(<GalleryPage />)} />
 
         <Route path="*" element={<EmptyState title="Page not found"><Link to="/">Go to the home page</Link></EmptyState>} />
       </Route>

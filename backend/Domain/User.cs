@@ -31,6 +31,9 @@ public class User : IAuthenticatable, ISoftDeletable
     public string? PhotoFileName { get; set; }
     public string? PhotoContentType { get; set; }
 
+    /// <summary>Leyah's private note about the client ("prefers short almond"); never shown to the client.</summary>
+    public string? AdminNote { get; set; }
+
     public DateTime CreatedAt { get; set; }
     public DateTime UpdatedAt { get; set; }
     public bool IsDeleted { get; set; }

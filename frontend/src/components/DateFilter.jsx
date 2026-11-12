@@ -59,18 +59,19 @@ export function DateFilter({ label, value, onChange }) {
 }
 
 /** A required day ("yyyy-mm-dd") with the same stepper and calendar as the bookings filter, e.g. the daily sales report. */
-export function DayPicker({ label, value, onChange, align }) {
+/** A single day in the salon's style. `min` (yyyy-mm-dd) greys out earlier days, e.g. today for a new booking. */
+export function DayPicker({ label, value, onChange, align, min, required = false }) {
   const labelId = useId()
   return (
     <div className="date-filter" role="group" aria-labelledby={labelId}>
-      <span className="field-label" id={labelId}>{label}</span>
-      <DateStepper value={value} onChange={onChange} name={label} align={align} />
+      <span className="field-label" id={labelId}>{label}{required && <span className="required" aria-hidden="true"> *</span>}</span>
+      <DateStepper value={value} onChange={onChange} name={label} align={align} min={min} />
     </div>
   )
 }
 
 /** ‹ [calendar icon  Wed, Nov 4, 2026] › with the calendar popover behind the middle button. */
-function DateStepper({ value, onChange, name, allowAny = false, highlight = false, align }) {
+function DateStepper({ value, onChange, name, allowAny = false, highlight = false, align, min }) {
   const [open, setOpen] = useState(false)
   const pickRef = useRef(null)
   const now = today()
@@ -84,7 +85,8 @@ function DateStepper({ value, onChange, name, allowAny = false, highlight = fals
   return (
     <div className="date-picker">
       <div className={`date-stepper${highlight ? ' is-picked' : ''}${open ? ' is-open' : ''}`}>
-        <button type="button" className="date-stepper-arrow" aria-label="Previous day" onClick={() => onChange(addDays(value || now, -1))}>‹</button>
+        <button type="button" className="date-stepper-arrow" aria-label="Previous day" disabled={Boolean(min) && (value || now) <= min}
+          onClick={() => onChange(addDays(value || now, -1))}>‹</button>
         <button ref={pickRef} type="button" className="date-stepper-pick" aria-haspopup="dialog" aria-expanded={open}
           aria-label={value ? `${name}: ${formatDate(value)}. Change date` : 'Pick a date'} onClick={() => setOpen((o) => !o)}>
           <CalendarIcon />
@@ -92,7 +94,7 @@ function DateStepper({ value, onChange, name, allowAny = false, highlight = fals
         </button>
         <button type="button" className="date-stepper-arrow" aria-label="Next day" onClick={() => onChange(addDays(value || now, 1))}>›</button>
       </div>
-      {open && <CalendarPopover value={value} today={now} allowAny={allowAny} align={align} onChoose={choose}
+      {open && <CalendarPopover value={value} today={now} allowAny={allowAny} align={align} min={min} onChoose={choose}
         onClose={() => { setOpen(false); pickRef.current?.focus() }} anchor={pickRef} />}
     </div>
   )
@@ -112,7 +114,7 @@ function useClickAway(panel, anchor, onClose) {
  * Home/End to the start or end of the week, Enter chooses and Escape closes. `allowAny` adds "Any date" to the
  * footer; `align="end"` opens it from the right edge of the button (for pickers on the right of the page).
  */
-function CalendarPopover({ value, today: now, allowAny, align, onChoose, onClose, anchor }) {
+function CalendarPopover({ value, today: now, allowAny, align, min, onChoose, onClose, anchor }) {
   const [focused, setFocused] = useState(value || now)
   const [month, setMonth] = useState(monthOf(value || now))
   const panel = useRef(null)
@@ -167,9 +169,10 @@ function CalendarPopover({ value, today: now, allowAny, align, onChoose, onClose
               if (monthOf(iso) !== month) classes.push('outside')
               if (iso === now) classes.push('today')
               if (iso === value) classes.push('selected')
+              const blocked = Boolean(min) && iso < min // e.g. a day already gone, for a new booking
               return (
                 <span key={iso} role="gridcell" aria-selected={iso === value}>
-                  <button type="button" className={classes.join(' ')} data-day={iso} tabIndex={iso === focused ? 0 : -1}
+                  <button type="button" className={classes.join(' ')} data-day={iso} tabIndex={iso === focused ? 0 : -1} disabled={blocked}
                     aria-label={`${formatDate(iso)}${iso === now ? ', today' : ''}`} aria-current={iso === now ? 'date' : undefined}
                     onClick={() => onChoose(iso)} onFocus={() => setFocused(iso)}>
                     {Number(iso.slice(8))}

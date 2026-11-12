@@ -133,9 +133,9 @@ describe('Mock backend', () => {
   it('accepts 09 and +639 mobile numbers only', () => {
     expect(validatePhone('09171234567')).toBeNull()
     expect(validatePhone('+639171234567')).toBeNull()
-    expect(validatePhone('08171234567')).toMatch(/09 or \+639/)
-    expect(validatePhone('+63917123456')).toMatch(/too short/)
-    expect(validatePhone('0917-123-4567')).toMatch(/only contain numbers/)
+    expect(validatePhone('08171234567')).toBe('Not a valid phone number.')
+    expect(validatePhone('+63917123456')).toBe('Not a valid phone number.')
+    expect(validatePhone('0917-123-4567')).toBe('Not a valid phone number.')
   })
 
   it('end to end: sign up, book, pay, cancel, administrator sees the cancellation (7.11)', async () => {

@@ -15,7 +15,7 @@ describe('Colour chart', () => {
     await startBooking(user)
     await user.click(screen.getByRole('button', { name: 'Open the colour chart' }))
 
-    const shades = within(chart()).getAllByRole('radio')
+    const shades = within(within(chart()).getByRole('radiogroup', { name: 'Shades' })).getAllByRole('radio')
     expect(shades).toHaveLength(58)
     expect(shades[0]).toHaveAccessibleName('Shade #01, Bright White')
     expect(shades[57]).toHaveAccessibleName('Shade #58, Dark Plum-Black')
@@ -48,7 +48,7 @@ describe('Colour chart', () => {
     // Clearing in the window and closing also keeps it.
     await user.click(screen.getByRole('button', { name: 'Colour #06 – Light Pink-Lavender. Change colour' }))
     await user.click(within(chart()).getByRole('button', { name: 'Clear #06' }))
-    expect(within(chart()).getByText('No color selected yet.')).toBeInTheDocument()
+    expect(within(chart()).getByText(/No color selected yet/)).toBeInTheDocument()
     await user.keyboard('{Escape}')
     expect(screen.getByRole('button', { name: 'Colour #06 – Light Pink-Lavender. Change colour' })).toBeInTheDocument()
   })
@@ -57,10 +57,20 @@ describe('Colour chart', () => {
     const user = userEvent.setup()
     await startBooking(user)
 
-    await user.click(screen.getByRole('radio', { name: 'Not sure yet (decide at the salon)' }))
+    // It sits in the chart window, under the shades.
+    await user.click(screen.getByRole('button', { name: 'Open the colour chart' }))
+    await user.click(within(chart()).getByRole('radio', { name: 'Not sure yet (decide at the salon)' }))
+    expect(within(chart()).getByRole('radio', { name: 'Not sure yet (decide at the salon)' })).toBeChecked()
+    // Deciding at the salon switches the chart off: no shade, no colour for each nail.
+    expect(within(chart()).getByRole('radio', { name: /^Shade #06,/ })).toBeDisabled()
+    expect(within(chart()).getByRole('button', { name: /^Left hand, thumb/ })).toBeDisabled()
+    // Tapping it again brings the chart back, then it is chosen once more for the booking.
+    await user.click(within(chart()).getByRole('radio', { name: 'Not sure yet (decide at the salon)' }))
+    expect(within(chart()).getByRole('radio', { name: /^Shade #06,/ })).toBeEnabled()
+    await user.click(within(chart()).getByRole('radio', { name: 'Not sure yet (decide at the salon)' }))
+    await user.click(within(chart()).getByRole('button', { name: 'Use This Choice' }))
 
-    expect(screen.getByRole('radio', { name: 'Not sure yet (decide at the salon)' })).toBeChecked()
-    expect(screen.getByRole('button', { name: 'Open the colour chart' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Not sure yet (decide at the salon). Change colour' })).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: /^Next:/ }))
     expect(screen.queryByText('Choose a nail colour to continue.')).toBeNull()
   })

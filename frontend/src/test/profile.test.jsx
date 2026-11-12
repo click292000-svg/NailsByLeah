@@ -37,7 +37,7 @@ describe('My profile', () => {
     await user.clear(phone)
     await user.type(phone, '08171234567')
     await user.click(screen.getByRole('button', { name: 'Save changes' }))
-    expect(screen.getByText(/starting with 09 or \+639/)).toBeInTheDocument()
+    expect(screen.getByText('Not a valid phone number.')).toBeInTheDocument()
 
     await user.clear(phone)
     await user.type(phone, other.phoneNumber)
@@ -203,6 +203,6 @@ describe('Client profile', () => {
 
     expect(await screen.findByText(/We filled in the same set as your visit/)).toBeInTheDocument()
     const service = db.services.find((s) => s.id === visit.serviceId)
-    if (service.category === 'SoftGel') expect(screen.getByRole('checkbox', { name: new RegExp(`^${service.name}`) })).toBeChecked()
+    if (service.category === 'SoftGel') expect(screen.getByRole('checkbox', { name: new RegExp(`^${service.name}`, 'i') })).toBeChecked()
   })
 })

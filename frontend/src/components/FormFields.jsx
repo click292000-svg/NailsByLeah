@@ -27,42 +27,30 @@ const CONTROL_KEYS = new Set(['Backspace', 'Delete', 'Tab', 'Enter', 'Escape', '
  * `onBlur` lets the form check the number once the user leaves the field.
  */
 export function PhoneField({ value, onChange, onBlur, error, label = 'Phone Number', required = true }) {
-  // Short-lived explanation of why a keystroke or part of a paste was ignored.
-  const [notice, setNotice] = useState(null)
   const max = phoneMaxLength(value)
+  // Letters, spaces and symbols are left out of a pasted number.
   const insert = (input, text) => {
     const { selectionStart: start, selectionEnd: end } = input
-    const next = phoneChars(value.slice(0, start ?? value.length) + text + value.slice(end ?? value.length))
-    setNotice(/[^\d+]/.test(text.trim()) ? 'Letters, spaces and symbols were removed from the pasted number.' : null)
-    onChange(next)
+    onChange(phoneChars(value.slice(0, start ?? value.length) + text + value.slice(end ?? value.length)))
   }
   const digits = value.startsWith('+63') ? value.length - 2 : value.length // +63 counts as the leading 0
   const counter = `${digits}/${LIMITS.phoneDigits} digits`
   return (
-    <Field label={label} error={error} required={required} counter={counter}
-      hint={notice ?? 'Philippine mobile number'}>
+    <Field label={label} error={error} required={required} counter={counter}>
       {(aria) => (
         <input className="input" type="tel" inputMode="tel" autoComplete="tel" value={value} required={required}
           onKeyDown={(e) => {
             if (e.ctrlKey || e.metaKey || e.altKey || CONTROL_KEYS.has(e.key)) return
             const atStart = e.currentTarget.selectionStart === 0 && !value.startsWith('+')
             if (e.key === '+' && atStart) return
-            if (!/^\d$/.test(e.key)) {
-              e.preventDefault()
-              setNotice(e.key === '+' ? 'A "+" can only go at the start, as in +639171234567.' : 'Only numbers (0–9) can be entered.')
-            } else if (value.length >= max && e.currentTarget.selectionStart === e.currentTarget.selectionEnd) {
-              e.preventDefault()
-              setNotice(`Phone numbers have exactly ${LIMITS.phoneDigits} digits (09…) or 13 characters with +63.`)
-            }
+            // Only numbers go in, and no more than the number can hold.
+            if (!/^\d$/.test(e.key) || (value.length >= max && e.currentTarget.selectionStart === e.currentTarget.selectionEnd)) e.preventDefault()
           }}
           onPaste={(e) => {
             e.preventDefault()
             insert(e.currentTarget, e.clipboardData.getData('text'))
           }}
-          onChange={(e) => {
-            setNotice(null)
-            onChange(phoneChars(e.target.value))
-          }}
+          onChange={(e) => onChange(phoneChars(e.target.value))}
           onBlur={onBlur}
           {...aria} />
       )}

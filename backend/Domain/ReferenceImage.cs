@@ -26,5 +26,8 @@ public class ReferenceImage : ISoftDeletable
     public DateTime CreatedAt { get; set; }
     public bool IsDeleted { get; set; }
 
+    /// <summary>A photo of the shade in a colour request, rather than of the design.</summary>
+    public bool IsColorReference { get; set; }
+
     public bool IsAttached => BookingId is not null;
 }

@@ -16,6 +16,9 @@ public sealed record PriceQuote(IReadOnlyList<QuoteLineResponse> Lines, decimal 
 /// <summary>A validated selection of one main service, an optional removal before it, and Stone add-ons.</summary>
 public sealed record ServiceSelection(CatalogService Service, IReadOnlyList<(StoneAddOn AddOn, int NailCount, NailHand Hand)> AddOns, RemovalService? Removal = null)
 {
+    /// <summary>The deposit in force when the selection was checked (Leyah can change it).</summary>
+    public decimal? Deposit { get; init; }
+
     /// <summary>The whole appointment: the removal first, then the main service.</summary>
     public int DurationMinutes => Service.DurationMinutes + (Removal?.DurationMinutes ?? 0);
 }
@@ -32,9 +35,11 @@ public interface IPriceService
 }
 
 /// <summary>All price calculations. The server's total is the authoritative one (Ref 10.4).</summary>
-public sealed class PriceService(IServiceCatalogRepository catalog, IOptions<BookingOptions> bookingOptions) : IPriceService
+public sealed class PriceService(IServiceCatalogRepository catalog, IOptions<BookingOptions> bookingOptions, IBookingRulesService? rules = null) : IPriceService
 {
-    public PriceQuote Calculate(IReadOnlyList<PricedItem> items)
+    public PriceQuote Calculate(IReadOnlyList<PricedItem> items) => Calculate(items, bookingOptions.Value.DepositAmount);
+
+    private static PriceQuote Calculate(IReadOnlyList<PricedItem> items, decimal deposit)
     {
         var lines = items
             .Select(i => new QuoteLineResponse(
@@ -42,7 +47,6 @@ public sealed class PriceService(IServiceCatalogRepository catalog, IOptions<Boo
             .ToList();
 
         var total = lines.Sum(l => l.LineTotal);
-        var deposit = bookingOptions.Value.DepositAmount;
         return new PriceQuote(lines, total, deposit, Math.Max(0, total - deposit));
     }
 
@@ -50,7 +54,7 @@ public sealed class PriceService(IServiceCatalogRepository catalog, IOptions<Boo
         Calculate([
             .. selection.Removal is { } removal ? [new PricedItem(removal, 1)] : Array.Empty<PricedItem>(),
             new PricedItem(selection.Service, 1),
-            .. selection.AddOns.Select(a => new PricedItem(a.AddOn, a.NailCount))]);
+            .. selection.AddOns.Select(a => new PricedItem(a.AddOn, a.NailCount))], selection.Deposit ?? bookingOptions.Value.DepositAmount);
 
     public async Task<ServiceSelection> ResolveSelectionAsync(
         int serviceId, IReadOnlyList<AddOnSelection>? addOns, int? removalServiceId = null, CancellationToken ct = default)
@@ -87,7 +91,7 @@ public sealed class PriceService(IServiceCatalogRepository catalog, IOptions<Boo
             resolved.Add((addOn, selection.NailCount, selection.Hand ?? NailHand.Both));
         }
 
-        return new ServiceSelection(service, resolved, removal);
+        return new ServiceSelection(service, resolved, removal) { Deposit = rules is null ? null : (await rules.GetAsync(ct)).DepositAmount };
     }
 }
 
@@ -113,7 +117,7 @@ public sealed class ServiceCatalogService(
     IUnitOfWork unitOfWork,
     IAuditLogger audit,
     ISalonClock clock,
-    IOptions<BookingOptions> bookingOptions,
+    IBookingRulesService rules,
     IOptions<LegalOptions> legalOptions) : IServiceCatalog, IServiceManagement
 {
     public Task<CatalogResponse> GetCatalogAsync(CancellationToken ct = default) => BuildAsync(includeInactive: false, ct);
@@ -216,20 +220,26 @@ public sealed class ServiceCatalogService(
     public static ServiceItemResponse ToResponse(Service s) =>
         new(s.Id, s.Category, s.CategoryLabel, s.Name, s.Price, s.PricingUnit, s.MaxQuantity, s.IsActive,
             (s as CatalogService)?.DurationMinutes,
-            (s as CatalogService)?.TakesAddOns ?? false);
+            (s as CatalogService)?.TakesAddOns ?? false,
+            (s as CatalogService)?.DesignOptionOfId);
 
     private async Task<CatalogResponse> BuildAsync(bool includeInactive, CancellationToken ct)
     {
         var services = await catalog.GetServicesAsync(includeInactive, ct);
         var addOns = await catalog.GetAddOnsAsync(includeInactive, ct);
+        var current = await rules.GetAsync(ct);
         return new CatalogResponse(
             services.Select(ToResponse).ToList(),
             addOns.Select(ToResponse).ToList(),
-            bookingOptions.Value.DepositAmount,
+            current.DepositAmount,
             DepositRefundable: false,
             Currency: "PHP",
-            bookingOptions.Value.NailColors,
-            legalOptions.Value.TermsVersion);
+            current.NailColors,
+            legalOptions.Value.TermsVersion,
+            current.OutOfStockColors,
+            current.RescheduleLimit,
+            current.RescheduleMinimumHours,
+            current.MaxDaysAhead);
     }
 
     private void Apply(Service item, string name, UpdateServiceRequest request)

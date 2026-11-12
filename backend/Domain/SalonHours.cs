@@ -28,6 +28,15 @@ public class SalonSettings
     public bool AlertCancellation { get; set; } = true;
     public bool AlertReschedule { get; set; } = true;
 
+    // Booking rules Leyah can change. Null means the default from appsettings (BookingOptions / ScheduleOptions).
+    public decimal? DepositAmount { get; set; }
+    public int? RescheduleMinimumHours { get; set; }
+    public int? ClientRescheduleLimit { get; set; }
+    public int? MaxDaysAhead { get; set; }
+
+    /// <summary>Chart shades Leyah has run out of, as a JSON array ("#06", ...). Clients can't pick them.</summary>
+    public string? OutOfStockColors { get; set; }
+
     public DateTime UpdatedAt { get; set; }
     public int? UpdatedByUserId { get; set; }
 }

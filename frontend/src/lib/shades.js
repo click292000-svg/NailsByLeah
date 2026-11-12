@@ -107,3 +107,15 @@ export function colorLabel(value) {
   const name = SHADE_NAMES[number]?.name
   return name ? `#${number} – ${name}` : `#${number}`
 }
+
+/** "Left: #06, #06, #30, #30, #30 · Right: #01, …" for a booking's colours per nail; null without any. */
+export function perNailText(nails) {
+  if (!nails) return null
+  const hand = (label, list) => (list?.some(Boolean) ? `${label}: ${list.map((c) => c ?? '–').join(', ')}` : null)
+  return [hand('Left', nails.left), hand('Right', nails.right)].filter(Boolean).join(' · ') || null
+}
+
+const REQUEST_STATUS = { Pending: 'pending confirmation', Available: 'confirmed by Leyah', Unavailable: 'not available' }
+
+/** "Colour request: pending confirmation". */
+export const colorRequestLabel = (status) => `Colour request: ${REQUEST_STATUS[status] ?? 'pending confirmation'}`

@@ -11,12 +11,12 @@ import { ApiError, errorMessage } from '../../api/errors'
 import { LIMITS, validateHand } from '../../validation/rules'
 import { Alert, Button, Card, Money, PageHeader, PageLoader } from '../../components/ui'
 import { SlotPicker } from '../../components/SlotPicker'
-import { ColorChooser } from '../../components/ColorPicker'
-import { colorFor, colorLabel } from '../../lib/shades'
+import { ColorChooser, EMPTY_NAILS, nailsComplete, nailsStarted } from '../../components/ColorPicker'
+import { colorFor, colorLabel, perNailText } from '../../lib/shades'
 import { PaymentPanel, amountNow, balanceAfter } from '../../components/PaymentPanel'
 import { Receipt } from '../../components/Receipt'
 
-const STEPS = ['Service', 'Date & time', 'Design & note', 'Summary & payment']
+const STEPS = ['Service', 'Date & time', 'Summary & payment']
 const HANDS = [{ value: 'Left', label: 'Left hand' }, { value: 'Right', label: 'Right hand' }, { value: 'Both', label: 'Both hands' }]
 const HAND_LABEL = Object.fromEntries(HANDS.map((h) => [h.value, h.label]))
 const SAVE_DELAY_MS = 400
@@ -24,8 +24,27 @@ const SAVE_DELAY_MS = 400
 const isRemoval = (service) => service?.category === 'Removal'
 
 // Photos for the Soft Gel services, matched by name (public/img). Services without one show as text only.
-const SERVICE_PHOTOS = { plain: '/img/service-plain.jpg', 'with design': '/img/service-with-design.jpg', biab: '/img/service-biab.jpg' }
+const SERVICE_PHOTOS = {
+  plain: '/img/service-plain.jpg', 'with design': '/img/service-with-design.jpg', biab: '/img/service-biab.jpg',
+  'soft gel extension': '/img/service-soft-gel-extension.jpg',
+}
+const DESIGN_PHOTO = '/img/service-with-design.jpg'
+// Plain first and BIAB last, as on Leyah's price list; anything else (Soft Gel Extension, services added later) between them.
+const CARD_ORDER = { plain: 0, biab: 2 }
+const cardOrder = (service) => CARD_ORDER[service.name.trim().toLowerCase()] ?? 1
 const photoFor = (service) => service.category === 'SoftGel' ? SERVICE_PHOTOS[service.name.trim().toLowerCase()] : undefined
+
+/** "Plain with design" for a design version, otherwise the service's own name ("BIAB"). */
+function setName(catalog, service) {
+  if (!service) return ''
+  const base = service.designOptionOfId ? byId(catalog, service.designOptionOfId) : null
+  return base ? `${base.name} with design` : service.name
+}
+/** "Plain set with design", "BIAB set": how the hints name the chosen set. */
+function setPhrase(catalog, service) {
+  const base = service?.designOptionOfId ? byId(catalog, service.designOptionOfId) : null
+  return base ? `${base.name} set with design` : `${service?.name} set`
+}
 
 // An add-on added later on the Services page, without a photo here yet, shows a plain tile rather than the wrong nails.
 const ADD_ON_PHOTOS = {
@@ -34,6 +53,7 @@ const ADD_ON_PHOTOS = {
   'cat eye polish': '/img/addon-cat-eye.jpg',
   'blooming gel': '/img/addon-blooming-gel.jpg',
   'embossed art': '/img/addon-embossed-art.jpg',
+  rhinestone: '/img/addon-rhinestone.jpg',
 }
 const addOnPhotoFor = (addOn) => ADD_ON_PHOTOS[addOn.name.trim().toLowerCase()]
 
@@ -56,10 +76,18 @@ function repeatDraft(catalog, booking) {
   return {
     step: 0, serviceId: softGel?.id ?? null, removalId: removal?.id ?? null,
     color: softGel && (catalog.nailColors ?? []).includes(booking.nailColor) ? booking.nailColor : '',
+    perNail: softGel && booking.perNailColors ? listedNails(catalog, booking.perNailColors) : EMPTY_NAILS,
     nails: Object.fromEntries(stones.map((a) => [a.addOnId, a.nailCount])),
     hands: Object.fromEntries(stones.map((a) => [a.addOnId, a.hand])),
     date: '', time: '', noteText: '', referenceImages: [], savedAt: `repeat-${booking.id}`, repeatOf: booking,
   }
+}
+
+/** An earlier booking's colours per nail, keeping only shades still on the chart. */
+function listedNails(catalog, nails) {
+  const listed = (c) => (c && (catalog.nailColors ?? []).includes(c) ? c : null)
+  const hand = (list) => Array.from({ length: 5 }, (_, i) => listed(list?.[i]))
+  return { left: hand(nails.left), right: hand(nails.right) }
 }
 
 export default function BookPage() {
@@ -77,13 +105,14 @@ export default function BookPage() {
     const [catalog, lookups, draft] = await Promise.all([api.catalog.get(), api.catalog.lookups(), loadBookingDraft()])
     if (repeat) return { catalog, lookups, draft: repeatDraft(catalog, repeat) }
     if (!draftHasProgress(draft)) return { catalog, lookups, draft: null }
-    const pending = draft.referenceImages?.length ? await api.referenceImages.pending().catch(() => []) : []
-    const stillPending = (draft.referenceImages ?? []).filter((saved) => pending.some((p) => p.id === saved.id))
-      .map((saved) => ({ ...pending.find((p) => p.id === saved.id), name: saved.name }))
+    const pending = draft.referenceImages?.length || draft.colorImages?.length ? await api.referenceImages.pending().catch(() => []) : []
+    const keep = (saved = []) => saved.filter((image) => pending.some((p) => p.id === image.id))
+      .map((image) => ({ ...pending.find((p) => p.id === image.id), name: image.name }))
+    const stillPending = keep(draft.referenceImages)
     const offered = (id) => catalog.addOns.some((a) => String(a.id) === String(id))
     const nails = Object.fromEntries(Object.entries(draft.nails ?? {}).filter(([id]) => offered(id)))
     const expired = draft.date && draft.date < today()
-    return { catalog, lookups, draft: { ...draft, nails, referenceImages: stillPending, ...(expired && { date: '', time: '', step: Math.min(draft.step, 1) }) } }
+    return { catalog, lookups, draft: { ...draft, nails, referenceImages: stillPending, colorImages: keep(draft.colorImages), ...(expired && { date: '', time: '', step: Math.min(draft.step, 1) }) } }
   }, [])
   if (data.loading) return <PageLoader label="Loading services…" />
   if (data.error) return <Alert kind="error">{errorMessage(data.error)}</Alert>
@@ -102,6 +131,9 @@ function BookingWizard({ catalog, lookups, draft, onStartOver }) {
   const [serviceId, setServiceId] = useState(() => draftService(catalog, draft)) // the new set (Soft Gel), if any
   const [removalId, setRemovalId] = useState(() => draftRemoval(catalog, draft)) // a removal, on its own or before the set
   const [color, setColor] = useState(draft?.color ?? '')
+  const [perNail, setPerNail] = useState(draft?.perNail ?? EMPTY_NAILS) // a colour for each nail (optional)
+  const [colorRequest, setColorRequest] = useState(draft?.colorRequest ?? null) // "Can't find your colour?" text; null when not asked
+  const [colorImages, setColorImages] = useState(draft?.colorImages ?? []) // at most one photo of that colour
   const [nails, setNails] = useState(draft?.nails ?? {}) // addOnId → nail count
   const [hands, setHands] = useState(draft?.hands ?? {}) // addOnId → 'Left' | 'Right' | 'Both'
   const [date, setDate] = useState(draft?.date ?? '')
@@ -116,7 +148,10 @@ function BookingWizard({ catalog, lookups, draft, onStartOver }) {
 
   // Every change is saved to the client's account as a Draft (shortly after the last change, and straight away
   // when leaving the page), so going back a step, leaving, or switching device never loses a booking in progress.
-  const values = { step, serviceId, removalId, color, nails, hands, date, time, noteText: note, referenceImages: referenceImages.map(({ id, name }) => ({ id, name })) }
+  const values = {
+    step, serviceId, removalId, color, perNail, colorRequest, nails, hands, date, time, noteText: note,
+    referenceImages: referenceImages.map(({ id, name }) => ({ id, name })), colorImages: colorImages.map(({ id, name }) => ({ id, name })),
+  }
   const valuesKey = JSON.stringify(values)
   const unsaved = useRef(null)
   const saving = useRef(Promise.resolve())
@@ -142,7 +177,7 @@ function BookingWizard({ catalog, lookups, draft, onStartOver }) {
     unsaved.current = null
     await saving.current
     // Photos uploaded for this draft are removed from the server too.
-    await Promise.all(referenceImages.map((image) => api.referenceImages.remove(image.id).catch(() => {})))
+    await Promise.all([...referenceImages, ...colorImages].map((image) => api.referenceImages.remove(image.id).catch(() => {})))
     await clearBookingDraft()
     onStartOver()
   }
@@ -160,10 +195,17 @@ function BookingWizard({ catalog, lookups, draft, onStartOver }) {
     : []
   // Recalculated on every change to the services or add-ons (Ref 10.4).
   const quote = calculateQuote(service, selectedAddOns, catalog.depositAmount, removalFirst)
+  // The total and the review name the set the way it was chosen ("Plain with design").
+  const shownQuote = { ...quote, lines: quote.lines.map((l) => (l.category === 'SoftGel' ? { ...l, name: setName(catalog, byId(catalog, l.itemId)) || l.name } : l)) }
+  // How the colour reads in the total and the summary: the chart shade, the request, or "one per nail".
+  const colorText = colorRequest !== null
+    ? (colorRequest.trim() ? `Colour request: ${colorRequest.trim()}` : null)
+    : [color && colorLabel(color), nailsComplete(perNail) && `Each nail: ${perNailText(perNail)}`].filter(Boolean).join(' · ') || null
 
   // One key per set of booking details: repeated or retried Pay clicks for the same booking are
   // recognised by the server and never charged twice (Ref 12.4).
-  const detailsKey = JSON.stringify([serviceId, removalId, color, nails, hands, date, time, note, paymentOption, referenceImages.map((r) => r.id)])
+  const detailsKey = JSON.stringify([serviceId, removalId, color, perNail, colorRequest, colorImages.map((r) => r.id), nails, hands, date, time, note,
+    paymentOption, referenceImages.map((r) => r.id)])
   const idempotencyKey = useMemo(() => crypto.randomUUID(), [detailsKey]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Which times are free depends on how long the appointment takes, so a different service needs the time chosen again.
@@ -174,7 +216,11 @@ function BookingWizard({ catalog, lookups, draft, onStartOver }) {
       setNails({})
       setHands({})
     }
-    if (!id) setColor('')
+    if (!id) {
+      setColor('')
+      setColorRequest(null)
+      setPerNail(EMPTY_NAILS)
+    }
     setServiceId(id)
   }
   const chooseRemoval = (id) => {
@@ -195,11 +241,17 @@ function BookingWizard({ catalog, lookups, draft, onStartOver }) {
     return null
   }
 
+  const colorProblem = () => {
+    if (!needsColor) return null
+    if (colorRequest !== null) return colorRequest.trim() ? null : "Describe the colour you're looking for, or pick one from the chart."
+    if (nailsStarted(perNail) && !nailsComplete(perNail)) return 'Choose a colour for all 10 nails, or clear the colours for each nail.'
+    return color || nailsComplete(perNail) ? null : 'Choose a nail colour to continue.'
+  }
+
   const next = () => {
     const problem = [
-      (!service && 'Choose a service to continue.') || (needsColor && !color && 'Choose a nail colour to continue.') || handProblem(),
+      (!service && 'Choose a service to continue.') || colorProblem() || handProblem(),
       (!date || !time) && 'Choose a date and an available time.',
-      null,
     ][step]
     if (problem) {
       setStepError(problem)
@@ -214,7 +266,10 @@ function BookingWizard({ catalog, lookups, draft, onStartOver }) {
     await flush() // the latest draft is on the server before the booking replaces it
     try {
       const response = await api.bookings.create({
-        serviceId: service.id, removalServiceId: removalFirst?.id ?? null, nailColor: needsColor ? color : null,
+        serviceId: service.id, removalServiceId: removalFirst?.id ?? null, nailColor: needsColor && colorRequest === null && color ? color : null,
+        perNailColors: needsColor && nailsComplete(perNail) ? perNail : null,
+        colorRequest: needsColor && colorRequest !== null ? colorRequest.trim() : null,
+        colorRequestImageId: needsColor && colorRequest !== null ? colorImages[0]?.id ?? null : null,
         termsVersion: catalog.termsVersion,
         addOns: selectedAddOns.map((a) => ({ addOnId: a.addOn.id, nailCount: a.nailCount, hand: hands[a.addOn.id] ?? 'Both' })),
         bookingDate: date, startTime: time, note: note.trim() || null, paymentMethod, paymentOption, depositAcknowledged: true, idempotencyKey,
@@ -230,7 +285,7 @@ function BookingWizard({ catalog, lookups, draft, onStartOver }) {
       } else if (err instanceof ApiError && err.code === 'terms_outdated') {
         setPayError(`${err.message} Reload the page to see the new version.`)
       } else if (err instanceof ApiError && err.code === 'image_unavailable') {
-        setStep(2)
+        setStep(0)
         setStepError(err.message)
       } else {
         setPayError(errorMessage(err))
@@ -280,7 +335,7 @@ function BookingWizard({ catalog, lookups, draft, onStartOver }) {
       </ol>
 
       <div className="booking-layout">
-        <Card className={step === 3 ? 'booking-main booking-main-wide' : 'booking-main'}>
+        <Card className={step === 2 ? 'booking-main booking-main-wide' : 'booking-main'}>
           {step > 0 && (
             <button type="button" className="step-back" onClick={back}>
               <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M15 18l-6-6 6-6" /></svg>
@@ -290,23 +345,23 @@ function BookingWizard({ catalog, lookups, draft, onStartOver }) {
           {stepError && <Alert kind="error">{stepError}</Alert>}
           {step === 0 && (
             <ServiceStep catalog={catalog} serviceId={serviceId} onService={chooseService} removalId={removalId} onRemoval={chooseRemoval}
-              color={color} onColor={setColor} nails={nails} onNails={setNails} hands={hands} onHands={setHands} />
+              color={color} onColor={setColor} perNail={perNail} onPerNail={setPerNail}
+              colorRequest={colorRequest} onColorRequest={setColorRequest} colorImages={colorImages} onColorImages={setColorImages}
+              referenceImages={referenceImages} onReferenceImages={setReferenceImages}
+              nails={nails} onNails={setNails} hands={hands} onHands={setHands} />
           )}
           {step === 1 && (
-            <SlotPicker date={date} onDateChange={setDate} selectedTime={time} onTimeChange={setTime} serviceId={service?.id}
-              removalServiceId={removalFirst?.id} />
-          )}
-          {step === 2 && (
-            <div className="design-step">
-              <ReferenceImagePicker images={referenceImages} onChange={setReferenceImages} />
+            <div className="stack">
+              <SlotPicker date={date} onDateChange={setDate} selectedTime={time} onTimeChange={setTime} serviceId={service?.id}
+                removalServiceId={removalFirst?.id} />
               <NoteStep suggestions={lookups.noteSuggestions} value={note} onChange={setNote} />
             </div>
           )}
-          {step === 3 && (
+          {step === 2 && (
             <div className="review-step">
               <div className="pick-column">
                 <h2 className="pick-title">Booking summary</h2>
-                <Review quote={quote} option={paymentOption} hands={hands} durationMinutes={durationMinutes} color={needsColor ? color : null}
+                <Review quote={shownQuote} option={paymentOption} hands={hands} durationMinutes={durationMinutes} color={needsColor ? colorText : null}
                   date={date} time={time} note={note.trim()}
                   referenceImages={referenceImages} onEdit={(target) => { setStepError(null); setStep(target) }} />
               </div>
@@ -320,10 +375,10 @@ function BookingWizard({ catalog, lookups, draft, onStartOver }) {
           )}
         </Card>
 
-        {step < 3 && (
+        {step < 2 && (
           <aside className="booking-aside">
             <Card title="Your total" className="your-total">
-              <Summary quote={quote} hands={hands} color={needsColor ? color : null} durationMinutes={durationMinutes} date={date} time={time} />
+              <Summary quote={shownQuote} hands={hands} color={needsColor ? colorText : null} swatchOf={needsColor && colorRequest === null ? color : null} durationMinutes={durationMinutes} date={date} time={time} />
               {/* The way forward sits under the total; going back is the "← Back to…" link at the top of each step.
                   On phones it becomes a bar fixed to the bottom of the screen. */}
               <div className="summary-next">
@@ -357,13 +412,56 @@ function ServiceCard({ service, selected, onToggle, name }) {
   )
 }
 
-function ServiceStep({ catalog, serviceId, onService, removalId, onRemoval, color, onColor, nails, onNails, hands, onHands }) {
+/**
+ * Design (optional): one "With Design" card for every set that has a design version. It adds the design to the chosen set
+ * (Plain becomes With Design, BIAB becomes BIAB with Design); with nothing chosen yet it starts with Plain.
+ */
+function DesignOption({ cards, chosen, baseOf, designOf, onService, children }) {
+  const base = baseOf(chosen)
+  const fallback = cards.map(designOf).find(Boolean)
+  if (!fallback) return null
+  const design = base ? designOf(base) : fallback
+  const on = Boolean(chosen?.designOptionOfId)
+  const hint = !base ? 'Add a design to your Plain or BIAB set.'
+    : design ? `Adds a design to your ${base.name} set.` : `Designs aren't available with ${base.name}.`
+  return (
+    <div className="service-group">
+      <h3 className="group-title">Design <span className="group-optional">(optional)</span></h3>
+      {/* The With Design card, with the design photos beside it; each column has one line above it so both line up. */}
+      <div className="design-row">
+        <div className="pick-column design-card">
+          <div className="pick-title-row"><span className="muted small">{hint}</span></div>
+          <label className={`choice has-photo${on ? ' selected' : ''}${design ? '' : ' is-disabled'}`}>
+          <img className="choice-photo" src={DESIGN_PHOTO} alt="" width="640" height="640" loading="lazy" />
+          <input type="checkbox" name="design" checked={on} disabled={!design}
+            onChange={() => onService(on ? base.id : design.id)} />
+          <span className="choice-name">With Design</span>
+          <span className="choice-facts">
+            <Money amount={(design ?? fallback).price} />
+            {(design ?? fallback).durationMinutes && <span className="choice-meta muted">{formatDuration((design ?? fallback).durationMinutes)}</span>}
+          </span>
+          </label>
+        </div>
+        {children}
+      </div>
+    </div>
+  )
+}
+
+function ServiceStep({
+  catalog, serviceId, onService, removalId, onRemoval, color, onColor, perNail, onPerNail, colorRequest, onColorRequest, colorImages, onColorImages,
+  referenceImages, onReferenceImages, nails, onNails, hands, onHands,
+}) {
   const softGels = catalog.services.filter((s) => s.category === 'SoftGel')
+  // The "with design" versions (Plain with design, BIAB with design) share one "With Design" card under Optional,
+  // which adds the design to whichever set is chosen.
+  const designOf = (base) => base && softGels.find((s) => s.designOptionOfId === base.id)
+  const cards = softGels.filter((s) => !s.designOptionOfId).sort((a, b) => cardOrder(a) - cardOrder(b))
   const removals = catalog.services.filter((s) => s.category === 'Removal')
   const softGel = byId(catalog, serviceId)
   const colors = catalog.nailColors ?? []
   const addOnsAllowed = Boolean(softGel?.allowsAddOns)
-  let badge = 2
+  // The counter goes down to 1 nail; the × beside it removes the add-on.
   const setCount = (id, count) => {
     onNails((current) => {
       const nextCounts = { ...current }
@@ -385,25 +483,30 @@ function ServiceStep({ catalog, serviceId, onService, removalId, onRemoval, colo
   // One hand has five nails, so Left or Right stops the counter at 5.
   const maxFor = (id) => (hands[id] === 'Left' || hands[id] === 'Right' ? LIMITS.maxNailsPerHand : LIMITS.maxNailsPerAddOn)
   const chosen = catalog.addOns.filter((a) => nails[a.id] > 0)
+  const baseOf = (service) => (service?.designOptionOfId ? byId(catalog, service.designOptionOfId) : service)
 
   return (
     <div className="stack">
       <fieldset className="choice-fieldset">
         <legend className="step-heading">
-          <span className="step-badge" aria-hidden="true">1</span>
           <span><h2>Choose a service</h2><span className="step-hint">A new set, a removal, or both in one appointment.</span></span>
         </legend>
         <div className="service-group">
-          <h3 className="group-title">Soft Gel</h3>
+          <h3 className="group-title">Services</h3>
           <div className="choice-grid service-photos">
-            {softGels.map((s) => <ServiceCard key={s.id} name="service" service={s} selected={serviceId === s.id} onToggle={onService} />)}
+            {cards.map((s) => (
+              <ServiceCard key={s.id} name="service" service={s} selected={baseOf(softGel)?.id === s.id} onToggle={onService} />
+            ))}
           </div>
         </div>
+        <DesignOption cards={cards} chosen={softGel} baseOf={baseOf} designOf={designOf} onService={onService}>
+          <ReferenceImagePicker images={referenceImages} onChange={onReferenceImages} optional={false} />
+        </DesignOption>
         {removals.length > 0 && (
           <div className="service-group">
             <h3 className="group-title">Removal</h3>
             <p className="muted small addon-note">
-              {softGel ? `Taken off first, then your ${softGel.name} set, in the same appointment.` : 'On its own, or add it before a new set.'}
+              {softGel ? `Taken off first, then your ${setPhrase(catalog, softGel)}, in the same appointment.` : 'On its own, or add it before a new set.'}
             </p>
             <div className="choice-grid service-compact">
               {removals.map((s) => <ServiceCard key={s.id} name="removal" service={s} selected={removalId === s.id} onToggle={onRemoval} />)}
@@ -415,22 +518,28 @@ function ServiceStep({ catalog, serviceId, onService, removalId, onRemoval, colo
       {softGel && colors.length > 0 && (
         <fieldset className="choice-fieldset">
           <legend className="step-heading">
-            <span className="step-badge" aria-hidden="true">{badge++}</span>
-            <span><h2>Choose a colour</h2><span className="step-hint">Pick a shade from the colour chart for your {softGel.name} set.</span></span>
+            <span><h2>Choose a colour</h2><span className="step-hint">Pick a shade from the colour chart for your {setPhrase(catalog, softGel)}.</span></span>
           </legend>
-          <ColorChooser colors={colors} value={color} onChange={onColor} />
+          <div className="stack">
+            <ColorChooser colors={colors} value={colorRequest === null ? color : ''}
+              onChange={(c) => { onColorRequest(null); onColor(c) }}
+              request={colorRequest} onRequest={(text) => { onColor(''); onColorRequest(text) }}
+              nails={perNail} onNails={onPerNail} outOfStock={catalog.outOfStockColors ?? []} />
+            {colorRequest !== null && (
+              <ColorRequestPhoto images={colorImages} onImages={onColorImages} />
+            )}
+          </div>
         </fieldset>
       )}
 
       <fieldset className="choice-fieldset" disabled={!addOnsAllowed}>
         <legend className="step-heading">
-          <span className="step-badge" aria-hidden="true">{badge}</span>
-          <span><h2>Add Stones</h2><span className="step-hint">Optional. Priced per nail, so choose as many as you like.</span></span>
+          <span><h2>Nail Art (add-ons)</h2><span className="step-hint">Optional · priced per nail, so choose as many as you like.</span></span>
         </legend>
         {!addOnsAllowed && (
           <p className="muted small addon-note">
-            {softGel ? `Stones aren't available with ${softGel.name}. Choose another Soft Gel service to add them.`
-              : 'Choose a Soft Gel service that takes Stones to add them.'}
+            {softGel ? `Nail art isn't available with ${baseOf(softGel)?.name ?? softGel.name} on its own. Tick "With Design" or choose another service to add it.`
+              : 'Choose a service to add nail art.'}
           </p>
         )}
         <div className={addOnsAllowed ? 'addon-list' : 'addon-list is-disabled'}>
@@ -467,18 +576,16 @@ function ServiceStep({ catalog, serviceId, onService, removalId, onRemoval, colo
                       <strong>{a.name}</strong>
                     </div>
                     <div className={hand ? 'hand-choice' : 'hand-choice needs-choice'} role="radiogroup" aria-label={`Which hand for ${a.name}`}>
-                      {HANDS.map((h) => {
-                        return (
-                          <button key={h.value} type="button" role="radio" aria-checked={hand === h.value}
-                            title={`${nailsFor(h.value)} nails`}
-                            className={hand === h.value ? 'hand-option selected' : 'hand-option'} onClick={() => setHand(a.id, h.value)}>
-                            {h.label}
-                          </button>
-                        )
-                      })}
+                      {HANDS.map((h) => (
+                        <button key={h.value} type="button" role="radio" aria-checked={hand === h.value}
+                          title={`${nailsFor(h.value)} nails`}
+                          className={hand === h.value ? 'hand-option selected' : 'hand-option'} onClick={() => setHand(a.id, h.value)}>
+                          {h.label}
+                        </button>
+                      ))}
                     </div>
                     <div className="counter" role="group" aria-label={`Number of nails for ${a.name}`}>
-                      <button type="button" onClick={() => setCount(a.id, count - 1)} aria-label={`Fewer nails for ${a.name}`}>−</button>
+                      <button type="button" onClick={() => setCount(a.id, count - 1)} disabled={count <= 1} aria-label={`Fewer nails for ${a.name}`}>−</button>
                       <output aria-live="polite">{count} {count === 1 ? 'nail' : 'nails'}</output>
                       <button type="button" onClick={() => setCount(a.id, count + 1)} disabled={count >= maxFor(a.id)}
                         aria-label={`More nails for ${a.name}`}>+</button>
@@ -493,6 +600,14 @@ function ServiceStep({ catalog, serviceId, onService, removalId, onRemoval, colo
         )}
       </fieldset>
     </div>
+  )
+}
+
+/** A photo of the colour asked for in the chart's "Can't find your colour?" (optional): it helps Leyah match the shade. */
+function ColorRequestPhoto({ images, onImages }) {
+  return (
+    <ReferenceImagePicker images={images} onChange={onImages} max={1} compact title="Photo of the colour" photoName="colour photo"
+      hint="Helps Leyah match the shade · JPG, PNG or WebP" />
   )
 }
 
@@ -530,12 +645,10 @@ function NoteStep({ suggestions, value, onChange }) {
 }
 
 /** Service, add-ons, total and the required deposit (Ref 10.2). */
-// "Soft Gel – Plain", "Removal – My Work"; Stones keep their own name.
-const CATEGORY_LABELS = { SoftGel: 'Soft Gel' }
+// "Removal – My Work"; the set ("Plain with design") and add-ons keep their own name.
 function totalLineName(line) {
   if (line.category === 'Removal') return /^Removal \(/.test(line.name) ? line.name.replace(/^Removal \((.*)\)$/, 'Removal – $1') : `Removal – ${line.name}`
-  const category = CATEGORY_LABELS[line.category]
-  return category && category.toLowerCase() !== line.name.toLowerCase() ? `${category} – ${line.name}` : line.name
+  return line.name
 }
 // The main service first, then the removal and Stones, as on the price list.
 const LINE_ORDER = { Removal: 1, Stone: 2 }
@@ -545,10 +658,10 @@ const SummaryIcon = ({ children }) => (
 )
 
 /** The "Your total" card beside each step: prices, total, deposit and balance, then time, colour and appointment. */
-function Summary({ quote, hands = {}, color, durationMinutes, date, time }) {
+function Summary({ quote, hands = {}, color, swatchOf, durationMinutes, date, time }) {
   if (!quote.lines.length) return <p className="muted">Choose a service to see your total.</p>
   const lines = [...quote.lines].sort((a, b) => (LINE_ORDER[a.category] ?? 0) - (LINE_ORDER[b.category] ?? 0))
-  const swatch = color ? colorFor(color) : null
+  const swatch = swatchOf ? colorFor(swatchOf) : null
   return (
     <div className="yt">
       <ul className="yt-lines">
@@ -583,7 +696,7 @@ function Summary({ quote, hands = {}, color, durationMinutes, date, time }) {
             <dt><SummaryIcon><path d="M12 3.5c3 3.6 5.5 6.6 5.5 9.6a5.5 5.5 0 0 1-11 0c0-3 2.5-6 5.5-9.6z" /></SummaryIcon>Colour</dt>
             <dd className="yt-color">
               <span className={swatch ? 'yt-swatch' : 'yt-swatch yt-swatch-unknown'} style={swatch ? { background: swatch } : undefined} aria-hidden="true" />
-              {colorLabel(color)}
+              {color}
             </dd>
           </div>
         )}
@@ -639,7 +752,7 @@ function Review({ quote, option, hands, durationMinutes, color, date, time, note
             </li>
           ))}
         </ul>
-        {color && <p className="review-color"><span className="muted">Colour</span> {colorLabel(color)}</p>}
+        {color && <p className="review-color"><span className="muted">Colour</span> {color}</p>}
         <div className="summary-total"><span>Total</span><Money amount={quote.total} /></div>
         {/* Follows the payment option chosen below. */}
         <div className="review-split" aria-live="polite">
@@ -649,11 +762,11 @@ function Review({ quote, option, hands, durationMinutes, color, date, time, note
       </section>
 
       <section className="review-section" aria-label="Design and note">
-        <div className="review-head"><h3>Design &amp; note</h3>{change(2, 'design and note')}</div>
+        <div className="review-head"><h3>Design photos &amp; note</h3></div>
         <dl className="review-details">
-          <dt>Note for Leyah</dt>
+          <dt>Note for Leyah {change(1, 'note')}</dt>
           <dd className={note ? 'summary-note' : 'muted'}>{note || 'No note'}</dd>
-          <dt>Design photos</dt>
+          <dt>Design photos {change(0, 'design photos')}</dt>
           <dd>
             {referenceImages.length === 0 ? <span className="muted">None</span> : (
               <ul className="reference-thumbs" aria-label="Design reference photos">

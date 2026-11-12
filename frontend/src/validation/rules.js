@@ -17,6 +17,11 @@ export const LIMITS = {
   maxNailsPerHand: 5,
   feedbackCommentMax: 1000,
   noteMax: 300,
+  colorRequestMax: 200,
+  guestNameMax: 150,
+  adminNoteMax: 500,
+  feedbackReplyMax: 500,
+  galleryCaptionMax: 100,
   balanceReferenceMax: 50,
   bookingDraftMax: 4000,
   referenceImageMaxBytes: 5 * 1024 * 1024,
@@ -108,10 +113,10 @@ export function validateEmail(value) {
 /** Same wording as the backend PhoneRule. */
 export const PHONE_MESSAGES = {
   required: 'Phone Number is required.',
-  digitsOnly: 'Phone Number can only contain numbers (0–9), with no letters, spaces or symbols.',
-  notMobile: 'Enter a Philippine mobile number starting with 09 or +639, e.g. 09171234567.',
-  tooShort: 'Phone Number is too short. Enter all 11 digits, e.g. 09171234567.',
-  tooLong: 'Phone Number is too long. Enter exactly 11 digits, e.g. 09171234567.',
+  digitsOnly: 'Not a valid phone number.',
+  notMobile: 'Not a valid phone number.',
+  tooShort: 'Not a valid phone number.',
+  tooLong: 'Not a valid phone number.',
 }
 
 /**

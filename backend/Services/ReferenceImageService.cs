@@ -27,6 +27,9 @@ public interface IReferenceImageAttacher
 {
     /// <summary>Attaches the client's pending photos to <paramref name="booking"/> (which must already have its id).</summary>
     Task AttachAsync(int clientId, Booking booking, IReadOnlyList<int>? imageIds, CancellationToken ct = default);
+
+    /// <summary>Attaches the photo of a colour the client asked for, marked as a colour reference.</summary>
+    Task AttachColorReferenceAsync(int clientId, Booking booking, int imageId, CancellationToken ct = default);
 }
 
 public sealed class ReferenceImageService(
@@ -49,7 +52,7 @@ public sealed class ReferenceImageService(
     public static readonly string StoreUnavailableMessage = "The photo couldn't be saved right now. Please try again in a moment.";
     public static readonly string UnavailableMessage = "One of the reference photos is no longer available. Please upload it again.";
 
-    public static ReferenceImageResponse ToResponse(ReferenceImage r) => new(r.Id, r.ContentType, r.SizeBytes, r.CreatedAt);
+    public static ReferenceImageResponse ToResponse(ReferenceImage r) => new(r.Id, r.ContentType, r.SizeBytes, r.CreatedAt, r.IsColorReference);
 
     public async Task<ReferenceImageResponse> UploadAsync(int clientId, IFormFile? file, CancellationToken ct = default)
     {
@@ -161,6 +164,15 @@ public sealed class ReferenceImageService(
 
         foreach (var image in found)
             image.BookingId = booking.Id;
+    }
+
+    public async Task AttachColorReferenceAsync(int clientId, Booking booking, int imageId, CancellationToken ct = default)
+    {
+        var found = await images.FindManyAsync([imageId], ct);
+        if (found.Count != 1 || found[0].ClientId != clientId || found[0].IsAttached)
+            throw new ValidationAppException("colorRequestImageId", UnavailableMessage, "image_unavailable");
+        found[0].BookingId = booking.Id;
+        found[0].IsColorReference = true;
     }
 
     internal static async Task CopyLimitedAsync(Stream source, Stream destination, long limit, CancellationToken ct)

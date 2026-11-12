@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router'
+import { bookingClientName, bookingClientPhone, isWalkIn } from '../../lib/bookingClient'
 import { api } from '../../api'
 import { useAsync } from '../../hooks/useAsync'
 import { errorMessage } from '../../api/errors'
@@ -23,7 +24,6 @@ const UserIcon = () => <Icon><circle cx="12" cy="8" r="4" /><path d="M4.5 20.5c1
 const ClockIcon = () => <Icon><circle cx="12" cy="12" r="8.5" /><path d="M12 7.5V12l3 2" /></Icon>
 const CardIcon = () => <Icon><rect x="3" y="5.5" width="18" height="13" rx="2.5" /><path d="M3 10h18M7 15h4" /></Icon>
 const WalletIcon = () => <Icon><path d="M4 7.5h14.5a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2V6.5a2 2 0 0 1 2-2H16" /><path d="M16 14h2" /></Icon>
-const ChartIcon = () => <Icon><path d="M4 20h16M7 16.5v-5M12 16.5v-9M17 16.5V13" /></Icon>
 const ChevronIcon = ({ dir = 'right' }) => <Icon className={`dash-chevron dash-chevron-${dir}`}><path d="M9 6l6 6-6 6" /></Icon>
 
 /** A light hand-drawn polish bottle and blossoms for the corner of the Next client card. */
@@ -46,7 +46,7 @@ const PolishArt = () => (
 )
 
 /* ---- Helpers ---- */
-const clientName = (b) => (b.client ? `${b.client.firstName} ${b.client.lastName}` : 'Client')
+const clientName = bookingClientName
 const servicesShort = (b) => [b.serviceName, b.removalServiceName && 'Removal'].filter(Boolean).join(' + ')
 const servicesInOrder = (b) => (b.removalServiceName ? `Removal (${b.removalServiceName}) first, then ${b.serviceName}` : b.serviceName)
 const stonesText = (b) => b.addOns.map((a) => `${a.name} · ${a.handLabel.toLowerCase()}`).join(', ')
@@ -94,7 +94,6 @@ export default function DashboardPage() {
   // fetchedAt: when the salon's "now" arrived, so the countdown can move on from it.
   const dashboard = useAsync(async () => ({ ...(await api.admin.dashboard(date)), fetchedAt: Date.now() }), [date])
   const [message, setMessage] = useState(null)
-  const [chosenView, setChosenView] = useState(null) // 'busy' | 'quiet' once Leyah picks one; null = follow the day
   const tick = useTick()
 
   if (dashboard.loading && !dashboard.data) return <PageLoader label="Loading dashboard…" />
@@ -103,34 +102,18 @@ export default function DashboardPage() {
   const d = { attention: [], nextBooking: null, date: dashboard.data.today, now: new Date().toISOString(), ...dashboard.data }
   const elapsed = Math.max(0, (tick - d.fetchedAt) / 60_000)
   const isToday = d.date === d.today
-  const active = d.todaysBookings.filter((b) => b.status === 'Pending' || b.status === 'Confirmed')
-  // Busy: three or more appointments and tasks together, with at least one appointment (tasks alone are a quiet day).
-  const busy = active.length > 0 && active.length + d.attention.length >= 3
-  const suggested = busy ? 'busy' : 'quiet'
-  const view = chosenView ?? suggested
+  // Money still due at the salon for the bookings on this day and the 7 after it.
+  const isActive = (b) => b.status === 'Pending' || b.status === 'Confirmed'
+  const balanceToCollect = [...d.todaysBookings, ...d.upcomingBookings].filter(isActive).reduce((sum, b) => sum + (b.balanceDue ?? 0), 0)
   const changed = (text) => { setMessage(text); dashboard.reload() }
   const pick = (value) => setDate(value === d.today ? null : value)
 
   return (
     <div className="dash stack-lg">
       <header className="dash-head">
-        <div>
-          <h1>Dashboard</h1>
-          <p>Your salon at a glance — appointments, tasks, and what&apos;s next.</p>
-        </div>
-        <DateStepper date={d.date} today={d.today} onChange={pick} loading={dashboard.loading} />
+        <h1>Dashboard</h1>
+        <DateStepper date={d.date} onChange={pick} loading={dashboard.loading} />
       </header>
-
-      {/* Busy day: just this day — its schedule in full, nothing further ahead. Quiet day: the whole overview. */}
-      <div className="dash-daytype" role="group" aria-label="Dashboard view">
-        {[['busy', 'Busy day', 'Focus on this day: its full schedule, nothing further ahead'],
-          ['quiet', 'Quiet day', 'The full overview: the next 7 days and shortcuts too']].map(([value, label, hint]) => (
-          <button key={value} type="button" className={view === value ? 'dash-pill on' : 'dash-pill'} aria-pressed={view === value}
-            title={hint} onClick={() => setChosenView(value === suggested ? null : value)}>
-            <CalendarIcon /> {label}
-          </button>
-        ))}
-      </div>
 
       {message && <Alert kind="success" onClose={() => setMessage(null)}>{message}</Alert>}
       {dashboard.error && <Alert kind="error">{errorMessage(dashboard.error)}</Alert>}
@@ -139,18 +122,17 @@ export default function DashboardPage() {
         <div className="dash-stat">
           <span className="dash-tile"><CalendarIcon /></span>
           <div>
-            <p>{isToday ? 'Today’s appointments' : `Appointments on ${shortDate(d.date)}`}</p>
+            <p>{isToday ? 'Today’s appointments' : 'Appointments'}</p>{/* the date picker above shows which day */}
             <strong>{d.todaysBookingCount}</strong>
           </div>
         </div>
-        <Link className="dash-stat dash-stat-link" to="/admin/bookings?status=Pending">
-          <span className="dash-tile"><CheckCircleIcon /></span>
+        <div className="dash-stat">
+          <span className="dash-tile dash-tile-green"><WalletIcon /></span>
           <div>
-            <p>Waiting for you to confirm</p>
-            <strong>{d.pendingBookingCount}</strong>
+            <p>Balance to collect <span className="dash-stat-sub">· {isToday ? 'today and the next 7 days' : `${shortDate(d.date)} and the 7 days after`}</span></p>
+            <strong>{formatMoney(balanceToCollect)}</strong>
           </div>
-          {d.pendingBookingCount > 0 && <ChevronIcon />}
-        </Link>
+        </div>
       </div>
 
       <div className="dash-grid">
@@ -159,56 +141,26 @@ export default function DashboardPage() {
           now={d.now} elapsed={elapsed} upcoming={d.upcomingBookings} />
       </div>
 
-      {view === 'busy' ? (
+      {/* This day in full, beside the week ahead. */}
+      <div className="dash-grid">
         <DayScheduleCard bookings={d.todaysBookings} date={d.date} isToday={isToday} />
-      ) : (
         <UpcomingCard bookings={d.upcomingBookings} from={d.date} isToday={isToday} />
-      )}
-
-      {view === 'quiet' && (
-      <section className="dash-moved" aria-labelledby="dash-moved-title">
-        <h2 id="dash-moved-title" className="dash-divider"><span>Moved to other pages</span></h2>
-        <div className="dash-moved-grid">
-          <Link to="/admin/reports" className="dash-moved-card">
-            <span className="dash-tile dash-tile-sm"><ChartIcon /></span>
-            <div>
-              <h3>Insights <span aria-hidden="true">›</span> Reports</h3>
-              <ul>
-                <li>Money received, by day or month</li>
-                <li>Balances still to collect</li>
-                <li>Completed, cancelled and no-shows</li>
-                <li>Download as a PDF</li>
-              </ul>
-            </div>
-            <ChevronIcon />
-          </Link>
-          <Link to="/admin/schedule" className="dash-moved-card">
-            <span className="dash-tile dash-tile-sm"><CalendarIcon /></span>
-            <div>
-              <h3>Management <span aria-hidden="true">›</span> Schedule</h3>
-              <ul>
-                <li>Opening hours and closing time</li>
-                <li>Close days off, holidays or single times</li>
-              </ul>
-            </div>
-            <ChevronIcon />
-          </Link>
-        </div>
-      </section>
-      )}
+      </div>
     </div>
   )
 }
 
 /** Busy-day view: every appointment of the day in time order, finished and cancelled ones included. */
-function DayScheduleCard({ bookings, date, isToday }) {
+function DayScheduleCard({ bookings: all, date, isToday }) {
   const [open, setOpen] = useState(null)
+  // The same appointments the count above counts; cancelled ones are only mentioned, so the two always agree.
+  const bookings = all.filter((b) => b.status !== 'Cancelled')
+  const cancelled = all.length - bookings.length
   return (
     <section className="card dash-card" aria-labelledby="dash-day">
       <div className="dash-card-head">
         <span className="dash-head-icon"><ClockIcon /></span>
         <h2 id="dash-day">{isToday ? 'Today’s schedule' : `Schedule · ${shortDate(date)}`}</h2>
-        <Link to="/admin/bookings" className="card-link dash-head-link">All bookings →</Link>
       </div>
       {bookings.length === 0 ? (
         <p className="dash-quiet">No appointments on this day.</p>
@@ -230,17 +182,21 @@ function DayScheduleCard({ bookings, date, isToday }) {
           ))}
         </ul>
       )}
+      {cancelled > 0 && (
+        <p className="dash-quiet dash-cancelled-note">
+          {cancelled} cancelled {cancelled === 1 ? 'booking' : 'bookings'} not shown. <Link to={`/admin/bookings?date=${date}&status=Cancelled`}>See {cancelled === 1 ? 'it' : 'them'}</Link>
+        </p>
+      )}
       {open && <BookingDetails booking={open} onClose={() => setOpen(null)} />}
     </section>
   )
 }
 
-/** ‹ Tue, Nov 10, 2026 › — the middle opens the browser's date picker; "Today" comes back when another day is shown. */
-function DateStepper({ date, today, onChange, loading }) {
+/** ‹ Tue, Nov 10, 2026 › — the middle opens the browser's date picker; the arrows step a day at a time. */
+function DateStepper({ date, onChange, loading }) {
   const input = useRef(null)
   return (
     <div className="dash-date-wrap">
-      {date !== today && <button type="button" className="dash-today" onClick={() => onChange(today)}>Today</button>}
       <div className="dash-date" aria-busy={loading}>
         <button type="button" className="dash-date-step" aria-label="Previous day" onClick={() => onChange(addDays(date, -1))}>
           <ChevronIcon dir="left" />
@@ -262,9 +218,10 @@ function DateStepper({ date, today, onChange, loading }) {
 
 const ATTENTION = {
   CheckPayment: { icon: <CardIcon />, tone: 'rose', title: 'Check payment' },
-  DatePassed: { icon: <CalendarIcon />, tone: 'blue', title: 'Date passed, still' },
+  DatePassed: { icon: <CalendarIcon />, tone: 'blue', title: 'Did they come?' },
   BalanceNotRecorded: { icon: <WalletIcon />, tone: 'amber', title: 'Balance not recorded' },
   RefundDue: { icon: <WalletIcon />, tone: 'rose', title: 'Refund to send' },
+  ColorRequest: { icon: <CalendarIcon />, tone: 'amber', title: 'Colour request' },
 }
 
 function attentionLine(kind, b) {
@@ -274,8 +231,9 @@ function attentionLine(kind, b) {
     return p ? `${when} · ${p.method ?? 'Paid'} ${formatMoney(p.amountPaid)} ${p.optionLabel.toLowerCase().replace(/^booking /, '')}` : `${when} · ${formatTime(b.startTime)}`
   }
   if (kind === 'BalanceNotRecorded') return `${when} · ${formatMoney(b.balanceDue)} still to collect`
+  if (kind === 'ColorRequest') return `${when} · "${b.colorRequest}" — do you have this shade?`
   if (kind === 'RefundDue') return `${when} · ${formatMoney(b.payment?.refundDue)} to send back (${b.status === 'NoShow' ? 'no-show' : 'cancelled'})`
-  return `${when} · did ${b.client?.firstName ?? 'the client'} come?`
+  return `${when} · date passed, still ${(STATUS_LABELS[b.status] ?? b.status).toLowerCase()}`
 }
 
 function AttentionCard({ items, onChanged }) {
@@ -297,6 +255,18 @@ function AttentionCard({ items, onChanged }) {
     }
   }
   const closeAnd = (text) => { setDialog(null); onChanged(text) }
+  const answerColor = async (b, available) => {
+    setBusyId(b.id)
+    setError(null)
+    try {
+      await api.admin.decideColorRequest(b.id, available)
+      onChanged(available ? `Colour request for booking #${b.id} confirmed.` : `Booking #${b.id}: colour marked as not available.`)
+    } catch (err) {
+      setError(errorMessage(err))
+    } finally {
+      setBusyId(null)
+    }
+  }
 
   return (
     <section className="card dash-card" aria-labelledby="dash-attention">
@@ -316,35 +286,39 @@ function AttentionCard({ items, onChanged }) {
         <ul className="dash-attn-list">
           {shown.map(({ kind, booking: b }) => {
             const look = ATTENTION[kind] ?? ATTENTION.CheckPayment
-            const title = kind === 'DatePassed'
-              ? `Date passed, still ${(STATUS_LABELS[b.status] ?? b.status).toLowerCase()}`
-              : `${look.title} · ${clientName(b)}`
+            const title = `${look.title} · ${clientName(b)}`
             return (
               <li key={`${kind}-${b.id}`} className="dash-attn">
                 <span className={`dash-tile dash-tile-${look.tone}`}>{look.icon}</span>
                 <button type="button" className="dash-attn-text" onClick={() => setDialog({ kind: 'details', booking: b })}
                   aria-label={`${title}, booking #${b.id}. View details`}>
-                  <strong>{title}{kind === 'DatePassed' && <span className="muted"> · #{b.id}</span>}</strong>
-                  <span>{kind === 'DatePassed' ? `${clientName(b)} · ` : ''}{attentionLine(kind, b)}</span>
+                  <strong>{title}</strong>
+                  <span>{attentionLine(kind, b)}</span>
                 </button>
                 <div className="dash-attn-actions">
                   {kind === 'CheckPayment' && (
                     <Button size="sm" loading={busyId === b.id} onClick={() => quick(b, 'confirm', `Booking #${b.id} confirmed.`)}>Confirm</Button>
                   )}
                   {kind === 'DatePassed' && b.status === 'Confirmed' && (
-                    <Button size="sm" variant="secondary" loading={busyId === b.id}
+                    <Button size="sm" loading={busyId === b.id}
                       onClick={() => (b.balanceDue > 0 ? setDialog({ kind: 'complete', booking: b }) : quick(b, 'complete', `Booking #${b.id} marked as completed.`))}>
                       Complete
                     </Button>
                   )}
                   {kind === 'DatePassed' && (
-                    <Button size="sm" variant="ghost" onClick={() => setDialog({ kind: 'no-show', booking: b })}>No-show</Button>
+                    <Button size="sm" variant="secondary" onClick={() => setDialog({ kind: 'no-show', booking: b })}>No-show</Button>
+                  )}
+                  {kind === 'ColorRequest' && (
+                    <>
+                      <Button size="sm" loading={busyId === b.id} onClick={() => answerColor(b, true)}>I have it</Button>
+                      <Button size="sm" variant="secondary" onClick={() => answerColor(b, false)}>Not available</Button>
+                    </>
                   )}
                   {kind === 'RefundDue' && (
-                    <Button size="sm" variant="secondary" onClick={() => setDialog({ kind: 'refund', booking: b })}>Record</Button>
+                    <Button size="sm" onClick={() => setDialog({ kind: 'refund', booking: b })}>Record</Button>
                   )}
                   {kind === 'BalanceNotRecorded' && (
-                    <Button size="sm" variant="secondary" onClick={() => setDialog({ kind: 'balance', booking: b })}>Record</Button>
+                    <Button size="sm" onClick={() => setDialog({ kind: 'balance', booking: b })}>Record</Button>
                   )}
                 </div>
               </li>
@@ -356,7 +330,7 @@ function AttentionCard({ items, onChanged }) {
         <Link to="/admin/bookings" className="card-link dash-more">{items.length - ATTENTION_SHOWN} more in Bookings →</Link>
       )}
 
-      {dialog?.kind === 'details' && <BookingDetails booking={dialog.booking} onClose={() => setDialog(null)} />}
+      {dialog?.kind === 'details' && <BookingDetails booking={dialog.booking} onClose={() => setDialog(null)} onChanged={() => onChanged(null)} />}
       {dialog?.kind === 'complete' && (
         <BalanceDialog booking={dialog.booking} completing onClose={() => setDialog(null)}
           onSubmit={async ({ received, reference }) => {
@@ -402,7 +376,7 @@ function NextClientCard({ booking: b, date, isToday, isPast, now, elapsed, upcom
   const emptyText = isPast ? 'This day has passed.' : isToday ? 'No more appointments today.' : 'No appointments on this day.'
 
   return (
-    <section className="card dash-card dash-next" aria-labelledby="dash-next">
+    <section className={b ? 'card dash-card dash-next' : 'card dash-card dash-next is-empty'} aria-labelledby="dash-next">
       <div className="dash-card-head">
         <span className="dash-head-icon"><UserIcon /></span>
         <h2 id="dash-next">{isToday ? 'Next client' : `First client · ${shortDate(date)}`}</h2>
@@ -417,7 +391,7 @@ function NextClientCard({ booking: b, date, isToday, isPast, now, elapsed, upcom
           </button>
           <dl className="dash-next-details">
             <dt>Client</dt>
-            <dd>{apiPhotoSrc(b.client?.photoUrl, b.client?.photoDataUrl) && <img className="dash-client-photo" src={apiPhotoSrc(b.client?.photoUrl, b.client?.photoDataUrl)} alt="" />}{clientName(b)}{b.client?.phoneNumber && <> · <a href={`tel:${b.client.phoneNumber}`}>{b.client.phoneNumber}</a></>}</dd>
+            <dd>{!isWalkIn(b) && apiPhotoSrc(b.client?.photoUrl, b.client?.photoDataUrl) && <img className="dash-client-photo" src={apiPhotoSrc(b.client?.photoUrl, b.client?.photoDataUrl)} alt="" />}{clientName(b)}{bookingClientPhone(b) && <> · <a href={`tel:${bookingClientPhone(b)}`}>{bookingClientPhone(b)}</a></>}{isWalkIn(b) && <span className="muted"> · walk-in</span>}</dd>
             <dt>Services</dt>
             <dd>{servicesInOrder(b)}</dd>
             {b.nailColor && (<><dt>Colour</dt><dd><ColorDot name={b.nailColor} /> {colorLabel(b.nailColor)}</dd></>)}
@@ -427,13 +401,12 @@ function NextClientCard({ booking: b, date, isToday, isPast, now, elapsed, upcom
           <PolishArt />
         </>
       ) : (
-        <div className="dash-empty dash-empty-next">
-          <span className="dash-tile"><ClockIcon /></span>
+        <div className="dash-empty">
+          <PolishArt />
           <div>
             <strong>{emptyText}</strong>
             {later && !isPast && <p>Next: {shortDate(later.bookingDate)} · {formatTime(later.startTime)} · {clientName(later)}</p>}
           </div>
-          <PolishArt />
         </div>
       )}
       {details && b && <BookingDetails booking={b} onClose={() => setDetails(false)} />}

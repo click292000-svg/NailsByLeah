@@ -32,8 +32,14 @@ describe('Booking time list', () => {
     expect(onTimeChange).toHaveBeenCalledWith('11:00:00')
   })
 
-  it('marks the last time of the day and leaves out times that would end after closing', async () => {
-    show()
+  it('marks the last time of the day once it is picked, and leaves out times that would end after closing', async () => {
+    const { unmount } = render(<SlotPicker date={date} onDateChange={() => {}} selectedTime="" onTimeChange={() => {}} serviceId={1} />)
+    const before = await screen.findByRole('group', { name: 'Evening' })
+    // Not outlined while the client hasn't chosen it.
+    expect(within(before).getByRole('button', { name: /^7:00 PM/ })).not.toHaveTextContent('Last time')
+    unmount()
+
+    show('19:00:00')
     const evening = await screen.findByRole('group', { name: 'Evening' })
 
     // Plain takes 2 hours and the salon closes at 9:00 PM, so 7:00 PM is the last start.

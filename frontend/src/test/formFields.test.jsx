@@ -30,7 +30,6 @@ describe('Phone Number field (7.1)', () => {
     await user.click(input)
     await user.paste('(0917) 123-4567 abc#')
     expect(input).toHaveValue('09171234567')
-    expect(screen.getByText('Letters, spaces and symbols were removed from the pasted number.')).toBeInTheDocument()
   })
 
   it('stops typing at 11 digits and shows the digit count', async () => {
@@ -41,7 +40,6 @@ describe('Phone Number field (7.1)', () => {
     await user.type(input, '091712345678')
     expect(input).toHaveValue('09171234567')
     expect(screen.getByText('11/11 digits')).toBeInTheDocument()
-    expect(screen.getByText(/Phone numbers have exactly 11 digits/)).toBeInTheDocument()
   })
 
   it('takes +63 numbers, typed or pasted with spaces', async () => {

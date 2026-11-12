@@ -27,7 +27,13 @@ public static class InputLimits
     public const int FeedbackCommentMaxLength = 1000;
     public const int NoteMaxLength = 300;
     public const int NailColorMaxLength = 40;
+    public const int ColorRequestMaxLength = 200;
+    public const int PerNailColorsMaxLength = 600;
     public const int BalanceReferenceMaxLength = 50;
+    public const int GuestNameMaxLength = 150;
+    public const int FeedbackReplyMaxLength = 500;
+    public const int AdminNoteMaxLength = 500;
+    public const int GalleryCaptionMaxLength = 100;
 
     /// <summary>A saved booking draft (JSON): ample for a service, add-ons, a time, a note and three photo ids.</summary>
     public const int BookingDraftMaxLength = 4000;
@@ -71,10 +77,12 @@ public static class InputNormalizer
 public static class PhoneRule
 {
     public const string Required = "Phone Number is required.";
-    public const string DigitsOnly = "Phone Number can only contain numbers (0–9), with no letters, spaces or symbols.";
-    public const string NotMobile = "Enter a Philippine mobile number starting with 09 or +639, e.g. 09171234567.";
-    public const string TooShort = "Phone Number is too short. Enter all 11 digits, e.g. 09171234567.";
-    public const string TooLong = "Phone Number is too long. Enter exactly 11 digits, e.g. 09171234567.";
+    // One short message for every wrong number (Leyah's revisions, 2026-11-12).
+    public const string Invalid = "Not a valid phone number.";
+    public const string DigitsOnly = Invalid;
+    public const string NotMobile = Invalid;
+    public const string TooShort = Invalid;
+    public const string TooLong = Invalid;
 
     private const string CountryPrefix = "+63";
 

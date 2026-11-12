@@ -19,7 +19,7 @@ describe('Admin navigation', () => {
 
     expect(within(nav).getByRole('link', { name: 'Dashboard' })).toHaveAttribute('href', '/admin')
     const hrefs = (name) => [...panelOf(trigger(name)).querySelectorAll('a')].map((a) => a.getAttribute('href'))
-    expect(hrefs('Management')).toEqual(['/admin/bookings', '/admin/services', '/admin/schedule', '/admin/clients'])
+    expect(hrefs('Management')).toEqual(['/admin/bookings', '/admin/services', '/admin/schedule', '/admin/clients', '/admin/gallery'])
     expect(hrefs('Insights')).toEqual(['/admin/reports', '/admin/feedback', '/admin/activity'])
   })
 
@@ -59,7 +59,7 @@ describe('Admin navigation', () => {
     await user.keyboard('{ArrowDown}')
     expect(panel.getByRole('link', { name: 'Services' })).toHaveFocus()
     await user.keyboard('{End}')
-    expect(panel.getByRole('link', { name: 'Clients' })).toHaveFocus()
+    expect(panel.getByRole('link', { name: 'Gallery' })).toHaveFocus()
     await user.keyboard('{ArrowDown}')
     expect(panel.getByRole('link', { name: 'Bookings' })).toHaveFocus()
 
@@ -93,7 +93,8 @@ describe('Admin navigation', () => {
 
     const profile = screen.getByRole('button', { name: /^Account:/ })
     await user.click(profile)
-    expect(within(panelOf(profile)).getByText(`@${ADMIN.username}`)).toBeInTheDocument()
+    // Name and role only: the username and email aren't repeated here.
+    expect(within(panelOf(profile)).queryByText(`@${ADMIN.username}`)).toBeNull()
     expect(within(panelOf(profile)).getByText('Administrator')).toBeInTheDocument()
 
     await user.click(within(panelOf(profile)).getByRole('button', { name: 'Log out' }))

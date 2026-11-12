@@ -1,12 +1,14 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router'
 import { api } from '../../api'
 import { useAsync, useDebouncedValue } from '../../hooks/useAsync'
 import { errorMessage } from '../../api/errors'
 import { addDays, daysInMonth, toIsoDate, today } from '../../lib/dates'
 import { formatDate } from '../../lib/format'
-import { Alert, Button, Card, PageLoader, Pager, Spinner } from '../../components/ui'
+import { Alert, Button, Card, PageLoader, Spinner } from '../../components/ui'
 import { AdminBookingTable } from './AdminBookingTable'
+import { bookingClientName } from '../../lib/bookingClient'
+import { NewBookingDialog } from './NewBookingDialog'
 
 const Icon = ({ children }) => (
   <svg className="fb-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"
@@ -30,7 +32,7 @@ const STATUSES = [
   { value: 'Cancelled', label: 'Cancelled', title: 'Cancelled bookings', icon: <CrossIcon /> },
   { value: 'NoShow', label: 'No-show', title: 'No-shows', icon: <BanIcon /> },
 ]
-const PAGE_SIZE = 20
+const BATCH = 10 // bookings shown at first, and added each time the list is scrolled to the end
 const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 const PANELS_KEY = 'nbl.bookingPanels'
 
@@ -53,10 +55,10 @@ export default function BookingsPage() {
   const date = params.get('date') ?? ''
   const status = params.get('status') ?? ''
   const serviceId = params.get('serviceId') ?? ''
-  const page = Number(params.get('page') ?? 1)
   const [search, setSearch] = useState(params.get('clientName') ?? '')
   const debouncedSearch = useDebouncedValue(search.trim(), 300)
   const [message, setMessage] = useState(null)
+  const [creating, setCreating] = useState(false)
   const [refresh, setRefresh] = useState(0) // any booking change reloads the list, the calendar and the day
 
   const [panels, setPanels] = useState(() => ({ calendar: false, day: false, ...readPanels() }))
@@ -74,13 +76,17 @@ export default function BookingsPage() {
   }
 
   const catalog = useAsync(() => api.admin.services(), [])
-  const results = useAsync(() => api.admin.searchBookings({ date, status, clientName: debouncedSearch, serviceId, page, pageSize: PAGE_SIZE }),
-    [date, status, debouncedSearch, serviceId, page, refresh])
+  // The list grows as Leyah scrolls: 10 bookings, then 10 more each time she reaches the end. New filters start again at 10.
+  const filterKey = JSON.stringify([date, status, debouncedSearch, serviceId])
+  const [more, setMore] = useState({ key: filterKey, shown: BATCH })
+  const shown = more.key === filterKey ? more.shown : BATCH
+  const results = useAsync(() => api.admin.searchBookings({ date, status, clientName: debouncedSearch, serviceId, page: 1, pageSize: shown }),
+    [date, status, debouncedSearch, serviceId, shown, refresh])
 
   const update = (changes) => {
     const next = new URLSearchParams(params)
-    Object.entries({ ...changes, page: changes.page ?? 1 }).forEach(([key, value]) => (value ? next.set(key, value) : next.delete(key)))
-    if (next.get('page') === '1') next.delete('page')
+    Object.entries(changes).forEach(([key, value]) => (value ? next.set(key, value) : next.delete(key)))
+    next.delete('page') // from the old page numbers; the list now loads as it scrolls
     setParams(next, { replace: true })
   }
 
@@ -91,8 +97,11 @@ export default function BookingsPage() {
 
   const filtered = Boolean(date || status || search || serviceId)
   const clear = () => { setSearch(''); setParams(new URLSearchParams(), { replace: true }) }
-  const totalPages = results.data ? Math.max(1, Math.ceil(results.data.totalCount / PAGE_SIZE)) : 1
   const count = results.data?.totalCount ?? 0
+  const loaded = results.data?.items.length ?? 0
+  // More to load while the server sent all that was asked for and there are still some it didn't send.
+  const hasMore = loaded < count && loaded >= shown
+  const loadMore = () => { if (hasMore && !results.loading) setMore({ key: filterKey, shown: shown + BATCH }) }
   const tab = STATUSES.find((s) => s.value === status) ?? STATUSES[0]
   const both = panels.calendar && panels.day
 
@@ -100,8 +109,15 @@ export default function BookingsPage() {
     <div className="stack-lg find-bookings">
       <h1 className="fb-title">Find bookings</h1>
       {message && <Alert kind="success" onClose={() => setMessage(null)}>{message}</Alert>}
+      {creating && (
+        <NewBookingDialog onClose={() => setCreating(false)} onCreated={(b) => {
+          setCreating(false)
+          changed(`Booking #${b.id} made for ${bookingClientName(b)} and confirmed.`)
+        }} />
+      )}
 
       <div className="fb-toggles">
+        <Button className="fb-new" onClick={() => setCreating(true)}>+ New booking</Button>
         <button type="button" className={panels.calendar ? 'fb-toggle is-on' : 'fb-toggle'} aria-expanded={panels.calendar}
           aria-controls="fb-calendar" onClick={() => setPanel('calendar', !panels.calendar)}>
           <CalendarIcon /> {panels.calendar ? 'Hide calendar' : 'Show calendar'}
@@ -164,10 +180,36 @@ export default function BookingsPage() {
           <>
             <AdminBookingTable bookings={results.data.items} onChanged={changed}
               emptyText={filtered ? 'Try another date, status or service, or clear the filters.' : 'New bookings show up here.'} />
-            <Pager page={page} pages={totalPages} onChange={(p) => update({ page: p, date, status, clientName: search, serviceId })} />
+            {loaded > 0 && <LoadMore loaded={loaded} count={count} hasMore={hasMore} loading={results.loading} onMore={loadMore} />}
           </>
         )}
       </Card>
+    </div>
+  )
+}
+
+/**
+ * The end of the bookings list: loads the next 10 as soon as it scrolls into view, with a button as well (for keyboards,
+ * and browsers that can't tell), and says when everything is shown.
+ */
+function LoadMore({ loaded, count, hasMore, loading, onMore }) {
+  const ref = useRef(null)
+  const onMoreRef = useRef(onMore)
+  onMoreRef.current = onMore
+  useEffect(() => {
+    const el = ref.current
+    if (!el || !hasMore || typeof IntersectionObserver === 'undefined') return undefined
+    const seen = new IntersectionObserver((entries) => { if (entries.some((e) => e.isIntersecting)) onMoreRef.current() }, { rootMargin: '200px' })
+    seen.observe(el)
+    return () => seen.disconnect()
+  }, [hasMore, loaded])
+  return (
+    <div ref={ref} className="fb-more" aria-live="polite">
+      {hasMore ? (
+        loading ? <Spinner small label="Loading more bookings" />
+          : <Button variant="secondary" size="sm" onClick={onMore}>Show more</Button>
+      ) : null}
+      <span className="muted small">{hasMore ? `Showing ${loaded} of ${count}` : `All ${count} booking${count === 1 ? '' : 's'} shown`}</span>
     </div>
   )
 }
@@ -250,7 +292,7 @@ const csvCell = (value) => {
 function downloadCsv(bookings) {
   const head = ['Booking', 'Date', 'Start', 'End', 'Client', 'Username', 'Service', 'Removal', 'Colour', 'Add-ons', 'Total', 'Paid online', 'Balance due', 'Status', 'Reference']
   const lines = bookings.map((b) => [
-    b.id, b.bookingDate, b.startTime.slice(0, 5), b.endTime.slice(0, 5), `${b.client?.firstName ?? ''} ${b.client?.lastName ?? ''}`.trim(),
+    b.id, b.bookingDate, b.startTime.slice(0, 5), b.endTime.slice(0, 5), bookingClientName(b),
     b.client?.username, b.serviceName, b.removalServiceName, b.nailColor,
     b.addOns.map((a) => `${a.name} (${a.handLabel}, ${a.nailCount})`).join('; '),
     b.totalPrice, b.payment?.amountPaid, b.balanceDue, b.status === 'NoShow' ? 'No-show' : b.status, b.payment?.referenceNumber,
@@ -317,7 +359,7 @@ function DayBookings({ date, refresh, onChanged }) {
   return (
     <section className="fb-card fb-day" aria-label="Bookings on the chosen day">
       <div className="fb-day-head">
-        <h2><CalendarIcon /> Bookings on {formatDate(date)}</h2>
+        <h2><CalendarIcon /> Bookings on {new Date(`${date}T00:00`).toLocaleDateString('en-PH', { weekday: 'short', month: 'short', day: 'numeric' })}</h2>
         {day.data && <span className="fb-count">{count} booking{count === 1 ? '' : 's'}</span>}
       </div>
       {day.loading && !day.data && <PageLoader label="Loading the day…" />}

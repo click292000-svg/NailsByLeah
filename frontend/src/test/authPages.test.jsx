@@ -156,13 +156,13 @@ describe('Login', () => {
     expect(screen.getByText(/try again in 15 minutes/)).toBeInTheDocument()
   })
 
-  it('sends a client to their bookings after logging in', async () => {
+  it('sends a client to the landing page after logging in', async () => {
     const user = userEvent.setup()
     renderApp('/login')
     await user.type(await screen.findByLabelText(/Username or email/), CLIENT.username)
     await user.type(screen.getByLabelText(/^Password( \*)?$/), CLIENT.password)
     await user.click(screen.getByRole('button', { name: 'Log in' }))
 
-    expect(await screen.findByRole('heading', { name: 'My bookings' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: 'Beautiful nails, booked in minutes.' })).toBeInTheDocument()
   })
 })

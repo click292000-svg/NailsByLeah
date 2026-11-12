@@ -3,6 +3,7 @@ import { Link } from 'react-router'
 import { Alert, PageLoader } from '../../../components/ui'
 import { errorMessage } from '../../../api/errors'
 import { canAnimate, peso, prefersReducedMotion } from './motion'
+import { softGelSets, withDesignName } from '../../../lib/services'
 
 const lowest = (items) => (items.length ? Math.min(...items.map((i) => i.price)) : null)
 
@@ -12,15 +13,18 @@ function startingPrices({ services, addOns }) {
   const softGel = active(services.filter((s) => s.category === 'SoftGel'))
   const removal = active(services.filter((s) => s.category === 'Removal'))
   const extras = active(addOns)
+  const sets = softGelSets(softGel)
   return [
-    { title: 'Soft Gel', from: 'Starting at', price: lowest(softGel), tags: softGel.map((s) => s.name), dir: 'from-left' },
+    // The sets as clients book them: Plain, Soft Gel Extension, BIAB, then "With design" as the option on top.
+    { title: 'Soft Gel', from: 'Starting at', price: lowest(softGel), dir: 'from-left',
+      tags: [...sets.map((s) => s.base.name), ...(sets.some((s) => s.design) ? ['With design (optional)'] : [])] },
     { title: 'Removal', from: 'Starting at', price: lowest(removal), tags: removal.map((s) => s.name), dir: 'from-top' },
     { title: 'Add-ons', from: 'Per nail', price: lowest(extras), tags: extras.map((a) => a.name), dir: 'from-right' },
   ].filter((c) => c.price !== null)
 }
 
-/** Pricing: three cards fly in (left, top, right); "View full price list" unfolds Leyah's price card. */
-export function PricingSection({ catalog, bookTo, onOpenPhoto }) {
+/** Pricing: three cards fly in (left, top, right); "View full price list" unfolds the full price card. */
+export function PricingSection({ catalog, bookTo }) {
   const cardsRef = useRef(null)
   const listRef = useRef(null)
   const [cardsIn, setCardsIn] = useState(!canAnimate)
@@ -68,13 +72,7 @@ export function PricingSection({ catalog, bookTo, onOpenPhoto }) {
       <div className={listOpen ? 'hm-unfold open' : 'hm-unfold'} id="full-price-list" aria-hidden={!listOpen} inert={!listOpen}>
         <div>
           <div className="hm-full-list" ref={listRef}>
-            <figure>
-              <button type="button" aria-label="Open Leyah's price card full size"
-                onClick={(e) => onOpenPhoto({ src: '/img/price-list.jpg', alt: PRICE_CARD_ALT }, e.currentTarget)}>
-                <img src="/img/price-list.jpg" width="941" height="1672" loading="lazy" alt={PRICE_CARD_ALT} />
-              </button>
-              <figcaption>Tap Leyah&apos;s price card to open it full size.</figcaption>
-            </figure>
+            {loaded && <PriceCard catalog={catalog.data} />}
           </div>
         </div>
       </div>
@@ -82,4 +80,35 @@ export function PricingSection({ catalog, bookTo, onOpenPhoto }) {
   )
 }
 
-const PRICE_CARD_ALT = "Leyah's price card: soft gel, removal and per-nail add-on prices."
+/**
+ * Leyah's full price list, drawn from the live prices so it always matches the booking page: the sets, their design
+ * versions, removal and the per-nail add-ons. Styled after her printed price card.
+ */
+function PriceCard({ catalog }) {
+  const active = (items) => items.filter((i) => i.isActive !== false)
+  const sets = softGelSets(active(catalog.services))
+  const designs = sets.filter((s) => s.design)
+  const groups = [
+    { title: 'Soft gel', rows: sets.map((s) => [s.base.name, s.base.price]) },
+    { title: 'With design', note: 'optional', rows: designs.map((s) => [withDesignName(s.base), s.design.price]) },
+    { title: 'Removal', rows: active(catalog.services.filter((s) => s.category === 'Removal')).map((s) => [s.name, s.price]) },
+    { title: 'Add-ons', note: 'per nail', rows: active(catalog.addOns).map((a) => [a.name, a.price]) },
+  ].filter((g) => g.rows.length)
+  return (
+    <article className="pc" aria-labelledby="pc-title">
+      <img className="pc-logo" src="/img/logo.webp" width="1000" height="455" alt="Nails by Leyah" />
+      <h3 className="pc-title" id="pc-title">Nails price list</h3>
+      {groups.map((g) => (
+        <section key={g.title} className="pc-group" aria-label={g.title}>
+          <h4 className="pc-pill">{g.title}{g.note && <small> ({g.note})</small>}</h4>
+          <dl>
+            {g.rows.map(([name, price]) => (
+              <div key={name} className="pc-row"><dt>{name}</dt><span className="pc-dots" aria-hidden="true" /><dd>{peso(price)}</dd></div>
+            ))}
+          </dl>
+        </section>
+      ))}
+      <p className="pc-foot" aria-hidden="true">♡</p>
+    </article>
+  )
+}

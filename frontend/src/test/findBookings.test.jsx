@@ -3,6 +3,9 @@ import userEvent from '@testing-library/user-event'
 import { ADMIN, renderApp, signIn } from './helpers'
 import { getDb } from './mockBackend/db'
 import { formatDate } from '../lib/format'
+
+// The day panel's heading: "Fri, Nov 13" (the calendar above shows the year).
+const dayTitle = (iso) => new Date(`${iso}T00:00`).toLocaleDateString('en-PH', { weekday: 'short', month: 'short', day: 'numeric' })
 import { dateFromToday, today } from '../lib/dates'
 
 const openPage = async () => {
@@ -15,13 +18,20 @@ const listRows = () => within(screen.getByRole('heading', { name: 'All bookings'
 const activeBookings = () => getDb().bookings.filter((b) => !b.isDeleted)
 
 describe('Find bookings', () => {
-  it('A: opens with both panels hidden and the full list showing', async () => {
+  it('A: opens with both panels hidden and the list showing, 10 at a time as it scrolls', async () => {
+    const user = userEvent.setup()
     await openPage()
 
     expect(toggle('Show calendar')).toHaveAttribute('aria-expanded', 'false')
     expect(toggle('Show booking details')).toHaveAttribute('aria-expanded', 'false')
     expect(screen.queryByRole('region', { name: 'Booking calendar' })).toBeNull()
-    await waitFor(() => expect(listRows()).toHaveLength(Math.min(20, activeBookings().length)))
+    const total = activeBookings().length
+    await waitFor(() => expect(listRows()).toHaveLength(Math.min(10, total)))
+    if (total > 10) {
+      expect(screen.getByText(`Showing 10 of ${total}`)).toBeInTheDocument()
+      await user.click(screen.getByRole('button', { name: 'Show more' }))
+      await waitFor(() => expect(listRows()).toHaveLength(Math.min(20, total)))
+    }
   })
 
   it('B and C: each panel opens on its own; the day panel starts on today', async () => {
@@ -35,7 +45,7 @@ describe('Find bookings', () => {
 
     await user.click(toggle('Hide calendar'))
     await user.click(toggle('Show booking details'))
-    expect(await screen.findByRole('heading', { name: `Bookings on ${formatDate(today())}` })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: `Bookings on ${dayTitle(today())}` })).toBeInTheDocument()
     expect(document.getElementById('fb-calendar')).toHaveAttribute('aria-hidden', 'true')
   })
 
@@ -53,7 +63,7 @@ describe('Find bookings', () => {
     await user.click(dayButton)
 
     const panel = screen.getByRole('region', { name: 'Bookings on the chosen day' })
-    expect(await within(panel).findByRole('heading', { name: `Bookings on ${formatDate(day)}` })).toBeInTheDocument()
+    expect(await within(panel).findByRole('heading', { name: `Bookings on ${dayTitle(day)}` })).toBeInTheDocument()
     await waitFor(() => expect(within(panel).getAllByRole('row').slice(1)).toHaveLength(onDay.length))
     expect(listRows().length).toBeGreaterThan(onDay.length) // the All bookings list is not filtered by the calendar
   })
@@ -75,7 +85,7 @@ describe('Find bookings', () => {
     expect(screen.getByRole('heading', { name: 'Pending bookings' })).toBeInTheDocument()
 
     await user.click(toggle('Show booking details'))
-    expect(screen.getByRole('heading', { name: `Bookings on ${formatDate(day)}` })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: `Bookings on ${dayTitle(day)}` })).toBeInTheDocument()
   })
 
   it('says so when the chosen day has no bookings', async () => {

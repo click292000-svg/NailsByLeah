@@ -52,6 +52,12 @@ public abstract class CatalogService : Service
     public bool AllowsAddOns { get; set; } = true;
 
     public virtual bool TakesAddOns => AllowsAddOns;
+
+    /// <summary>
+    /// Set on a "with design" version of another service ("With Design" is Plain with a design, "BIAB with Design" is BIAB
+    /// with one). The booking page shows it as the optional "With design" choice on that service's card, not as a card of its own.
+    /// </summary>
+    public int? DesignOptionOfId { get; set; }
 }
 
 public sealed class SoftGelService : CatalogService
@@ -94,7 +100,7 @@ public sealed class StoneAddOn : Service
     public static bool FitsOn(NailHand hand, int nailCount) => hand == NailHand.Both || nailCount <= MaxNailsPerHand;
 
     public override string Category => CategoryKey;
-    public override string CategoryLabel => "Stone (Add-on)";
+    public override string CategoryLabel => "Nail design (add-on)";
     public override string PricingUnit => "per nail";
     public override int MaxQuantity => MaxNails;
 }

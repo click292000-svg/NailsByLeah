@@ -30,9 +30,11 @@ export default function LoginPage() {
     setSubmitting(true)
     try {
       const user = await login(values)
-      // Return to the page that asked for a login, unless it belongs to the other role.
+      // Return to the page that asked for a login, unless it belongs to the other role. Otherwise a client starts on
+      // the landing page; Leyah starts on her dashboard.
       const from = location.state?.from
-      navigate(from && canOpen(user.role, from) ? from : homeFor(user.role), { replace: true })
+      const start = user.role === 'Client' ? '/' : homeFor(user.role)
+      navigate(from && canOpen(user.role, from) ? from : start, { replace: true })
     } catch (err) {
       setErrors(fieldErrors(err))
       setFailure(err)
@@ -46,8 +48,20 @@ export default function LoginPage() {
 
   return (
     <div className="auth-page">
-      <Card className="auth-card">
-        <h1>Log in</h1>
+      <div className="login-split">
+      {/* A photo of Leyah's work beside the form; a short strip on phones. */}
+      <aside className="login-art" aria-hidden="true">
+        <img src="/img/service-with-design.jpg" alt="" width="640" height="640" />
+        <div className="login-art-text">
+          <p className="login-art-name">Nails by Leyah</p>
+          <p>Soft gel sets, BIAB and nail art, booked in a few taps.</p>
+        </div>
+      </aside>
+      <Card className="auth-card login-card">
+        <div className="login-head">
+          <h1>Log in</h1>
+          <p className="muted">Welcome back! Log in to book and manage your appointments.</p>
+        </div>
         {sessionNotice && <Alert kind="info">{sessionNotice}</Alert>}
         <LoginFailure error={failure} email={values.usernameOrEmail} />
 
@@ -64,8 +78,8 @@ export default function LoginPage() {
         <p className="auth-switch">
           New here? <Link to="/register">Create an account</Link>
         </p>
-
       </Card>
+      </div>
     </div>
   )
 }

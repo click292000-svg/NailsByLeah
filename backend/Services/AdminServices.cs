@@ -23,7 +23,7 @@ public sealed class DashboardService(
     private const int UpcomingDays = 7;
     private const int BalanceLookbackDays = 30;
     private const int MaxDaysAway = 366;
-    private static readonly string[] AttentionOrder = ["CheckPayment", "RefundDue", "DatePassed", "BalanceNotRecorded"];
+    private static readonly string[] AttentionOrder = ["CheckPayment", "ColorRequest", "RefundDue", "DatePassed", "BalanceNotRecorded"];
 
     public async Task<DashboardResponse> GetAsync(DateOnly? date = null, CancellationToken ct = default)
     {
@@ -57,6 +57,9 @@ public sealed class DashboardService(
             };
             if (kind is not null)
                 attention.Add(new DashboardAttentionItem(kind, BookingMapper.ToResponse(b, includeClient: true)));
+            // A shade the client asked for that Leyah hasn't checked yet, on an appointment still to come.
+            if (b.ColorRequestStatus == ColorRequestStatus.Pending && b.IsActive && !IsOver(b))
+                attention.Add(new DashboardAttentionItem("ColorRequest", BookingMapper.ToResponse(b, includeClient: true)));
         }
         // Most urgent first: a client who paid is waiting, then appointments left open, then money to note down.
         // OrderBy is stable, so each group keeps its date order.

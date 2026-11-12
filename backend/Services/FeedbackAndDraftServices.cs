@@ -81,6 +81,9 @@ public interface IFeedbackService
 
     Task<IReadOnlyList<FeedbackResponse>> GetMineAsync(int clientId, CancellationToken ct = default);
     Task<FeedbackListResponse> GetAllAsync(int page, int pageSize, CancellationToken ct = default);
+
+    /// <summary>Leyah's reply, shown to the client on their Feedback page; empty removes it.</summary>
+    Task<FeedbackResponse> ReplyAsync(int feedbackId, FeedbackReplyRequest request, CancellationToken ct = default);
 }
 
 /// <summary>Star ratings (1-5) with optional comments. Clients rate the salon; the administrator reads them.</summary>
@@ -132,6 +135,19 @@ public sealed class FeedbackService(IFeedbackRepository feedback, IUnitOfWork un
         return new FeedbackListResponse(items.Select(f => ToResponse(f, includeClient: true)).ToList(), page, pageSize, total, average, byRating);
     }
 
+    public async Task<FeedbackResponse> ReplyAsync(int feedbackId, FeedbackReplyRequest request, CancellationToken ct = default)
+    {
+        var item = await feedback.GetByIdAsync(feedbackId, ct) ?? throw new NotFoundException("This feedback no longer exists.");
+        var reply = string.IsNullOrWhiteSpace(request.Reply) ? null : InputNormalizer.Text(request.Reply);
+        if (reply?.Length > InputLimits.FeedbackReplyMaxLength)
+            throw new ValidationAppException("reply", $"The reply must be {InputLimits.FeedbackReplyMaxLength} characters or fewer.");
+        item.Reply = reply;
+        item.RepliedAt = reply is null ? null : clock.UtcNow;
+        audit.Record(AuditActions.FeedbackReplied, nameof(Feedback), item.Id, reply is null ? "Reply removed" : "Replied");
+        await unitOfWork.SaveChangesAsync(ct);
+        return ToResponse(item, includeClient: true);
+    }
+
     private static FeedbackResponse Replay(Feedback earlier, int clientId) =>
         earlier.ClientId == clientId
             ? ToResponse(earlier, includeClient: false)
@@ -139,5 +155,6 @@ public sealed class FeedbackService(IFeedbackRepository feedback, IUnitOfWork un
 
     private static FeedbackResponse ToResponse(Feedback f, bool includeClient) => new(
         f.Id, f.Rating, f.Comment, f.CreatedAt,
-        includeClient ? new ClientSummaryResponse(f.Client.Id, f.Client.FirstName, f.Client.LastName, f.Client.Username, f.Client.Email, f.Client.PhoneNumber) : null);
+        includeClient ? new ClientSummaryResponse(f.Client.Id, f.Client.FirstName, f.Client.LastName, f.Client.Username, f.Client.Email, f.Client.PhoneNumber) : null,
+        f.Reply, f.RepliedAt);
 }

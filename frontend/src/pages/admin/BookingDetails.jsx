@@ -1,10 +1,13 @@
+import { useState } from 'react'
 import { formatDate, formatDateTime, formatTime } from '../../lib/format'
+import { errorMessage } from '../../api/errors'
 import { Button, Money, StatusBadge } from '../../components/ui'
 import { Modal } from '../../components/Modal'
 import { ReceiptDownload } from '../../components/ReceiptDownload'
 import { api } from '../../api'
-import { colorFor, colorLabel } from '../../lib/shades'
+import { colorFor, colorLabel, colorRequestLabel, perNailText } from '../../lib/shades'
 import { apiPhotoSrc } from '../../lib/photos'
+import { bookingClientHandle, bookingClientName, bookingClientPhone, isWalkIn } from '../../lib/bookingClient'
 import { ReferenceImageGallery } from '../../components/ReferenceImageGallery'
 
 function Section({ title, children, wide = false }) {
@@ -35,8 +38,25 @@ function PaymentCheck({ booking: b }) {
 }
 
 /** One booking at a glance: when it is, who it's for, what they're having, what's been paid, and what happened so far. */
-export function BookingDetails({ booking: b, onClose }) {
+export function BookingDetails({ booking, onClose, onChanged }) {
+  // Kept here so answering a colour request shows straight away; the page behind reloads through onChanged.
+  const [b, setBooking] = useState(booking)
+  const [deciding, setDeciding] = useState(null)
+  const [decideError, setDecideError] = useState(null)
+  const decide = async (available) => {
+    setDeciding(available ? 'yes' : 'no')
+    setDecideError(null)
+    try {
+      setBooking(await api.admin.decideColorRequest(b.id, available))
+      onChanged?.()
+    } catch (err) {
+      setDecideError(errorMessage(err))
+    } finally {
+      setDeciding(null)
+    }
+  }
   const client = b.client
+  const walkIn = isWalkIn(b)
   const paid = b.payment?.amountPaid ?? b.depositAmount
   const paidInFull = b.balanceDue === 0
   const closed = b.status === 'Cancelled' || b.status === 'NoShow'
@@ -67,19 +87,23 @@ export function BookingDetails({ booking: b, onClose }) {
         <div className="bd-grid">
           <Section title="Client">
             <div className="bd-client">
-              {apiPhotoSrc(client?.photoUrl, client?.photoDataUrl)
+              {!walkIn && apiPhotoSrc(client?.photoUrl, client?.photoDataUrl)
                 ? <img className="bd-client-photo" src={apiPhotoSrc(client?.photoUrl, client?.photoDataUrl)} alt={`${client?.firstName}'s photo`} />
-                : <span className="bd-client-photo" aria-hidden="true">{client?.firstName?.slice(0, 1)}</span>}
+                : <span className="bd-client-photo" aria-hidden="true">{bookingClientName(b).slice(0, 1)}</span>}
               <div>
-                <p className="bd-name">{client?.firstName} {client?.lastName}</p>
-                <p className="muted small">@{client?.username}</p>
+                <p className="bd-name">{bookingClientName(b)}</p>
+                <p className="muted small">{bookingClientHandle(b)}</p>
               </div>
             </div>
 
             <ul className="bd-contact">
-              <li><a href={`mailto:${client?.email}`}>{client?.email}</a></li>
-              <li><a href={`tel:${client?.phoneNumber}`}>{client?.phoneNumber}</a></li>
+              {!walkIn && <li><a href={`mailto:${client?.email}`}>{client?.email}</a></li>}
+              {bookingClientPhone(b) ? <li><a href={`tel:${bookingClientPhone(b)}`}>{bookingClientPhone(b)}</a></li>
+                : walkIn && <li className="muted small">No phone number given</li>}
             </ul>
+            {client?.adminNote && (
+              <p className="bd-client-note"><span>Your note</span>{client.adminNote}</p>
+            )}
           </Section>
 
           <Section title="Service">
@@ -92,6 +116,24 @@ export function BookingDetails({ booking: b, onClose }) {
                 <Row label="Colour">
                   {colorFor(b.nailColor) && <span className="bd-swatch" style={{ background: colorFor(b.nailColor) }} aria-hidden="true" />}
                   {colorLabel(b.nailColor)}
+                </Row>
+              )}
+              {b.perNailColors && (
+                <Row label="Each nail"><span className="bd-nails">{perNailText(b.perNailColors)}</span></Row>
+              )}
+              {b.colorRequest && (
+                <Row label="Colour request">
+                  <span className="bd-color-request">
+                    <span>{b.colorRequest}</span>
+                    <span className={`color-request-badge is-${(b.colorRequestStatus ?? 'Pending').toLowerCase()}`}>{colorRequestLabel(b.colorRequestStatus)}</span>
+                    {b.colorRequestStatus === 'Pending' && (b.status === 'Pending' || b.status === 'Confirmed') && (
+                      <span className="bd-color-actions">
+                        <Button size="sm" loading={deciding === 'yes'} disabled={Boolean(deciding)} onClick={() => decide(true)}>I have it</Button>
+                        <Button size="sm" variant="secondary" loading={deciding === 'no'} disabled={Boolean(deciding)} onClick={() => decide(false)}>Not available</Button>
+                      </span>
+                    )}
+                    {decideError && <span className="field-error">{decideError}</span>}
+                  </span>
                 </Row>
               )}
               {b.addOns.map((a) => (

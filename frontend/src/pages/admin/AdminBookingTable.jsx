@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { api } from '../../api'
+import { bookingClientHandle, bookingClientName } from '../../lib/bookingClient'
 import { useAsync } from '../../hooks/useAsync'
 import { errorMessage } from '../../api/errors'
 import { formatDate, formatTime } from '../../lib/format'
@@ -23,7 +24,7 @@ export const StatusDot = ({ status }) => (
  * Bookings table with the administrator actions Confirm, Complete, Record balance, No-show, Reschedule and Cancel (Ref 11.2).
  * On small screens each row becomes a card (cells carry data-label).
  */
-export function AdminBookingTable({ bookings, onChanged, emptyTitle = 'No bookings found', emptyText, dayView = false }) {
+export function AdminBookingTable({ bookings, onChanged, emptyTitle = 'No bookings found', emptyText, dayView = false, serviceName = (b) => b.serviceName }) {
   const lookups = useAsync(() => api.catalog.lookups(), [])
   const [dialog, setDialog] = useState(null)
   const [busyId, setBusyId] = useState(null)
@@ -90,12 +91,13 @@ export function AdminBookingTable({ bookings, onChanged, emptyTitle = 'No bookin
                     )}
                   </td>
                   <td data-label="Client">
-                    <span className="cell-main">{b.client?.firstName} {b.client?.lastName}</span>
-                    <span className="muted small">@{b.client?.username}</span>
+                    <span className="cell-main">{bookingClientName(b)}</span>
+                    <span className="muted small">{bookingClientHandle(b)}</span>
                   </td>
                   <td data-label="Service">
-                    <span className="cell-main">{b.serviceName}</span>
+                    <span className="cell-main">{serviceName(b)}</span>
                     {b.removalServiceName && <span className="muted small">+ Removal ({b.removalServiceName}) first</span>}
+                    {b.colorRequestStatus === 'Pending' && <span className="color-request-badge">Colour request</span>}
                     {b.addOns.length > 0 && <span className="muted small">+ {b.addOns.map((a) => `${a.name} (${a.handLabel.toLowerCase()} ×${a.nailCount})`).join(', ')}</span>}
                     {b.referenceImages?.length > 0 && (
                       <span className="muted small">📎 {b.referenceImages.length} design {b.referenceImages.length === 1 ? 'photo' : 'photos'}</span>
@@ -157,7 +159,7 @@ export function AdminBookingTable({ bookings, onChanged, emptyTitle = 'No bookin
             closeAnd(`Booking #${moved.id} moved to ${formatDate(moved.bookingDate)} at ${formatTime(moved.startTime)}.`)
           }} />
       )}
-      {dialog?.kind === 'details' && <BookingDetails booking={dialog.booking} onClose={() => setDialog(null)} />}
+      {dialog?.kind === 'details' && <BookingDetails booking={dialog.booking} onClose={() => setDialog(null)} onChanged={() => onChanged?.(null)} />}
       {dialog?.kind === 'complete' && (
         <BalanceDialog booking={dialog.booking} completing onClose={() => setDialog(null)}
           onSubmit={async ({ received, reference }) => {

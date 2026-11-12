@@ -3,8 +3,8 @@ import { api } from '../../api'
 import { useAsync } from '../../hooks/useAsync'
 import { errorMessage } from '../../api/errors'
 import { today } from '../../lib/dates'
-import { formatDate } from '../../lib/format'
-import { downloadSalesReport, totalReceived } from '../../lib/reportPdf'
+import { formatDate, formatMoney } from '../../lib/format'
+import { downloadSalesReport, totalReceived } from '../../lib/reportExcel'
 import { Alert, Button, Card, Money, PageHeader, PageLoader, StatCard } from '../../components/ui'
 import { DayPicker, MonthPicker } from '../../components/DateFilter'
 
@@ -23,27 +23,28 @@ export default function ReportsPage() {
   )
 }
 
-/** Sales first, then booking counts; every card has a label, a value and a one-line explanation. */
+/**
+ * Money first, then booking counts. Each figure appears once: the total shows what it is made of underneath, and the
+ * completed services show how many appointments they were.
+ */
 function Totals({ report }) {
+  const finished = report.bookingsCompleted
   return (
     <div className="report-totals">
       <section aria-label="Sales">
         <h3 className="report-section-title">Sales</h3>
         <div className="stat-row stat-row-3">
-          <StatCard label="Total received" value={<Money amount={totalReceived(report)} />} hint="Online payments plus balances" />
-          <StatCard label="Paid online" value={<Money amount={report.depositsCollected} />} hint="Deposits and full payments" />
-          <StatCard label="Balances received" value={<Money amount={report.balancesReceived} />} hint="Paid after the service" />
-        </div>
-        <div className="stat-row stat-row-2 stat-row-next">
-          <StatCard label="Completed services" value={<Money amount={report.completedServicesValue} />} hint="Full price of appointments completed" />
-          <StatCard label="Balances unpaid" value={<Money amount={report.balancesUnpaid} />} hint="Completed, balance not recorded yet" />
+          <StatCard label="Total received" value={<Money amount={totalReceived(report)} />}
+            hint={`${formatMoney(report.depositsCollected)} online · ${formatMoney(report.balancesReceived)} in balances`} />
+          <StatCard label="Completed services" value={<Money amount={report.completedServicesValue} />}
+            hint={`${finished} appointment${finished === 1 ? '' : 's'} finished`} />
+          <StatCard label="Balances unpaid" value={<Money amount={report.balancesUnpaid} />} hint="Completed, not recorded yet" />
         </div>
       </section>
       <section aria-label="Bookings">
         <h3 className="report-section-title">Bookings</h3>
-        <div className="stat-row stat-row-4">
+        <div className="stat-row stat-row-3">
           <StatCard label="Made" value={report.bookingsMade} hint="New bookings placed" dot="made" />
-          <StatCard label="Completed" value={report.bookingsCompleted} hint="Appointments finished" dot="completed" />
           <StatCard label="Cancelled" value={report.bookingsCancelled} hint="By clients or the salon" dot="cancelled" />
           <StatCard label="No-show" value={report.bookingsNoShow} hint="Client did not come" dot="noshow" />
         </div>
@@ -52,7 +53,7 @@ function Totals({ report }) {
   )
 }
 
-/** The period's title on the left, its picker and the PDF download on the right, so the report reads top to bottom. */
+/** The period picker on the left and the Excel download on the right. The picker shows the period, so its title is only read out. */
 function ReportHeader({ title, report, fileName, children }) {
   const [downloading, setDownloading] = useState(false)
   const [error, setError] = useState(null)
@@ -63,7 +64,7 @@ function ReportHeader({ title, report, fileName, children }) {
     try {
       await downloadSalesReport({ period: title, report, fileName })
     } catch {
-      setError('The PDF could not be made. Please try again.')
+      setError('The Excel file could not be made. Please try again.')
     } finally {
       setDownloading(false)
     }
@@ -72,11 +73,9 @@ function ReportHeader({ title, report, fileName, children }) {
   return (
     <>
       <div className="report-head">
-        <h2>{title}</h2>
-        <div className="report-controls">
-          {children}
-          <Button variant="secondary" className="report-download" loading={downloading} disabled={!report} onClick={download}>Download PDF</Button>
-        </div>
+        <h2 className="sr-only">{title}</h2>
+        {children}
+        <Button variant="secondary" className="report-download" loading={downloading} disabled={!report} onClick={download}>Download Excel</Button>
       </div>
       {error && <Alert kind="error" onClose={() => setError(null)}>{error}</Alert>}
     </>
@@ -88,7 +87,7 @@ function DailyReport() {
   const report = useAsync(() => api.admin.dailyReport(date), [date])
   return (
     <Card>
-      <ReportHeader title={formatDate(date)} report={report.loading ? null : report.data} fileName={`nails-by-leyah-sales-${date}.pdf`}>
+      <ReportHeader title={formatDate(date)} report={report.loading ? null : report.data} fileName={`nails-by-leyah-sales-${date}.xlsx`}>
         <DayPicker label="Day" value={date} onChange={(value) => value && setDate(value)} align="end" />
       </ReportHeader>
       {report.loading && <PageLoader label="Building report…" />}
@@ -107,7 +106,7 @@ function MonthlyReport() {
   return (
     <Card>
       <ReportHeader title={new Date(year, month - 1, 1).toLocaleDateString('en-PH', { month: 'long', year: 'numeric' })}
-        report={report.loading ? null : report.data} fileName={`nails-by-leyah-sales-${value}.pdf`}>
+        report={report.loading ? null : report.data} fileName={`nails-by-leyah-sales-${value}.xlsx`}>
         <MonthPicker label="Month" value={value} onChange={setValue} align="end" />
       </ReportHeader>
       {report.loading && <PageLoader label="Building report…" />}
@@ -120,9 +119,6 @@ function MonthlyReport() {
 
 function ReportNotes() {
   return (
-    <p className="muted small report-notes">
-      Online payments and balances are counted on the day they were paid. Completed services, no-shows and unpaid balances are counted on the
-      appointment date. Bookings made and cancelled are counted on the day it happened.
-    </p>
+    <p className="muted small report-notes">Payments count on the day they were paid; everything else on the day it happened.</p>
   )
 }

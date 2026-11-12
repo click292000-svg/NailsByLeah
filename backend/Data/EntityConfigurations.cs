@@ -31,6 +31,7 @@ internal sealed class UserConfiguration : IEntityTypeConfiguration<User>
         b.Property(u => u.PasswordHash).HasMaxLength(100).IsRequired();
         b.Property(u => u.TermsVersion).HasMaxLength(20);
         b.Property(u => u.SecurityStamp).HasMaxLength(40).IsRequired();
+        b.Property(u => u.AdminNote).HasMaxLength(InputLimits.AdminNoteMaxLength);
 
         // Indexes on username and email (Ref 13.3) double as the UNIQUE constraints (Ref 6.2).
         b.HasIndex(u => u.Username).IsUnique().HasDatabaseName(IndexNames.UsersUsername);
@@ -51,6 +52,7 @@ internal sealed class CatalogServiceConfiguration : IEntityTypeConfiguration<Cat
         });
         b.Property(s => s.DurationMinutes).HasDefaultValue(CatalogService.DefaultDurationMinutes);
         b.Property(s => s.Name).HasMaxLength(InputLimits.ServiceNameMaxLength).IsRequired();
+        b.HasOne<CatalogService>().WithMany().HasForeignKey(s => s.DesignOptionOfId).OnDelete(DeleteBehavior.Restrict);
 
         b.HasDiscriminator<string>("category")
             .HasValue<SoftGelService>(SoftGelService.CategoryKey)
@@ -87,11 +89,15 @@ internal sealed class BookingConfiguration : IEntityTypeConfiguration<Booking>
         });
 
         b.Property(x => x.NailColor).HasMaxLength(InputLimits.NailColorMaxLength);
+        b.Property(x => x.PerNailColors).HasMaxLength(InputLimits.PerNailColorsMaxLength);
+        b.Property(x => x.ColorRequest).HasMaxLength(InputLimits.ColorRequestMaxLength);
         b.Property(x => x.TermsVersion).HasMaxLength(20);
         b.HasOne(x => x.RemovalService).WithMany().HasForeignKey(x => x.RemovalServiceId).OnDelete(DeleteBehavior.Restrict);
 
         b.Property(x => x.RowVersion).IsRowVersion();
         b.Property(x => x.Note).HasMaxLength(InputLimits.NoteMaxLength);
+        b.Property(x => x.GuestName).HasMaxLength(InputLimits.GuestNameMaxLength);
+        b.Property(x => x.GuestPhone).HasMaxLength(InputLimits.PhoneDigits);
         b.Property(x => x.BalanceReference).HasMaxLength(InputLimits.BalanceReferenceMaxLength);
         b.Property(x => x.RefundReference).HasMaxLength(InputLimits.BalanceReferenceMaxLength);
         b.HasOne(x => x.ConfirmedBy).WithMany().HasForeignKey(x => x.ConfirmedByUserId);
@@ -242,10 +248,23 @@ internal sealed class FeedbackConfiguration : IEntityTypeConfiguration<Feedback>
         b.ToTable("feedback", t =>
             t.HasCheckConstraint("ck_feedback_rating", $"[rating] BETWEEN {Feedback.MinRating} AND {Feedback.MaxRating}"));
         b.Property(x => x.Comment).HasMaxLength(InputLimits.FeedbackCommentMaxLength);
+        b.Property(x => x.Reply).HasMaxLength(InputLimits.FeedbackReplyMaxLength);
         b.HasOne(x => x.Client).WithMany().HasForeignKey(x => x.ClientId);
         b.HasIndex(x => x.SubmissionKey).IsUnique().HasDatabaseName(IndexNames.FeedbackSubmissionKey);
         b.HasIndex(x => x.CreatedAt).HasDatabaseName("ix_feedback_created_at");
         b.HasIndex(x => x.ClientId).HasDatabaseName("ix_feedback_client_id");
+    }
+}
+
+internal sealed class GalleryPhotoConfiguration : IEntityTypeConfiguration<GalleryPhoto>
+{
+    public void Configure(EntityTypeBuilder<GalleryPhoto> b)
+    {
+        b.ToTable("gallery_photos");
+        b.Property(x => x.FileName).HasMaxLength(100).IsRequired();
+        b.Property(x => x.ContentType).HasMaxLength(40).IsRequired();
+        b.Property(x => x.Caption).HasMaxLength(InputLimits.GalleryCaptionMaxLength);
+        b.HasIndex(x => x.CreatedAt).HasDatabaseName("ix_gallery_photos_created_at");
     }
 }
 
@@ -274,6 +293,7 @@ internal sealed class SalonSettingsConfiguration : IEntityTypeConfiguration<Salo
         b.Property(x => x.Bio).HasMaxLength(Services.SalonProfileService.BioMaxLength);
         b.Property(x => x.PhotoFileName).HasMaxLength(100);
         b.Property(x => x.PhotoContentType).HasMaxLength(40);
+        b.Property(x => x.OutOfStockColors).HasMaxLength(2000);
         b.HasData(new SalonSettings
         {
             Id = SalonSettings.SingletonId,

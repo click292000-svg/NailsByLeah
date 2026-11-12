@@ -40,6 +40,11 @@ public sealed class AdminBookingsController(IAdminBookingService bookings) : Con
     public Task<IReadOnlyList<BookingCalendarDayResponse>> Calendar([FromQuery] int year, [FromQuery] int month, CancellationToken ct) =>
         bookings.GetCalendarAsync(year, month, ct);
 
+    /// <summary>Leyah books an appointment herself, for a client with an account or a walk-in. It is confirmed straight away.</summary>
+    [HttpPost]
+    public async Task<ActionResult<BookingResponse>> Create(AdminCreateBookingRequest request, CancellationToken ct) =>
+        StatusCode(StatusCodes.Status201Created, await bookings.CreateByAdminAsync(User.GetUserId(), request, ct));
+
     [HttpPost("{id:int}/confirm")]
     public Task<BookingResponse> Confirm(int id, CancellationToken ct) => bookings.ConfirmAsync(User.GetUserId(), id, ct);
 
@@ -58,6 +63,11 @@ public sealed class AdminBookingsController(IAdminBookingService bookings) : Con
 
     [HttpPost("{id:int}/no-show")]
     public Task<BookingResponse> NoShow(int id, CancellationToken ct) => bookings.MarkNoShowAsync(id, ct);
+
+    /// <summary>Whether the salon has the shade a client asked for with "Can't find your colour?".</summary>
+    [HttpPost("{id:int}/color-request")]
+    public Task<BookingResponse> DecideColorRequest(int id, ColorRequestDecision request, CancellationToken ct) =>
+        bookings.DecideColorRequestAsync(id, request, ct);
 
     [HttpPost("{id:int}/reschedule")]
     public Task<BookingResponse> Reschedule(int id, RescheduleRequest request, CancellationToken ct) =>
@@ -96,6 +106,10 @@ public sealed class AdminClientDataController(IClientDataService clients, IClien
 
     [HttpGet("{id:int}")]
     public Task<ClientDataResponse> Get(int id, CancellationToken ct) => clients.GetAsync(id, ct);
+
+    /// <summary>Leyah's private note about the client; never shown to the client.</summary>
+    [HttpPut("{id:int}/note")]
+    public Task<ClientDataResponse> UpdateNote(int id, UpdateClientNoteRequest request, CancellationToken ct) => clients.UpdateNoteAsync(id, request, ct);
 
     /// <summary>Permanently erases the client's personal data. Refused while they have an open booking.</summary>
     [HttpPost("{id:int}/delete-data")]
@@ -218,6 +232,49 @@ public sealed class AdminFeedbackController(IFeedbackService feedback) : Control
     [HttpGet]
     public Task<FeedbackListResponse> List([FromQuery] int page = 1, [FromQuery] int pageSize = 20, CancellationToken ct = default) =>
         feedback.GetAllAsync(page, pageSize, ct);
+
+    /// <summary>Leyah's reply, shown to the client on their Feedback page; an empty reply removes it.</summary>
+    [HttpPut("{id:int}/reply")]
+    public Task<FeedbackResponse> Reply(int id, FeedbackReplyRequest request, CancellationToken ct) => feedback.ReplyAsync(id, request, ct);
+}
+
+/// <summary>The deposit, reschedule rules, how far ahead clients can book, and which shades are out of stock.</summary>
+[ApiController]
+[Authorize(Roles = Roles.Administrator)]
+[Route("api/admin/booking-rules")]
+public sealed class AdminBookingRulesController(IBookingRulesService rules) : ControllerBase
+{
+    [HttpGet]
+    public Task<BookingRulesResponse> Get(CancellationToken ct) => rules.GetSettingsAsync(ct);
+
+    [HttpPut]
+    public Task<BookingRulesResponse> Update(UpdateBookingRulesRequest request, CancellationToken ct) => rules.UpdateAsync(User.GetUserId(), request, ct);
+
+    [HttpPut("colors")]
+    public Task<BookingRulesResponse> SetColorStock(ColorStockRequest request, CancellationToken ct) => rules.SetColorStockAsync(User.GetUserId(), request, ct);
+}
+
+/// <summary>Leyah's photos for the home page's Our Works gallery.</summary>
+[ApiController]
+[Authorize(Roles = Roles.Administrator)]
+[Route("api/admin/gallery")]
+public sealed class AdminGalleryController(IGalleryService gallery) : ControllerBase
+{
+    [HttpGet]
+    public Task<IReadOnlyList<GalleryPhotoResponse>> List(CancellationToken ct) => gallery.GetAllAsync(ct);
+
+    [HttpPost]
+    [RequestSizeLimit(GalleryService.PhotoMaxBytes + 64 * 1024)]
+    [RequestFormLimits(MultipartBodyLengthLimit = GalleryService.PhotoMaxBytes + 64 * 1024)]
+    public async Task<ActionResult<GalleryPhotoResponse>> Add(IFormFile? file, [FromForm] string? caption, CancellationToken ct) =>
+        StatusCode(StatusCodes.Status201Created, await gallery.AddAsync(User.GetUserId(), file, caption, ct));
+
+    [HttpDelete("{id:int}")]
+    public async Task<IActionResult> Remove(int id, CancellationToken ct)
+    {
+        await gallery.RemoveAsync(id, ct);
+        return NoContent();
+    }
 }
 
 /// <summary>Leyah's salon details, photo and email alert switches (her profile page).</summary>

@@ -116,6 +116,11 @@ public sealed class CreateBookingRequestValidator : AbstractValidator<CreateBook
         RuleFor(x => x.TermsVersion).NotEmpty().WithMessage(TermsMessage);
         RuleFor(x => x.RemovalServiceId).GreaterThan(0).When(x => x.RemovalServiceId is not null).WithMessage("Select a removal.");
         RuleFor(x => x.NailColor).MaximumLength(InputLimits.NailColorMaxLength).WithMessage("Choose one of the listed colours.");
+        RuleFor(x => x.ColorRequest).MaximumLength(InputLimits.ColorRequestMaxLength)
+            .WithMessage($"Describe the colour in {InputLimits.ColorRequestMaxLength} characters or fewer.");
+        RuleFor(x => x.ColorRequestImageId).GreaterThan(0).When(x => x.ColorRequestImageId is not null).WithMessage("Choose a photo of the colour.");
+        RuleFor(x => x.PerNailColors).Must(c => c is null || ((c.Left?.Count ?? 0) <= StoneAddOn.MaxNailsPerHand && (c.Right?.Count ?? 0) <= StoneAddOn.MaxNailsPerHand))
+            .WithMessage($"Choose up to {StoneAddOn.MaxNailsPerHand} colours for each hand.");
         RuleFor(x => x.IdempotencyKey).NotEmpty().WithMessage("A payment request key is required.");
         RuleFor(x => x.ReferenceImageIds)
             .Must(ids => ids is null || ids.Count <= UploadLimits.ReferenceImagesPerBooking)

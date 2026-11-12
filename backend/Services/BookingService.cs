@@ -43,10 +43,19 @@ public interface IAdminBookingService
     /// <summary>Leyah sent back what a cancelled or no-show booking was owed.</summary>
     Task<BookingResponse> RecordRefundAsync(int bookingId, RecordRefundRequest request, CancellationToken ct = default);
 
+    /// <summary>Leyah says whether she has the shade a client asked for.</summary>
+    Task<BookingResponse> DecideColorRequestAsync(int bookingId, ColorRequestDecision decision, CancellationToken ct = default);
+
     /// <summary>The client did not come; only possible once the appointment time has arrived.</summary>
     Task<BookingResponse> MarkNoShowAsync(int bookingId, CancellationToken ct = default);
     Task<BookingResponse> RescheduleAsync(int bookingId, RescheduleRequest request, CancellationToken ct = default);
     Task<BookingResponse> CancelAsync(int adminId, int bookingId, AdminCancelRequest request, CancellationToken ct = default);
+
+    /// <summary>
+    /// Leyah books an appointment herself, for a client with an account or a walk-in without one. It is confirmed
+    /// straight away, and whatever was already paid (cash, GCash or Maya) is recorded as received and checked.
+    /// </summary>
+    Task<BookingResponse> CreateByAdminAsync(int adminId, AdminCreateBookingRequest request, CancellationToken ct = default);
 }
 
 /// <summary>Creates and manages bookings (Single Responsibility: BookingService, Ref 5.1).</summary>
@@ -64,7 +73,9 @@ public sealed class BookingService(
     ISalonClock clock,
     IOptions<BookingOptions> bookingOptions,
     IOptions<LegalOptions> legalOptions,
-    ISalonProfileService salonProfile) : IClientBookingService, IAdminBookingService
+    ISalonProfileService salonProfile,
+    IBookingRulesService bookingRules,
+    IUserRepository users) : IClientBookingService, IAdminBookingService
 {
     private const string SlotTakenMessage = "This time slot has just been booked by someone else. Please choose another slot.";
 
@@ -87,7 +98,13 @@ public sealed class BookingService(
                 "The booking policy and Terms & Conditions have been updated. Please read them again and agree before paying.", "terms_outdated");
 
         var selection = await prices.ResolveSelectionAsync(request.ServiceId, request.AddOns, request.RemovalServiceId, ct);
-        var nailColor = ResolveColor(selection.Service, request.NailColor);
+        var rules = await bookingRules.GetAsync(ct);
+        var colorRequest = ResolveColorRequest(selection.Service, request.ColorRequest, request.ColorRequestImageId);
+        var perNailColors = ResolvePerNailColors(selection.Service, request.PerNailColors, rules);
+        // A colour request, or a colour on every nail, stands in for the one main colour.
+        var everyNail = request.PerNailColors is { Left: { } l, Right: { } r } && l.Count(c => !string.IsNullOrWhiteSpace(c)) == StoneAddOn.MaxNailsPerHand
+                        && r.Count(c => !string.IsNullOrWhiteSpace(c)) == StoneAddOn.MaxNailsPerHand;
+        var nailColor = ResolveColor(selection.Service, request.NailColor, colorRequest is not null || (perNailColors is not null && everyNail), rules);
         var quote = prices.Calculate(selection);
         var duration = selection.DurationMinutes;
         try
@@ -127,6 +144,9 @@ public sealed class BookingService(
                     RemovalServiceId = selection.Removal?.Id,
                     RemovalPrice = selection.Removal?.CalculatePrice(1) ?? 0,
                     NailColor = nailColor,
+                    PerNailColors = perNailColors,
+                    ColorRequest = colorRequest,
+                    ColorRequestStatus = colorRequest is null ? null : ColorRequestStatus.Pending,
                     TermsVersion = legalOptions.Value.TermsVersion,
                     DepositAmount = quote.Deposit,
                     BookingDate = request.BookingDate,
@@ -150,6 +170,8 @@ public sealed class BookingService(
 
                 // Design photos uploaded during the booking become part of it (rolled back with everything else).
                 await referenceImages.AttachAsync(clientId, booking, request.ReferenceImageIds, tx);
+                if (colorRequest is not null && request.ColorRequestImageId is { } colorImageId)
+                    await referenceImages.AttachColorReferenceAsync(clientId, booking, colorImageId, tx);
 
                 // The draft has become a real booking. Deleted in this transaction, so a failed payment keeps it.
                 await drafts.DeleteForClientAsync(clientId, tx);
@@ -184,14 +206,17 @@ public sealed class BookingService(
 
         var details = await bookings.GetDetailsAsync(outcome.NewBooking.Id, ct) ?? outcome.NewBooking;
         await NotifyConfirmedAsync(details, outcome.Payment);
-        return (new CreateBookingResponse(Map(details, includeClient: false), BookingMapper.ToReceipt(outcome.Payment, details)), true);
+        return (new CreateBookingResponse(Map(details, includeClient: false, rules.RescheduleLimit), BookingMapper.ToReceipt(outcome.Payment, details)), true);
     }
 
-    public async Task<IReadOnlyList<BookingResponse>> GetHistoryAsync(int clientId, CancellationToken ct = default) =>
-        (await bookings.GetForClientAsync(clientId, ct)).Select(b => Map(b, includeClient: false)).ToList();
+    public async Task<IReadOnlyList<BookingResponse>> GetHistoryAsync(int clientId, CancellationToken ct = default)
+    {
+        var limit = (await bookingRules.GetAsync(ct)).RescheduleLimit;
+        return (await bookings.GetForClientAsync(clientId, ct)).Select(b => Map(b, includeClient: false, limit)).ToList();
+    }
 
     public async Task<BookingResponse> GetAsync(int clientId, int bookingId, CancellationToken ct = default) =>
-        Map(await GetOwnedAsync(clientId, bookingId, ct), includeClient: false);
+        Map(await GetOwnedAsync(clientId, bookingId, ct), includeClient: false, (await bookingRules.GetAsync(ct)).RescheduleLimit);
 
     public async Task<ReceiptResponse> GetReceiptAsync(int clientId, int bookingId, CancellationToken ct = default)
     {
@@ -204,13 +229,20 @@ public sealed class BookingService(
     public async Task<BookingResponse> RescheduleAsync(int clientId, int bookingId, RescheduleRequest request, CancellationToken ct = default)
     {
         var booking = await GetOwnedAsync(clientId, bookingId, ct);
-        var minimumHours = bookingOptions.Value.RescheduleMinimumHours;
+        var rules = await bookingRules.GetAsync(ct);
+        if (booking.RescheduleCount >= rules.RescheduleLimit)
+            throw new ConflictException(
+                rules.RescheduleLimit == 0
+                    ? "Appointments can't be rescheduled online. Please message Leyah if you need to move it."
+                    : $"This appointment has already been rescheduled {rules.RescheduleLimit} {(rules.RescheduleLimit == 1 ? "time" : "times")}. Please message Leyah if you need to move it again.",
+                "reschedule_limit_reached");
+        var minimumHours = rules.RescheduleMinimumHours;
         if ((booking.StartsAtLocal - clock.LocalNow).TotalHours < minimumHours)
             throw new ConflictException(
                 $"Appointments can only be rescheduled at least {minimumHours} hours before the scheduled time.", "reschedule_window_passed");
 
         var (fromDate, fromTime) = (booking.BookingDate, booking.StartTime);
-        var moved = await MoveAsync(booking, request, ct);
+        var moved = await MoveAsync(booking, request, ct, countForClient: true);
         if (await salonProfile.WantsAlertAsync(SalonAlert.Reschedule, ct))
             await background.EnqueueAsync((n, stop) => n.SendSalonRescheduleAsync(booking, fromDate, fromTime, stop), $"reschedule alert for booking {booking.Id}");
         return moved;
@@ -234,8 +266,11 @@ public sealed class BookingService(
         return Map(cancelled, includeClient: false);
     }
 
-    /// <summary>The colour must be one on the salon's list; a removal on its own has none.</summary>
-    private string? ResolveColor(CatalogService service, string? requested)
+    /// <summary>
+    /// The colour must be one on the salon's list; a removal on its own has none. With a colour request the client
+    /// describes a shade that isn't listed, so no listed colour is needed.
+    /// </summary>
+    private string? ResolveColor(CatalogService service, string? requested, bool hasColorRequest, BookingRules? rules)
     {
         var color = string.IsNullOrWhiteSpace(requested) ? null : InputNormalizer.Text(requested);
         if (!service.NeedsColor())
@@ -244,19 +279,187 @@ public sealed class BookingService(
         if (colors.Length == 0)
             return color; // no list configured: nothing to choose from, so nothing is required
         if (color is null)
-            throw new ValidationAppException("nailColor", "Choose a nail colour.");
-        return colors.FirstOrDefault(c => string.Equals(c, color, StringComparison.OrdinalIgnoreCase))
-               ?? throw new ValidationAppException("nailColor", "Choose one of the listed colours.");
+            return hasColorRequest ? null : throw new ValidationAppException("nailColor", "Choose a nail colour.");
+        var listed = MatchListed(color) ?? throw new ValidationAppException("nailColor", "Choose one of the listed colours.");
+        return InStock(listed, rules, "nailColor");
+    }
+
+    /// <summary>Clients can't pick a shade Leyah has run out of; she can (rules is null for her own bookings).</summary>
+    private static string InStock(string listed, BookingRules? rules, string field) =>
+        rules is not null && rules.IsOutOfStock(listed)
+            ? throw new ValidationAppException(field, $"{listed} is out of stock at the moment. Please choose another shade.", "color_out_of_stock")
+            : listed;
+
+    private string? MatchListed(string color) =>
+        bookingOptions.Value.NailColors.FirstOrDefault(c => string.Equals(c, color, StringComparison.OrdinalIgnoreCase));
+
+    /// <summary>"Can't find your colour?": a photo needs a description, and only a new set has a colour.</summary>
+    private static string? ResolveColorRequest(CatalogService service, string? description, int? imageId)
+    {
+        var text = string.IsNullOrWhiteSpace(description) ? null : InputNormalizer.Text(description);
+        if (text is null && imageId is not null)
+            throw new ValidationAppException("colorRequest", "Describe the colour you're looking for.");
+        return service.NeedsColor() ? text : null;
+    }
+
+    /// <summary>Each nail's colour, from the chart only; stored as JSON with five places per hand, thumb first.</summary>
+    private string? ResolvePerNailColors(CatalogService service, NailColorsRequest? requested, BookingRules rules)
+    {
+        if (requested is null || !service.NeedsColor())
+            return null;
+        string?[] Hand(IReadOnlyList<string?>? nails, string field)
+        {
+            var result = new string?[StoneAddOn.MaxNailsPerHand];
+            for (var i = 0; i < Math.Min(result.Length, nails?.Count ?? 0); i++)
+            {
+                var color = string.IsNullOrWhiteSpace(nails![i]) ? null : InputNormalizer.Text(nails[i]!);
+                if (color is null)
+                    continue;
+                result[i] = InStock((MatchListed(color) is { } listed && listed.StartsWith('#') ? listed : null)
+                            ?? throw new ValidationAppException(field, "Choose each nail's colour from the colour chart."), rules, field);
+            }
+            return result;
+        }
+        var left = Hand(requested.Left, "perNailColors.left");
+        var right = Hand(requested.Right, "perNailColors.right");
+        if (left.All(c => c is null) && right.All(c => c is null))
+            return null;
+        return PerNailColorsJson.Write(left, right);
     }
 
     // ---- Administrator operations ----
+
+    public async Task<BookingResponse> CreateByAdminAsync(int adminId, AdminCreateBookingRequest request, CancellationToken ct = default)
+    {
+        // Who it is for: a client with an account, or a walk-in typed in by name (the booking then sits on Leyah's account).
+        var guestName = string.IsNullOrWhiteSpace(request.GuestName) ? null : InputNormalizer.Text(request.GuestName);
+        var guestPhone = string.IsNullOrWhiteSpace(request.GuestPhone) ? null : request.GuestPhone.Trim();
+        int clientId;
+        if (request.ClientId is { } id)
+        {
+            var client = await users.GetByIdAsync(id, ct);
+            if (client is not { Role: UserRole.Client, IsDeleted: false })
+                throw new ValidationAppException("clientId", "Choose a client from the list.");
+            clientId = client.Id;
+            guestName = null;
+            guestPhone = null;
+        }
+        else
+        {
+            if (guestName is null)
+                throw new ValidationAppException("guestName", "Choose a client, or type the walk-in client's name.");
+            if (guestName.Length > InputLimits.GuestNameMaxLength)
+                throw new ValidationAppException("guestName", $"The name must be {InputLimits.GuestNameMaxLength} characters or fewer.");
+            if (guestPhone is not null && (guestPhone.Length != InputLimits.PhoneDigits || !guestPhone.All(char.IsAsciiDigit)))
+                throw new ValidationAppException("guestPhone", "Not a valid phone number.");
+            clientId = adminId;
+        }
+
+        PaymentOption? paidOption = request.Paid switch
+        {
+            "None" or null or "" => null,
+            "Deposit" => PaymentOption.Deposit,
+            "Full" => PaymentOption.Full,
+            _ => throw new ValidationAppException("paid", "Choose what was paid: nothing yet, the deposit or the full amount."),
+        };
+        var reference = CleanBalanceReference(request.PaymentReference);
+
+        var selection = await prices.ResolveSelectionAsync(request.ServiceId, request.AddOns, request.RemovalServiceId, ct);
+        // Leyah may leave the colour for the salon, and may use a shade she has just run out of.
+        var nailColor = string.IsNullOrWhiteSpace(request.NailColor) ? null : ResolveColor(selection.Service, request.NailColor, hasColorRequest: true, rules: null);
+        var quote = prices.Calculate(selection);
+        var duration = selection.DurationMinutes;
+        await slots.EnsureBookableAsync(request.BookingDate, request.StartTime, duration, movingBookingId: null, ct);
+
+        Booking created;
+        try
+        {
+            created = await unitOfWork.ExecuteInTransactionAsync(async tx =>
+            {
+                await bookings.LockDayAsync(request.BookingDate, tx);
+                await slots.EnsureFreeAsync(request.BookingDate, request.StartTime, duration, movingBookingId: null, tx);
+
+                var now = clock.UtcNow;
+                var booking = new Booking
+                {
+                    ClientId = clientId,
+                    GuestName = guestName,
+                    GuestPhone = guestPhone,
+                    CreatedByAdmin = true,
+                    ServiceId = selection.Service.Id,
+                    ServicePrice = selection.Service.CalculatePrice(1),
+                    RemovalServiceId = selection.Removal?.Id,
+                    RemovalPrice = selection.Removal?.CalculatePrice(1) ?? 0,
+                    NailColor = nailColor,
+                    DepositAmount = quote.Deposit,
+                    BookingDate = request.BookingDate,
+                    StartTime = request.StartTime,
+                    DurationMinutes = duration,
+                    Note = string.IsNullOrWhiteSpace(request.Note) ? null : InputNormalizer.Text(request.Note),
+                    Status = BookingStatus.Pending,
+                    CreatedAt = now,
+                    UpdatedAt = now,
+                    AddOns = selection.AddOns.Select(a => new BookingAddOn
+                    {
+                        AddOnId = a.AddOn.Id,
+                        NailCount = a.NailCount,
+                        Hand = a.Hand,
+                        LinePrice = a.AddOn.CalculatePrice(a.NailCount),
+                    }).ToList(),
+                };
+                bookings.Add(booking);
+                await unitOfWork.SaveChangesAsync(tx); // assigns the id
+
+                if (paidOption is { } option)
+                {
+                    var amount = booking.AmountFor(option);
+                    payments.Add(new Payment
+                    {
+                        BookingId = booking.Id,
+                        ClientId = clientId,
+                        Method = request.PaymentMethod,
+                        Option = option,
+                        Amount = amount,
+                        TotalAmount = booking.TotalPrice,
+                        BalanceAfter = Math.Max(0, booking.TotalPrice - amount),
+                        // Cash has no provider reference; the booking number keeps the receipt readable.
+                        ReferenceNumber = reference ?? $"{request.PaymentMethod.ToString().ToUpperInvariant()}-{booking.Id}",
+                        IdempotencyKey = Guid.NewGuid(),
+                        Status = PaymentStatus.Succeeded,
+                        PaidAt = now,
+                        CreatedAt = now,
+                        VerifiedAt = now,
+                        VerifiedByUserId = adminId,
+                    });
+                    booking.RecordPayment(option, amount);
+                }
+                booking.Confirm(adminId, now);
+                audit.Record(AuditActions.BookingCreatedByAdmin, nameof(Booking), booking.Id,
+                    $"{selection.Service.Name}{(selection.Removal is { } r ? $" + removal ({r.Name})" : "")} on {Describe(booking.BookingDate, booking.StartTime)} for "
+                    + (guestName is null ? $"client #{clientId}" : $"walk-in {guestName}")
+                    + (paidOption is { } o ? $", {Labels.For(o).ToLowerInvariant()} PHP {booking.AmountPaid:0.00} by {request.PaymentMethod}" : ", nothing paid yet"));
+                await unitOfWork.SaveChangesAsync(tx);
+                return booking;
+            }, ct);
+        }
+        catch (UniqueConstraintViolationException ex) when (ex.IndexName == IndexNames.BookingsActiveSlot)
+        {
+            throw new ConflictException(SlotTakenMessage, "slot_unavailable");
+        }
+
+        var details = await ReloadAsync(created.Id, ct);
+        // A client with an account hears about it like any confirmed booking; a walk-in has no email to send to.
+        if (guestName is null)
+            await background.EnqueueAsync((n, stop) => n.SendBookingApprovedAsync(details, stop), $"confirmed email for booking {details.Id}");
+        return Map(details, includeClient: true);
+    }
 
     public async Task<PagedResponse<BookingResponse>> SearchAsync(BookingSearchQuery query, CancellationToken ct = default)
     {
         var page = Math.Max(1, query.Page);
         var pageSize = Math.Clamp(query.PageSize, 1, 100);
         var (items, total) = await bookings.SearchAsync(
-            new BookingSearchCriteria(query.Date, query.Status, query.ClientName, page, pageSize, query.ServiceId), ct);
+            new BookingSearchCriteria(query.Date, query.Status, query.ClientName, page, pageSize, query.ServiceId, query.Open), ct);
         return new PagedResponse<BookingResponse>(items.Select(b => Map(b, includeClient: true)).ToList(), page, pageSize, total);
     }
 
@@ -336,6 +539,16 @@ public sealed class BookingService(
         return Map(booking, includeClient: true);
     }
 
+    public async Task<BookingResponse> DecideColorRequestAsync(int bookingId, ColorRequestDecision decision, CancellationToken ct = default)
+    {
+        var booking = await ReloadAsync(bookingId, ct);
+        booking.DecideColorRequest(decision.Available, clock.UtcNow);
+        audit.Record(AuditActions.ColorRequestDecided, nameof(Booking), booking.Id,
+            $"'{booking.ColorRequest}': {(decision.Available ? "available" : "not available")}");
+        await unitOfWork.SaveChangesAsync(ct);
+        return Map(booking, includeClient: true);
+    }
+
     public async Task<BookingResponse> MarkNoShowAsync(int bookingId, CancellationToken ct = default)
     {
         var booking = await ReloadAsync(bookingId, ct);
@@ -400,7 +613,7 @@ public sealed class BookingService(
         await unitOfWork.SaveChangesAsync(ct);
     }
 
-    private async Task<BookingResponse> MoveAsync(Booking booking, RescheduleRequest request, CancellationToken ct, bool includeClient = false)
+    private async Task<BookingResponse> MoveAsync(Booking booking, RescheduleRequest request, CancellationToken ct, bool includeClient = false, bool countForClient = false)
     {
         if (!booking.IsActive)
             throw new ConflictException($"A {booking.Status} booking cannot be rescheduled.", "invalid_status");
@@ -418,6 +631,8 @@ public sealed class BookingService(
                 await slots.EnsureFreeAsync(request.BookingDate, request.StartTime, booking.DurationMinutes, booking.Id, tx);
 
                 booking.MoveTo(request.BookingDate, request.StartTime, clock.UtcNow);
+                if (countForClient)
+                    booking.RescheduleCount++;
                 audit.Record(AuditActions.BookingRescheduled, nameof(Booking), booking.Id,
                     $"{from} -> {Describe(request.BookingDate, request.StartTime)}");
                 return booking.Id;
@@ -457,7 +672,8 @@ public sealed class BookingService(
             await background.EnqueueAsync((n, stop) => n.SendSalonNewBookingAsync(booking, payment, stop), $"new booking alert for booking {booking.Id}");
     }
 
-    private static BookingResponse Map(Booking booking, bool includeClient) => BookingMapper.ToResponse(booking, includeClient);
+    private static BookingResponse Map(Booking booking, bool includeClient, int rescheduleLimit = Booking.ClientRescheduleLimit) =>
+        BookingMapper.ToResponse(booking, includeClient, rescheduleLimit);
 
     private static string Describe(DateOnly date, TimeOnly time) => $"{date:yyyy-MM-dd} {time:HH\\:mm}";
 
@@ -466,7 +682,7 @@ public sealed class BookingService(
 
 public static class BookingMapper
 {
-    public static BookingResponse ToResponse(Booking b, bool includeClient) => new(
+    public static BookingResponse ToResponse(Booking b, bool includeClient, int rescheduleLimit = Booking.ClientRescheduleLimit) => new(
         b.Id,
         b.Status.ToString(),
         b.BookingDate,
@@ -487,7 +703,7 @@ public static class BookingMapper
             : null,
         includeClient
             ? new ClientSummaryResponse(b.Client.Id, b.Client.FirstName, b.Client.LastName, b.Client.Username, b.Client.Email, b.Client.PhoneNumber,
-                ClientProfileService.AdminPhotoUrl(b.Client))
+                ClientProfileService.AdminPhotoUrl(b.Client), b.GuestName is null ? b.Client.AdminNote : null)
             : null,
         b.ReferenceImages.Where(r => !r.IsDeleted).OrderBy(r => r.Id).Select(ReferenceImageService.ToResponse).ToList(),
         b.DurationMinutes,
@@ -498,7 +714,15 @@ public static class BookingMapper
         b.RemovalPrice,
         b.NailColor,
         b.TermsVersion,
-        b.TermsAcceptedAt);
+        b.TermsAcceptedAt,
+        PerNailColorsJson.Read(b.PerNailColors),
+        b.ColorRequest,
+        b.ColorRequestStatus?.ToString(),
+        b.RescheduleCount,
+        rescheduleLimit,
+        b.GuestName,
+        b.GuestPhone,
+        b.CreatedByAdmin);
 
     // The first successful payment (bookings are paid once, when they are made).
     private static BookingPaymentResponse PaymentOf(Booking b)
@@ -515,7 +739,7 @@ public static class BookingMapper
         p.Id, b.Id, p.ReferenceNumber, p.Method.ToString(), p.Amount, "PHP", p.PaidAt, p.Status.ToString(),
         Refundable: false, b.ServiceDescription, b.BookingDate, b.StartTime,
         p.Option.ToString(), Labels.For(p.Option), b.TotalPrice, b.BalanceDue, b.Status.ToString(),
-        ClientName: b.Client is { } c ? $"{c.FirstName} {c.LastName}" : null,
+        ClientName: b.GuestName ?? (b.Client is { } c ? $"{c.FirstName} {c.LastName}" : null),
         Lines: ReceiptLines(b),
         Verified: p.VerifiedAt is not null,
         VerifiedAt: p.VerifiedAt,
@@ -534,5 +758,23 @@ public static class BookingMapper
         lines.AddRange(b.AddOns.Select(a => new ReceiptLineResponse(
             $"{a.AddOn?.Name ?? "Stone add-on"} ({Labels.For(a.Hand).ToLowerInvariant()}, {a.NailCount} {(a.NailCount == 1 ? "nail" : "nails")})", a.LinePrice)));
         return lines;
+    }
+}
+
+/// <summary>The per-nail colours column: {"left":[5],"right":[5]}, a null for a nail with the main colour.</summary>
+public static class PerNailColorsJson
+{
+    private sealed record Stored(string?[] Left, string?[] Right);
+
+    private static readonly System.Text.Json.JsonSerializerOptions Options = new(System.Text.Json.JsonSerializerDefaults.Web);
+
+    public static string Write(string?[] left, string?[] right) => System.Text.Json.JsonSerializer.Serialize(new Stored(left, right), Options);
+
+    public static NailColorsRequest? Read(string? json)
+    {
+        if (string.IsNullOrEmpty(json))
+            return null;
+        var stored = System.Text.Json.JsonSerializer.Deserialize<Stored>(json, Options);
+        return stored is null ? null : new NailColorsRequest(stored.Left, stored.Right);
     }
 }

@@ -119,8 +119,9 @@ export function SlotPicker({ date, onDateChange, selectedTime, onTimeChange, ser
                         {group.map((slot) => {
                           const isCurrent = keepTime && slot.startTime === keepTime
                           const open = slot.status === 'Open'
-                          const isLast = slot === lastOpen
                           const selected = selectedTime === slot.startTime
+                          // "Last time" is pointed out only once the client picks that time, not on the list itself.
+                          const isLast = slot === lastOpen && selected
                           const range = `${formatTime(slot.startTime)} – ${formatTime(slot.endTime)}`
                           // The exact reason when there is one ("Break until 1:30 PM", "Too close to the 11:30 AM appointment").
                           const reason = isCurrent ? 'Current' : slot.note ?? STATUS_TEXT[slot.status]

@@ -9,13 +9,16 @@ import { LegalDocumentModal } from './Modal'
 import { salon } from '../content/salon'
 import { formatPhone, useSalon } from './SalonProfile'
 import { apiPhotoSrc } from '../lib/photos'
+import { api } from '../api'
+import { useAsync } from '../hooks/useAsync'
 
 const YEAR = new Date().getFullYear()
 
-const clientLinks = [
+// "Rate us" appears once the client has had a successful (completed) visit.
+const clientLinks = (canRate) => [
   { to: '/book', label: 'Book now' },
   { to: '/bookings', label: 'My bookings' },
-  { to: '/feedback', label: 'Rate us' },
+  ...(canRate ? [{ to: '/feedback', label: 'Rate us' }] : []),
 ]
 
 export function Layout() {
@@ -35,7 +38,12 @@ export function Layout() {
 
   const isAdmin = user?.role === 'Administrator'
   const isHome = location.pathname === '/'
-  const links = user ? clientLinks : []
+  // Checked again when the client signs in or moves between their own pages, so a visit Leyah just completed shows up.
+  const isClientPage = ['/book', '/bookings', '/feedback', '/profile'].includes(location.pathname)
+  const visits = useAsync(() => (user?.role === 'Client' ? api.bookings.history().catch(() => []) : Promise.resolve([])),
+    [user?.id, user?.role, isClientPage && location.pathname])
+  const canRate = (visits.data ?? []).some((b) => b.status === 'Completed')
+  const links = user ? clientLinks(canRate) : []
   // Explore and Pricing glide to their home page section (HomePage reads the hash).
   const homeLinks = [{ to: '/#tour', label: 'Explore' }, { to: '/#prices', label: 'Pricing' }]
 
@@ -73,7 +81,8 @@ export function Layout() {
                 <ClientAccountMenu user={user} photo={apiPhotoSrc(user.photoUrl, user.photoDataUrl)} onSignOut={signOut} />
               ) : (
                 <div className="nav-user">
-                  <NavLink to="/login" className="nav-link">Log in</NavLink>
+                  {/* The same pill as Sign up, outlined, so the two read as a pair. */}
+                  <NavLink to="/login" className={({ isActive }) => (isActive ? 'btn btn-secondary btn-sm is-current' : 'btn btn-secondary btn-sm')}>Log in</NavLink>
                   <Link to="/register" className="btn btn-primary btn-sm">Sign up</Link>
                 </div>
               )}

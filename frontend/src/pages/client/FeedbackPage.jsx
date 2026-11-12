@@ -12,6 +12,7 @@ import { StarRating, Stars } from '../../components/StarRating'
 /** Clients rate their experience: a 1-5 star rating is required, the comment is optional. */
 export default function FeedbackPage() {
   const mine = useAsync(() => api.feedback.mine(), [])
+  const visits = useAsync(() => api.bookings.history().catch(() => []), [])
   const [rating, setRating] = useState(0)
   const [comment, setComment] = useState('')
   // A new key per form: repeated clicks on Submit are saved once (the server returns the first result).
@@ -50,6 +51,14 @@ export default function FeedbackPage() {
   return (
     <div className="narrow stack">
       <PageHeader title="Rate your experience" subtitle="Tell Leyah how your nails turned out. It only takes a moment." />
+      {visits.data && !visits.data.some((b) => b.status === 'Completed') ? (
+        <Card>
+          <div className="stack">
+            <p className="muted">You can rate us after your first appointment. We&apos;d love to hear how your nails turned out!</p>
+            <Link to="/bookings" className="btn btn-secondary">My bookings</Link>
+          </div>
+        </Card>
+      ) : (
       <Card>
         {thanks ? (
           <div className="stack feedback-thanks">
@@ -75,6 +84,7 @@ export default function FeedbackPage() {
           </form>
         )}
       </Card>
+      )}
 
       {mine.data?.length > 0 && (
         <Card title="Your past feedback">
@@ -83,6 +93,12 @@ export default function FeedbackPage() {
               <li key={f.id}>
                 <div className="feedback-meta"><Stars rating={f.rating} size="sm" /> <span className="muted small">{formatDate(toIsoDate(new Date(f.createdAt)))}</span></div>
                 {f.comment ? <p>{f.comment}</p> : <p className="muted small">No comment</p>}
+                {f.reply && (
+                  <div className="feedback-reply">
+                    <span className="feedback-reply-label">Leyah replied</span>
+                    <p>{f.reply}</p>
+                  </div>
+                )}
               </li>
             ))}
           </ul>

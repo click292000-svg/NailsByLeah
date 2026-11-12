@@ -38,7 +38,11 @@ public sealed record TokenRequest(string Token);
 /// <summary>What the salon holds about one client, shown before erasing it at the client's request.</summary>
 public sealed record ClientDataResponse(
     int Id, string FirstName, string LastName, string Username, string Email, string PhoneNumber,
-    int BookingCount, int ActiveBookingCount, int PhotoCount, int FeedbackCount);
+    int BookingCount, int ActiveBookingCount, int PhotoCount, int FeedbackCount,
+    string? AdminNote = null, int NoShowCount = 0, int CancelledCount = 0);
+
+/// <summary>Leyah's private note about a client; empty clears it.</summary>
+public sealed record UpdateClientNoteRequest(string? Note);
 
 /// <summary>What a signed-in user may change about themselves. Username and email stay as they are.</summary>
 public sealed record UpdateProfileRequest(string FirstName, string LastName, string PhoneNumber);
@@ -59,7 +63,8 @@ public sealed record UserProfileResponse(
 public sealed record ServiceItemResponse(
     int Id, string Category, string CategoryLabel, string Name, decimal Price, string PricingUnit, int MaxQuantity, bool IsActive,
     int? DurationMinutes = null, // minutes for main services; null for add-ons
-    bool AllowsAddOns = false); // whether Stone add-ons can be chosen with this service
+    bool AllowsAddOns = false, // whether Stone add-ons can be chosen with this service
+    int? DesignOptionOfId = null); // set on a "with design" version: the service whose card shows it as an option
 
 public sealed record CatalogResponse(
     IReadOnlyList<ServiceItemResponse> Services,
@@ -68,7 +73,11 @@ public sealed record CatalogResponse(
     bool DepositRefundable,
     string Currency,
     IReadOnlyList<string>? NailColors = null,
-    string TermsVersion = "");
+    string TermsVersion = "",
+    IReadOnlyList<string>? OutOfStockColors = null, // chart shades Leyah has run out of; clients can't pick them
+    int RescheduleLimit = 2,
+    int RescheduleMinimumHours = 24,
+    int MaxDaysAhead = 30);
 
 /// <summary>Hand is required when booking (Left or Right for up to 5 nails, Both for any number); price quotes ignore it.</summary>
 public sealed record AddOnSelection(int AddOnId, int NailCount, NailHand? Hand = null);
@@ -141,8 +150,37 @@ public sealed record CreateBookingRequest(
     string? Note = null, // typed note for Leyah, optional
     PaymentOption PaymentOption = PaymentOption.Deposit, // the amount is worked out by the server, never sent by the browser
     int? RemovalServiceId = null, // a removal before the main service, in the same appointment
-    string? NailColor = null, // required when the service takes add-ons, from the catalog's list
-    string? TermsVersion = null); // the Terms version the client read and agreed to; must be the current one
+    string? NailColor = null, // required for a new set (unless ColorRequest is given), from the catalog's list
+    string? TermsVersion = null, // the Terms version the client read and agreed to; must be the current one
+    NailColorsRequest? PerNailColors = null, // optional: a different listed colour on each nail, five per hand
+    string? ColorRequest = null, // "Can't find your colour?": the client's description of a shade not on the chart
+    int? ColorRequestImageId = null); // an optional photo of that shade, uploaded like a design photo
+
+/// <summary>
+/// A booking Leyah makes herself: for a client with an account (ClientId), or for a walk-in or Messenger client without
+/// one (GuestName and GuestPhone; the booking then sits on her own account). It is confirmed straight away. What was
+/// paid is recorded as received: nothing yet, the deposit or the full amount, in cash, GCash or Maya.
+/// </summary>
+public sealed record AdminCreateBookingRequest(
+    int ServiceId,
+    DateOnly BookingDate,
+    TimeOnly StartTime,
+    int? ClientId = null,
+    string? GuestName = null,
+    string? GuestPhone = null,
+    IReadOnlyList<AddOnSelection>? AddOns = null,
+    int? RemovalServiceId = null,
+    string? NailColor = null,
+    string? Note = null,
+    string Paid = "None", // None, Deposit or Full
+    PaymentMethod PaymentMethod = PaymentMethod.Cash,
+    string? PaymentReference = null);
+
+/// <summary>A colour for each nail, thumb to little finger; a null nail has the set's main colour.</summary>
+public sealed record NailColorsRequest(IReadOnlyList<string?>? Left, IReadOnlyList<string?>? Right);
+
+/// <summary>Leyah's answer to a colour request: whether she has that shade.</summary>
+public sealed record ColorRequestDecision(bool Available);
 
 public sealed record RescheduleRequest(DateOnly BookingDate, TimeOnly StartTime);
 
@@ -178,7 +216,7 @@ public sealed record AccountSecurityResponse(DateTime? PreviousSignInAt, string?
 public sealed record RecordRefundRequest(string? RefundReference);
 
 public sealed record ClientSummaryResponse(int Id, string FirstName, string LastName, string Username, string Email, string PhoneNumber,
-    string? PhotoUrl = null);
+    string? PhotoUrl = null, string? AdminNote = null); // AdminNote: Leyah's private note; only sent to administrators
 
 public sealed record BookingAddOnResponse(int AddOnId, string Name, int NailCount, decimal LinePrice, string Hand, string HandLabel);
 
@@ -211,7 +249,15 @@ public sealed record BookingResponse(
     decimal RemovalPrice = 0,
     string? NailColor = null,
     string? TermsVersion = null,
-    DateTime? TermsAcceptedAt = null);
+    DateTime? TermsAcceptedAt = null,
+    NailColorsRequest? PerNailColors = null,
+    string? ColorRequest = null,
+    string? ColorRequestStatus = null, // Pending, Available or Unavailable; null without a request
+    int RescheduleCount = 0, // times the client has moved it; clients may do this RescheduleLimit times
+    int RescheduleLimit = 0,
+    string? GuestName = null, // who the appointment is for when it isn't the account holder (a walk-in Leyah booked)
+    string? GuestPhone = null,
+    bool CreatedByAdmin = false);
 
 /// <summary>
 /// How the booking was paid. AmountPaid includes the deposit; BalanceDue on the booking is what is left for the salon.
@@ -225,7 +271,7 @@ public sealed record BookingPaymentResponse(
     decimal RefundDue = 0, DateTime? RefundSentAt = null, string? RefundReference = null);
 
 /// <summary>An uploaded design photo. The file is at GET /api/reference-images/{id}.</summary>
-public sealed record ReferenceImageResponse(int Id, string ContentType, long SizeBytes, DateTime CreatedAt);
+public sealed record ReferenceImageResponse(int Id, string ContentType, long SizeBytes, DateTime CreatedAt, bool IsColorReference = false);
 
 public sealed record ReceiptResponse(
     int PaymentId,
@@ -268,6 +314,9 @@ public sealed class BookingSearchQuery
 
     /// <summary>Bookings with this service, as the main service or the removal before it.</summary>
     public int? ServiceId { get; set; }
+
+    /// <summary>Only bookings still open (pending or confirmed), soonest first. Ignored when Status is given.</summary>
+    public bool Open { get; set; }
     public int Page { get; set; } = 1;
     public int PageSize { get; set; } = 20;
 }
@@ -287,7 +336,26 @@ public sealed record SaveBookingDraftRequest(System.Text.Json.JsonElement Data);
 /// <summary>Comment is optional. Resending the same SubmissionKey returns the first result instead of saving twice.</summary>
 public sealed record SubmitFeedbackRequest(int Rating, string? Comment, Guid SubmissionKey);
 
-public sealed record FeedbackResponse(int Id, int Rating, string? Comment, DateTime CreatedAt, ClientSummaryResponse? Client);
+public sealed record FeedbackResponse(int Id, int Rating, string? Comment, DateTime CreatedAt, ClientSummaryResponse? Client,
+    string? Reply = null, DateTime? RepliedAt = null);
+
+/// <summary>Leyah's reply to a piece of feedback; empty removes it.</summary>
+public sealed record FeedbackReplyRequest(string? Reply);
+
+/// <summary>A photo in the home page's Our Works gallery.</summary>
+public sealed record GalleryPhotoResponse(int Id, string Url, string? Caption, DateTime CreatedAt);
+
+/// <summary>
+/// The booking rules Leyah can change. Each one has a default in appsettings; IsDefault says which are still on it.
+/// </summary>
+public sealed record BookingRulesResponse(
+    decimal DepositAmount, int RescheduleMinimumHours, int RescheduleLimit, int MaxDaysAhead,
+    IReadOnlyList<string> OutOfStockColors);
+
+public sealed record UpdateBookingRulesRequest(decimal DepositAmount, int RescheduleMinimumHours, int RescheduleLimit, int MaxDaysAhead);
+
+/// <summary>Marks one chart shade as in stock or out of stock.</summary>
+public sealed record ColorStockRequest(string Color, bool InStock);
 
 public sealed record FeedbackListResponse(
     IReadOnlyList<FeedbackResponse> Items, int Page, int PageSize, int TotalCount, decimal AverageRating,
@@ -311,7 +379,7 @@ public sealed record DashboardResponse(
 /// <summary>
 /// Something Leyah has to act on. Kind is CheckPayment (paid, not confirmed yet), DatePassed (the appointment is over but the
 /// booking is still Pending or Confirmed), BalanceNotRecorded (completed in the last 30 days with money still owing) or
-/// RefundDue (cancelled or a no-show, with money to send back).
+/// RefundDue (cancelled or a no-show, with money to send back) or ColorRequest (a shade the client asked for, not checked yet).
 /// </summary>
 public sealed record DashboardAttentionItem(string Kind, BookingResponse Booking);
 

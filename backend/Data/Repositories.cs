@@ -50,7 +50,8 @@ public interface IServiceCatalogRepository
 /// <summary>The part of a booking the schedule needs.</summary>
 public sealed record ScheduledAppointment(int BookingId, DateOnly Date, TimeOnly StartTime, int DurationMinutes);
 
-public sealed record BookingSearchCriteria(DateOnly? Date, BookingStatus? Status, string? ClientName, int Page, int PageSize, int? ServiceId = null);
+public sealed record BookingSearchCriteria(DateOnly? Date, BookingStatus? Status, string? ClientName, int Page, int PageSize, int? ServiceId = null,
+    bool OpenOnly = false);
 
 public interface IBookingRepository
 {
@@ -127,6 +128,7 @@ public interface IFeedbackRepository
     void Add(Feedback feedback);
     Task<Feedback?> FindBySubmissionKeyAsync(Guid key, CancellationToken ct = default);
     Task<List<Feedback>> GetForClientAsync(int clientId, CancellationToken ct = default);
+    Task<Feedback?> GetByIdAsync(int id, CancellationToken ct = default);
     Task<(List<Feedback> Items, int TotalCount)> GetPageAsync(int page, int pageSize, CancellationToken ct = default);
 
     /// <summary>Number of ratings per star value (1-5).</summary>
@@ -255,20 +257,26 @@ internal sealed class BookingRepository(AppDbContext db) : IBookingRepository
             query = query.Where(b => b.BookingDate == date);
         if (c.Status is { } status)
             query = query.Where(b => b.Status == status);
+        else if (c.OpenOnly)
+            query = query.Where(b => b.Status == BookingStatus.Pending || b.Status == BookingStatus.Confirmed);
         if (c.ServiceId is { } serviceId)
             query = query.Where(b => b.ServiceId == serviceId || b.RemovalServiceId == serviceId);
         if (!string.IsNullOrWhiteSpace(c.ClientName))
         {
             var name = c.ClientName.Trim();
             query = query.Where(b =>
+                (b.GuestName != null && b.GuestName.Contains(name)) ||
                 b.Client.FirstName.Contains(name) || b.Client.LastName.Contains(name) ||
                 (b.Client.FirstName + " " + b.Client.LastName).Contains(name) || b.Client.Username.Contains(name) ||
                 b.Service.Name.Contains(name) || b.Payments.Any(p => p.ReferenceNumber.Contains(name)));
         }
 
         var total = await query.CountAsync(ct);
-        var items = await query
-            .OrderByDescending(b => b.BookingDate).ThenBy(b => b.StartTime)
+        // Open bookings are work still to do, so the soonest comes first; any other list starts with the latest.
+        var ordered = c.OpenOnly && c.Status is null
+            ? query.OrderBy(b => b.BookingDate).ThenBy(b => b.StartTime)
+            : query.OrderByDescending(b => b.BookingDate).ThenBy(b => b.StartTime);
+        var items = await ordered
             .Skip((c.Page - 1) * c.PageSize).Take(c.PageSize)
             .ToListAsync(ct);
         return (items, total);
@@ -320,7 +328,8 @@ internal sealed class BookingRepository(AppDbContext db) : IBookingRepository
         WithDetails.Where(b => b.Status == BookingStatus.Pending ||
                                (b.Status == BookingStatus.Confirmed && b.BookingDate <= today) ||
                                (b.Status == BookingStatus.Completed && b.BookingDate >= balanceSince) ||
-                               (b.RefundDue > 0 && b.RefundSentAt == null))
+                               (b.RefundDue > 0 && b.RefundSentAt == null) ||
+                               (b.ColorRequestStatus == ColorRequestStatus.Pending && b.Status == BookingStatus.Confirmed))
             .OrderBy(b => b.BookingDate).ThenBy(b => b.StartTime)
             .ToListAsync(ct);
 
@@ -423,6 +432,8 @@ internal sealed class FeedbackRepository(AppDbContext db) : IFeedbackRepository
     public Task<List<Feedback>> GetForClientAsync(int clientId, CancellationToken ct) =>
         db.Feedback.Where(f => f.ClientId == clientId).OrderByDescending(f => f.CreatedAt).ThenByDescending(f => f.Id).ToListAsync(ct);
 
+    public Task<Feedback?> GetByIdAsync(int id, CancellationToken ct) => db.Feedback.Include(f => f.Client).FirstOrDefaultAsync(f => f.Id == id, ct);
+
     public async Task<(List<Feedback> Items, int TotalCount)> GetPageAsync(int page, int pageSize, CancellationToken ct)
     {
         var total = await db.Feedback.CountAsync(ct);
@@ -433,6 +444,25 @@ internal sealed class FeedbackRepository(AppDbContext db) : IFeedbackRepository
 
     public Task<Dictionary<int, int>> CountByRatingAsync(CancellationToken ct) =>
         db.Feedback.GroupBy(f => f.Rating).Select(g => new { Rating = g.Key, Count = g.Count() }).ToDictionaryAsync(g => g.Rating, g => g.Count, ct);
+}
+
+public interface IGalleryPhotoRepository
+{
+    Task<List<GalleryPhoto>> GetAllAsync(CancellationToken ct = default);
+    Task<GalleryPhoto?> GetByIdAsync(int id, CancellationToken ct = default);
+    Task<int> CountAsync(CancellationToken ct = default);
+    void Add(GalleryPhoto photo);
+    void Remove(GalleryPhoto photo);
+}
+
+internal sealed class GalleryPhotoRepository(AppDbContext db) : IGalleryPhotoRepository
+{
+    // Newest first, as Leyah adds them.
+    public Task<List<GalleryPhoto>> GetAllAsync(CancellationToken ct) => db.GalleryPhotos.OrderByDescending(p => p.CreatedAt).ThenByDescending(p => p.Id).ToListAsync(ct);
+    public Task<GalleryPhoto?> GetByIdAsync(int id, CancellationToken ct) => db.GalleryPhotos.FirstOrDefaultAsync(p => p.Id == id, ct);
+    public Task<int> CountAsync(CancellationToken ct) => db.GalleryPhotos.CountAsync(ct);
+    public void Add(GalleryPhoto photo) => db.GalleryPhotos.Add(photo);
+    public void Remove(GalleryPhoto photo) => db.GalleryPhotos.Remove(photo);
 }
 
 internal sealed class SalonSettingsRepository(AppDbContext db) : ISalonSettingsRepository

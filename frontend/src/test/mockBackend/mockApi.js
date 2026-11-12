@@ -93,11 +93,23 @@ function usableResetToken(db, token) {
   return record
 }
 
+// Clients may move an appointment this many times (Booking.ClientRescheduleLimit).
+const RESCHEDULE_LIMIT = 2
+
+/** Same as the backend's booking rules: Leyah's own values, or the defaults. */
+const bookingRules = (db) => ({
+  depositAmount: db.salonSettings.depositAmount ?? policies.depositAmount,
+  rescheduleMinimumHours: db.salonSettings.rescheduleMinimumHours ?? 24,
+  rescheduleLimit: db.salonSettings.rescheduleLimit ?? RESCHEDULE_LIMIT,
+  maxDaysAhead: db.salonSettings.maxDaysAhead ?? schedule.maxDaysAhead,
+  outOfStockColors: NAIL_COLORS.filter((c) => (db.salonSettings.outOfStockColors ?? []).includes(c)),
+})
+
 // ---------------------------------------------------------------- catalog and pricing
 
 const serviceItem = (s) => ({ id: s.id, category: s.category, categoryLabel: categoryLabels[s.category], name: s.name,
   price: s.price, pricingUnit: 'per service', maxQuantity: 1, isActive: s.isActive, durationMinutes: s.durationMinutes,
-  allowsAddOns: s.category !== 'Removal' && s.allowsAddOns !== false })
+  allowsAddOns: s.category !== 'Removal' && s.allowsAddOns !== false, designOptionOfId: s.designOptionOfId ?? null })
 const addOnItem = (a) => ({ id: a.id, category: 'Stone', categoryLabel: categoryLabels.Stone, name: a.name,
   price: a.price, pricingUnit: 'per nail', maxQuantity: rules.LIMITS.maxNailsPerAddOn, isActive: a.isActive })
 
@@ -106,11 +118,12 @@ function catalog(db, includeInactive) {
   return {
     services: db.services.filter(visible).sort((a, b) => a.id - b.id).map(serviceItem),
     addOns: db.addOns.filter(visible).sort((a, b) => a.id - b.id).map(addOnItem),
-    depositAmount: policies.depositAmount,
+    depositAmount: bookingRules(db).depositAmount,
     depositRefundable: false,
     currency: 'PHP',
     nailColors: NAIL_COLORS,
     termsVersion: termsAndConditions.version,
+    ...(({ outOfStockColors, rescheduleLimit, rescheduleMinimumHours, maxDaysAhead }) => ({ outOfStockColors, rescheduleLimit, rescheduleMinimumHours, maxDaysAhead }))(bookingRules(db)),
   }
 }
 
@@ -147,7 +160,7 @@ function resolveSelection(db, serviceId, selections = [], { requireHand = false,
 const HAND_LABELS = { Left: 'Left hand', Right: 'Right hand', Both: 'Both hands' }
 const PAYMENT_OPTION_LABELS = { Deposit: 'Booking deposit', Full: 'Full payment' }
 
-const quoteFor = (selection) => calculateQuote(selection.service, selection.addOns, policies.depositAmount, selection.removal)
+const quoteFor = (selection, db) => calculateQuote(selection.service, selection.addOns, db ? bookingRules(db).depositAmount : policies.depositAmount, selection.removal)
 
 // ---------------------------------------------------------------- schedule
 
@@ -303,13 +316,17 @@ function bookingResponse(db, b, includeClient) {
     note: b.note ?? null, createdAt: b.createdAt,
     removalServiceId: b.removalServiceId ?? null, removalServiceName: removal?.name ?? null, removalPrice: b.removalPrice ?? 0,
     nailColor: b.nailColor ?? null, termsVersion: b.termsVersion ?? null, termsAcceptedAt: b.termsAcceptedAt ?? null,
+    perNailColors: b.perNailColors ?? null, colorRequest: b.colorRequest ?? null, colorRequestStatus: b.colorRequestStatus ?? null,
+    rescheduleCount: b.rescheduleCount ?? 0, rescheduleLimit: bookingRules(db).rescheduleLimit,
+    guestName: b.guestName ?? null, guestPhone: b.guestPhone ?? null, createdByAdmin: Boolean(b.createdByAdmin),
     cancellation: cancellation ? {
       reason: cancellation.reason, reasonLabel: reasonLabel(cancellation.reason), explanation: cancellation.explanation,
       cancelledByRole: db.users.find((u) => u.id === cancellation.cancelledByUserId)?.role ?? '', cancelledAt: cancellation.cancelledAt,
     } : null,
     client: includeClient && client ? { id: client.id, firstName: client.firstName, lastName: client.lastName,
       username: client.username, email: client.email, phoneNumber: client.phoneNumber,
-      photoUrl: client.photoDataUrl ? `/api/admin/clients/${client.id}/photo` : null, photoDataUrl: client.photoDataUrl ?? null } : null,
+      photoUrl: client.photoDataUrl ? `/api/admin/clients/${client.id}/photo` : null, photoDataUrl: client.photoDataUrl ?? null,
+      adminNote: b.guestName ? null : client.adminNote ?? null } : null,
     referenceImages: db.referenceImages.filter((r) => r.bookingId === b.id && !r.isDeleted).map(referenceImageResponse),
   }
 }
@@ -336,6 +353,9 @@ function checkedBlock(db, admin, body, ignoreId) {
   return row
 }
 
+/** Same shape as the backend GalleryPhotoResponse; the test backend also sends the photo itself. */
+const galleryResponse = (p) => ({ id: p.id, url: `/api/gallery/${p.id}/photo`, caption: p.caption, createdAt: p.createdAt, dataUrl: p.dataUrl })
+
 /** Same shape as the backend ClientDataResponse. */
 function clientSummary(db, client) {
   if (!client) notFound('No client account was found with that email address.')
@@ -344,7 +364,9 @@ function clientSummary(db, client) {
     phoneNumber: client.phoneNumber, bookingCount: bookings.length,
     activeBookingCount: bookings.filter((b) => ['Pending', 'Confirmed'].includes(b.status)).length,
     photoCount: db.referenceImages.filter((r) => r.clientId === client.id && !r.isDeleted).length,
-    feedbackCount: db.feedback.filter((f) => f.clientId === client.id).length }
+    feedbackCount: db.feedback.filter((f) => f.clientId === client.id).length,
+    adminNote: client.adminNote ?? null, noShowCount: bookings.filter((b) => b.status === 'NoShow').length,
+    cancelledCount: bookings.filter((b) => b.status === 'Cancelled').length }
 }
 
 // Same shape as the backend BookingPaymentResponse.
@@ -368,7 +390,7 @@ const newestFirst = (a, b) => b.createdAt.localeCompare(a.createdAt) || b.id - a
 
 function feedbackResponse(db, f, includeClient) {
   const client = includeClient ? db.users.find((u) => u.id === f.clientId) : null
-  return { id: f.id, rating: f.rating, comment: f.comment, createdAt: f.createdAt,
+  return { id: f.id, rating: f.rating, comment: f.comment, createdAt: f.createdAt, reply: f.reply ?? null, repliedAt: f.repliedAt ?? null,
     client: client ? { id: client.id, firstName: client.firstName, lastName: client.lastName, username: client.username,
       email: client.email, phoneNumber: client.phoneNumber } : null }
 }
@@ -423,7 +445,7 @@ function receipt(db, payment) {
     serviceName: db.services.find((s) => s.id === b.serviceId)?.name ?? '', bookingDate: b.bookingDate, startTime: b.startTime,
     paymentOption: payment.option ?? 'Deposit', paymentOptionLabel: PAYMENT_OPTION_LABELS[payment.option ?? 'Deposit'],
     totalAmount: view.totalPrice, balanceDue: view.balanceDue, bookingStatus: b.status,
-    clientName: (({ firstName, lastName }) => `${firstName} ${lastName}`)(db.users.find((u) => u.id === b.clientId)),
+    clientName: b.guestName ?? (({ firstName, lastName }) => `${firstName} ${lastName}`)(db.users.find((u) => u.id === b.clientId)),
     lines: [
       ...(view.removalServiceName ? [{ description: `Removal (${view.removalServiceName})`, amount: view.removalPrice }] : []),
       { description: view.serviceName, amount: view.servicePrice },
@@ -477,9 +499,23 @@ function createBooking(db, user, body) {
     conflict('The booking policy and Terms & Conditions have been updated. Please read them again and agree before paying.', 'terms_outdated')
   const selection = resolveSelection(db, body.serviceId, body.addOns ?? [], { requireHand: true, removalServiceId: body.removalServiceId ?? null })
   let nailColor = null
+  let colorRequest = null
+  let perNailColors = null
   if (selection.service.category !== 'Removal') {
-    if (!String(body.nailColor ?? '').trim()) invalid('nailColor', 'Choose a nail colour.')
-    nailColor = NAIL_COLORS.find((c) => same(c, String(body.nailColor).trim())) ?? invalid('nailColor', 'Choose one of the listed colours.')
+    colorRequest = String(body.colorRequest ?? '').trim() || null
+    const listed = (c) => NAIL_COLORS.find((x) => same(x, String(c).trim()) && x.startsWith('#'))
+    if (body.perNailColors) {
+      const hand = (list) => Array.from({ length: 5 }, (_, i) => (list?.[i] ? listed(list[i]) ?? invalid('perNailColors.left', "Choose each nail's colour from the colour chart.") : null))
+      perNailColors = { left: hand(body.perNailColors.left), right: hand(body.perNailColors.right) }
+    }
+    const everyNail = perNailColors && [...perNailColors.left, ...perNailColors.right].every(Boolean)
+    if (String(body.nailColor ?? '').trim())
+      nailColor = NAIL_COLORS.find((c) => same(c, String(body.nailColor).trim())) ?? invalid('nailColor', 'Choose one of the listed colours.')
+    else if (!colorRequest && !everyNail) invalid('nailColor', 'Choose a nail colour.')
+    // Like the backend: a shade Leyah has run out of can't be booked.
+    const out = bookingRules(db).outOfStockColors
+    for (const c of [nailColor, ...(perNailColors ? [...perNailColors.left, ...perNailColors.right] : [])])
+      if (c && out.includes(c)) invalid('nailColor', `${c} is out of stock at the moment. Please choose another shade.`, 'color_out_of_stock')
   }
   const referenceImages = attachReferenceImages(db, user, body.referenceImageIds)
   ensureBookable(db, body.bookingDate, body.startTime, selection.durationMinutes)
@@ -494,12 +530,13 @@ function createBooking(db, user, body) {
 
   // Deposit or full payment; the amount is worked out here from the prices, never taken from the request.
   const option = body.paymentOption ?? 'Deposit'
-  const quote = quoteFor(selection)
+  const quote = quoteFor(selection, db)
   const amount = option === 'Full' ? quote.fullAmount : quote.deposit
   const createdAt = nowIso()
   const booking = { id: nextId('bookings'), clientId: user.id, serviceId: selection.service.id, servicePrice: selection.service.price,
     depositAmount: quote.deposit, bookingDate: body.bookingDate, startTime: body.startTime, durationMinutes: selection.durationMinutes,
     removalServiceId: selection.removal?.id ?? null, removalPrice: selection.removal?.price ?? 0, nailColor,
+    perNailColors, colorRequest, colorRequestStatus: colorRequest ? 'Pending' : null, rescheduleCount: 0,
     termsVersion: termsAndConditions.version, termsAcceptedAt: createdAt,
     note: String(body.note ?? '').trim() || null, paymentOption: option, amountPaid: amount,
     confirmedAt: null, confirmedByUserId: null,
@@ -1038,7 +1075,11 @@ const routes = [
     const booking = ownedBooking(db, user, params.id)
     if ((startsAt(booking.bookingDate, booking.startTime) - new Date()) / (60 * MINUTE) < policies.rescheduleMinimumHours)
       conflict(`Appointments can only be rescheduled at least ${policies.rescheduleMinimumHours} hours before the scheduled time.`, 'reschedule_window_passed')
+    if ((booking.rescheduleCount ?? 0) >= RESCHEDULE_LIMIT)
+      conflict(`This appointment has already been rescheduled ${RESCHEDULE_LIMIT} times. Please message Leyah if you need to move it again.`, 'reschedule_limit_reached')
     moveBooking(db, user, booking, body)
+    booking.rescheduleCount = (booking.rescheduleCount ?? 0) + 1
+    saveDb()
     return bookingResponse(db, booking, false)
   }],
   ['POST', '/bookings/:id/cancel', (db, { params, body }) => {
@@ -1100,13 +1141,18 @@ const routes = [
     const serviceId = query.serviceId ? Number(query.serviceId) : null
     const matches = db.bookings.filter((b) => {
       if (b.isDeleted || (query.date && b.bookingDate !== query.date) || (query.status && b.status !== query.status)) return false
+      if (!query.status && String(query.open) === 'true' && !isActive(b)) return false
       if (serviceId && b.serviceId !== serviceId && b.removalServiceId !== serviceId) return false
       if (!name) return true
+      if (b.guestName?.toLowerCase().includes(name)) return true
       const c = db.users.find((u) => u.id === b.clientId)
       const service = db.services.find((s) => s.id === b.serviceId)?.name ?? ''
       const references = db.payments.filter((p) => p.bookingId === b.id).map((p) => p.referenceNumber)
       return [c.firstName, c.lastName, `${c.firstName} ${c.lastName}`, c.username, service, ...references].some((v) => v.toLowerCase().includes(name))
-    }).sort((a, b) => b.bookingDate.localeCompare(a.bookingDate) || a.startTime.localeCompare(b.startTime))
+    })
+    // Open bookings are work still to do, so the soonest comes first; any other list starts with the latest.
+    const soonestFirst = !query.status && String(query.open) === 'true'
+    matches.sort((a, b) => (soonestFirst ? a.bookingDate.localeCompare(b.bookingDate) : b.bookingDate.localeCompare(a.bookingDate)) || a.startTime.localeCompare(b.startTime))
     return { items: matches.slice((page - 1) * pageSize, page * pageSize).map((b) => bookingResponse(db, b, true)), page, pageSize, totalCount: matches.length }
   }],
   ['GET', '/admin/bookings/calendar', (db, { query }) => {
@@ -1187,6 +1233,14 @@ const routes = [
     saveDb()
     return bookingResponse(db, booking, true)
   }],
+  ['POST', '/admin/bookings/:id/color-request', (db, { params, body }) => {
+    requireUser(db, 'Administrator')
+    const booking = findBooking(db, params.id)
+    if (!booking.colorRequestStatus) conflict('This booking has no colour request.', 'no_color_request')
+    booking.colorRequestStatus = body.available ? 'Available' : 'Unavailable'
+    saveDb()
+    return bookingResponse(db, booking, true)
+  }],
   ['POST', '/admin/bookings/:id/reschedule', (db, { params, body }) => {
     const admin = requireUser(db, 'Administrator')
     const booking = findBooking(db, params.id)
@@ -1201,6 +1255,125 @@ const routes = [
       invalid('explanation', `Explanation must be ${rules.LIMITS.explanationMax} characters or fewer.`)
     cancelBooking(db, admin, booking, body.reason, body.explanation, body.reason !== 'ClientDidNotRespond')
     return bookingResponse(db, booking, true)
+  }],
+
+  // ---- Booking rules and shade stock ----
+  ['GET', '/admin/booking-rules', (db) => { requireUser(db, 'Administrator'); return bookingRules(db) }],
+  ['PUT', '/admin/booking-rules', (db, { body }) => {
+    const admin = requireUser(db, 'Administrator')
+    const n = (key) => Number(body[key])
+    if (!(n('depositAmount') >= 0 && n('depositAmount') <= 100000)) invalid('depositAmount', 'The deposit must be between PHP 0 and 100000.')
+    if (!(n('rescheduleMinimumHours') >= 0 && n('rescheduleMinimumHours') <= 168)) invalid('rescheduleMinimumHours', 'Choose between 0 and 168 hours.')
+    if (!(n('rescheduleLimit') >= 0 && n('rescheduleLimit') <= 10)) invalid('rescheduleLimit', 'Choose between 0 and 10 times.')
+    if (!(n('maxDaysAhead') >= 7 && n('maxDaysAhead') <= 365)) invalid('maxDaysAhead', 'Choose between 7 and 365 days.')
+    Object.assign(db.salonSettings, { depositAmount: n('depositAmount'), rescheduleMinimumHours: n('rescheduleMinimumHours'),
+      rescheduleLimit: n('rescheduleLimit'), maxDaysAhead: n('maxDaysAhead'), updatedAt: nowIso(), updatedByUserId: admin.id })
+    audit(db, admin.id, 'BookingRulesChanged', 'SalonSettings', 1)
+    saveDb()
+    return bookingRules(db)
+  }],
+  ['PUT', '/admin/booking-rules/colors', (db, { body }) => {
+    const admin = requireUser(db, 'Administrator')
+    const listed = NAIL_COLORS.find((c) => same(c, body.color)) ?? invalid('color', 'Choose one of the colours on the chart.')
+    const out = (db.salonSettings.outOfStockColors ?? []).filter((c) => c !== listed)
+    db.salonSettings.outOfStockColors = body.inStock ? out : [...out, listed]
+    audit(db, admin.id, 'ColorStockChanged', 'SalonSettings', 1, `${listed} ${body.inStock ? 'back in stock' : 'out of stock'}`)
+    saveDb()
+    return bookingRules(db)
+  }],
+
+  // ---- Leyah's own booking, for a client or a walk-in ----
+  ['POST', '/admin/bookings', (db, { body }) => {
+    const admin = requireUser(db, 'Administrator')
+    let clientId = admin.id
+    let guestName = String(body.guestName ?? '').trim() || null
+    let guestPhone = String(body.guestPhone ?? '').trim() || null
+    if (body.clientId) {
+      const client = db.users.find((u) => u.id === Number(body.clientId) && u.role === 'Client' && !u.isDeleted)
+      if (!client) invalid('clientId', 'Choose a client from the list.')
+      clientId = client.id
+      guestName = null
+      guestPhone = null
+    } else {
+      if (!guestName) invalid('guestName', "Choose a client, or type the walk-in client's name.")
+      if (guestPhone && !/^\d{11}$/.test(guestPhone)) invalid('guestPhone', 'Not a valid phone number.')
+    }
+    if (!['None', 'Deposit', 'Full'].includes(body.paid ?? 'None')) invalid('paid', 'Choose what was paid: nothing yet, the deposit or the full amount.')
+    const selection = resolveSelection(db, body.serviceId, (body.addOns ?? []).map((a) => ({ hand: 'Both', ...a })), { requireHand: true, removalServiceId: body.removalServiceId ?? null })
+    const nailColor = selection.service.category !== 'Removal' && String(body.nailColor ?? '').trim()
+      ? NAIL_COLORS.find((c) => same(c, body.nailColor)) ?? invalid('nailColor', 'Choose one of the listed colours.') : null
+    ensureBookable(db, body.bookingDate, body.startTime, selection.durationMinutes)
+    const quote = quoteFor(selection, db)
+    const option = body.paid && body.paid !== 'None' ? body.paid : null
+    const amount = option === 'Full' ? quote.fullAmount : option === 'Deposit' ? quote.deposit : 0
+    const createdAt = nowIso()
+    const booking = { id: nextId('bookings'), clientId, guestName, guestPhone, createdByAdmin: true, serviceId: selection.service.id,
+      servicePrice: selection.service.price, depositAmount: quote.deposit, bookingDate: body.bookingDate, startTime: body.startTime,
+      durationMinutes: selection.durationMinutes, removalServiceId: selection.removal?.id ?? null, removalPrice: selection.removal?.price ?? 0,
+      nailColor, perNailColors: null, colorRequest: null, colorRequestStatus: null, rescheduleCount: 0, termsVersion: null, termsAcceptedAt: null,
+      note: String(body.note ?? '').trim() || null, paymentOption: option ?? 'Deposit', amountPaid: amount,
+      confirmedAt: createdAt, confirmedByUserId: admin.id, status: 'Confirmed', createdAt, updatedAt: createdAt, reminderSentAt: null, isDeleted: false }
+    db.bookings.push(booking)
+    for (const { addOn, nailCount, hand } of selection.addOns)
+      db.bookingAddOns.push({ id: nextId('bookingAddOns'), bookingId: booking.id, addOnId: addOn.id, nailCount, hand, linePrice: addOn.price * nailCount })
+    if (option) {
+      const method = body.paymentMethod ?? 'Cash'
+      db.payments.push({ id: nextId('payments'), bookingId: booking.id, clientId, method, option, amount,
+        totalAmount: quote.total, balanceAfter: Math.max(0, quote.total - amount),
+        referenceNumber: String(body.paymentReference ?? '').trim() || `${method.toUpperCase()}-${booking.id}`,
+        idempotencyKey: crypto.randomUUID?.() ?? randomHex(16), status: 'Succeeded', paidAt: createdAt, verifiedAt: createdAt, verifiedByUserId: admin.id })
+    }
+    audit(db, admin.id, 'BookingCreatedByAdmin', 'Booking', booking.id)
+    saveDb()
+    return { status: 201, data: bookingResponse(db, booking, true) }
+  }],
+
+  // ---- Private client notes and feedback replies ----
+  ['PUT', '/admin/clients/:id/note', (db, { params, body }) => {
+    requireUser(db, 'Administrator')
+    const client = db.users.find((u) => u.id === Number(params.id) && u.role === 'Client' && !u.isDeleted)
+    if (!client) notFound('No client account was found with that email address.')
+    const note = String(body.note ?? '').trim() || null
+    if (note && note.length > 500) invalid('note', 'The note must be 500 characters or fewer.')
+    client.adminNote = note
+    saveDb()
+    return clientSummary(db, client)
+  }],
+  ['PUT', '/admin/feedback/:id/reply', (db, { params, body }) => {
+    requireUser(db, 'Administrator')
+    const item = db.feedback.find((f) => f.id === Number(params.id)) ?? notFound('This feedback no longer exists.')
+    const reply = String(body.reply ?? '').trim() || null
+    if (reply && reply.length > 500) invalid('reply', 'The reply must be 500 characters or fewer.')
+    Object.assign(item, { reply, repliedAt: reply ? nowIso() : null })
+    saveDb()
+    return feedbackResponse(db, item, true)
+  }],
+
+  // ---- Our Works gallery ----
+  ['GET', '/gallery', (db) => (db.galleryPhotos ?? []).slice().reverse().map(galleryResponse)],
+  ['GET', '/admin/gallery', (db) => { requireUser(db, 'Administrator'); return (db.galleryPhotos ?? []).slice().reverse().map(galleryResponse) }],
+  ['POST', '/admin/gallery', async (db, { body, file }) => {
+    const admin = requireUser(db, 'Administrator')
+    if (!file || !file.size) invalid('file', 'Choose a photo to upload.', 'image_missing')
+    const bytes = new Uint8Array(await file.arrayBuffer())
+    const contentType = detectImageType(bytes)
+    if (!contentType) invalid('file', rules.REFERENCE_IMAGE_MESSAGES.type, 'image_type')
+    let binary = ''
+    for (let i = 0; i < bytes.length; i += 0x8000) binary += String.fromCharCode(...bytes.subarray(i, i + 0x8000))
+    db.galleryPhotos ??= []
+    const photo = { id: (db.galleryPhotos.at(-1)?.id ?? 0) + 1, caption: String(body.caption ?? '').trim() || null,
+      dataUrl: `data:${contentType};base64,${btoa(binary)}`, createdAt: nowIso(), createdByUserId: admin.id }
+    db.galleryPhotos.push(photo)
+    saveDb()
+    return { status: 201, data: galleryResponse(photo) }
+  }],
+  ['DELETE', '/admin/gallery/:id', (db, { params }) => {
+    requireUser(db, 'Administrator')
+    const before = (db.galleryPhotos ?? []).length
+    db.galleryPhotos = (db.galleryPhotos ?? []).filter((p) => p.id !== Number(params.id))
+    if (db.galleryPhotos.length === before) notFound('This photo has already been removed.')
+    saveDb()
+    return null
   }],
 
   ['GET', '/admin/services', (db) => {

@@ -253,6 +253,7 @@ public sealed class AppointmentReminderJob(
         var until = now.AddHours(options.Value.ReminderLeadHours);
         var due = (await bookings.GetDueForReminderAsync(DateOnly.FromDateTime(now), DateOnly.FromDateTime(until), ct))
             .Where(b => b.StartsAtLocal > now && b.StartsAtLocal <= until)
+            .Where(b => b.GuestName is null) // a walk-in Leyah booked has no email; the booking sits on her own account
             .ToList();
 
         var sent = 0;

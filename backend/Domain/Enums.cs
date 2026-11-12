@@ -27,6 +27,8 @@ public enum PaymentMethod
 {
     GCash,
     Maya,
+    /// <summary>Paid in person at the salon; only for bookings Leyah makes herself.</summary>
+    Cash,
 }
 
 /// <summary>What the client chose to pay when booking. The deposit is part of a full payment, never charged on top.</summary>
@@ -68,6 +70,14 @@ public enum NailHand
     Left,
     Right,
     Both,
+}
+
+/// <summary>A colour request waits for Leyah to say whether she has the shade.</summary>
+public enum ColorRequestStatus
+{
+    Pending,
+    Available,
+    Unavailable,
 }
 
 public enum UserTokenPurpose

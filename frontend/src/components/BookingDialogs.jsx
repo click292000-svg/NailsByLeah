@@ -6,6 +6,7 @@ import { errorMessage, fieldErrors } from '../api/errors'
 import { formatDate, formatTime } from '../lib/format'
 import { LIMITS } from '../validation/rules'
 import { amountPaid, depositKept, refundFor } from '../lib/refunds'
+import { bookingClientName } from '../lib/bookingClient'
 
 /**
  * Cancellation dialog. Clients pick from their reasons (Ref 2.5), and "Others" asks them to write theirs;
@@ -108,7 +109,7 @@ export function BalanceDialog({ booking, completing = false, onSubmit, onClose }
     <Modal title={completing ? 'Complete booking' : 'Record balance'} onClose={onClose}>
       <form onSubmit={submit} noValidate className="stack">
         <p>
-          {booking.client?.firstName} {booking.client?.lastName}, {booking.serviceName}<br />
+          {bookingClientName(booking)}, {booking.serviceName}<br />
           Balance: <strong><Money amount={booking.balanceDue} /></strong>
         </p>
         {error && <Alert kind="error">{error}</Alert>}
@@ -198,7 +199,7 @@ export function RefundDialog({ booking, onSubmit, onClose }) {
     <Modal title="Record refund" onClose={onClose}>
       <form onSubmit={submit} noValidate className="stack">
         <p>
-          {booking.client?.firstName} {booking.client?.lastName}, booking #{booking.id}<br />
+          {bookingClientName(booking)}, booking #{booking.id}<br />
           Refund owed: <strong><Money amount={booking.payment?.refundDue ?? 0} /></strong>
         </p>
         <p className="muted small">Send it to the client by GCash or Maya first, then record it here.</p>
@@ -235,7 +236,7 @@ export function NoShowDialog({ booking, onSubmit, onClose }) {
     <Modal title="Mark as no-show" onClose={onClose}>
       <div className="stack">
         <p>
-          {booking.client?.firstName} {booking.client?.lastName} did not come on <strong>{formatDate(booking.bookingDate)}</strong> at {formatTime(booking.startTime)}?
+          {bookingClientName(booking)} did not come on <strong>{formatDate(booking.bookingDate)}</strong> at {formatTime(booking.startTime)}?
         </p>
         <Alert kind="warning">
           The <Money amount={depositKept(booking)} /> deposit is kept as the no-show fee.

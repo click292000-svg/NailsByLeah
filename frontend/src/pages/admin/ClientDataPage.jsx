@@ -6,6 +6,7 @@ import { formatDateTime } from '../../lib/format'
 import { Alert, Button, Card, PageHeader, PageLoader, Pager, Spinner, TextField } from '../../components/ui'
 import { Modal } from '../../components/Modal'
 import { apiPhotoSrc } from '../../lib/photos'
+import { LIMITS } from '../../validation/rules'
 
 const CONFIRM_WORD = 'DELETE'
 const PAGE_SIZE = 20
@@ -114,9 +115,15 @@ export default function ClientDataPage() {
             <dt>Email</dt><dd>{client.email}</dd>
             <dt>Phone</dt><dd>{client.phoneNumber}</dd>
             <dt>Bookings</dt><dd>{client.bookingCount}</dd>
+            <dt>Cancelled</dt><dd>{client.cancelledCount ?? 0}</dd>
+            <dt>No-shows</dt>
+            <dd className={client.noShowCount > 0 ? 'client-noshows' : undefined}>
+              {client.noShowCount ?? 0}{client.noShowCount >= 2 && ' · consider asking for the full payment next time'}
+            </dd>
             <dt>Design photos</dt><dd>{client.photoCount}</dd>
             <dt>Feedback</dt><dd>{client.feedbackCount}</dd>
           </dl>
+          <ClientNote key={client.id} client={client} onSaved={setClient} />
           {client.activeBookingCount > 0 ? (
             <Alert kind="warning" title="This client still has an open booking.">
               A pending or confirmed booking stays open until it is completed or cancelled. Complete or cancel{' '}
@@ -130,6 +137,45 @@ export default function ClientDataPage() {
       )}
 
       {confirming && <ConfirmDeleteDialog client={client} onDeleted={onDeleted} onClose={() => setConfirming(false)} />}
+    </div>
+  )
+}
+
+/** Leyah's private note about the client: shown with their bookings, never to the client. */
+function ClientNote({ client, onSaved }) {
+  const [text, setText] = useState(client.adminNote ?? '')
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState(null)
+  const [saved, setSaved] = useState(false)
+  const dirty = text.trim() !== (client.adminNote ?? '')
+
+  const save = async () => {
+    setSaving(true)
+    setError(null)
+    try {
+      onSaved(await api.admin.updateClientNote(client.id, text.trim() || null))
+      setSaved(true)
+    } catch (err) {
+      setError(errorMessage(err))
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div className="client-note">
+      <div className="pick-title-row">
+        <label htmlFor="client-note" className="field-label pick-title">Your private note</label>
+        <span className="field-counter">{text.length}/{LIMITS.adminNoteMax}</span>
+      </div>
+      <textarea id="client-note" className="input textarea" rows={2} maxLength={LIMITS.adminNoteMax} value={text}
+        placeholder="e.g. Prefers short almond. Sensitive cuticles." onChange={(e) => { setText(e.target.value); setSaved(false) }} />
+      <p className="muted small">Only you see this. It shows in this client&apos;s booking details.</p>
+      {error && <div className="field-error">{error}</div>}
+      <div className="client-note-actions">
+        {saved && !dirty && <span className="muted small">Saved</span>}
+        <Button size="sm" variant="secondary" loading={saving} disabled={!dirty} onClick={save}>Save note</Button>
+      </div>
     </div>
   )
 }

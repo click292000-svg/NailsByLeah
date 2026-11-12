@@ -65,6 +65,7 @@ public static class ServiceRegistration
         services.AddScoped<IReferenceImageRepository, ReferenceImageRepository>();
         services.AddScoped<IBookingDraftRepository, BookingDraftRepository>();
         services.AddScoped<IFeedbackRepository, FeedbackRepository>();
+        services.AddScoped<IGalleryPhotoRepository, GalleryPhotoRepository>();
         services.AddScoped<IClientDataRepository, ClientDataRepository>();
 
         // Application services
@@ -73,6 +74,8 @@ public static class ServiceRegistration
         services.AddScoped<IRegistrationService, RegistrationService>();
         services.AddScoped<IAuthService, AuthService>();
         services.AddScoped<IPasswordResetService, PasswordResetService>();
+        services.AddScoped<IBookingRulesService, BookingRulesService>();
+        services.AddScoped<IGalleryService, GalleryService>();
         services.AddScoped<IPriceService, PriceService>();
         services.AddScoped<IBookingDraftService, BookingDraftService>();
         services.AddScoped<IFeedbackService, FeedbackService>();

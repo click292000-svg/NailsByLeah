@@ -4,7 +4,8 @@ import { useAsync } from '../../hooks/useAsync'
 import { errorMessage } from '../../api/errors'
 import { formatDate } from '../../lib/format'
 import { toIsoDate } from '../../lib/dates'
-import { Alert, Card, EmptyState, PageHeader, PageLoader, Pager, Spinner } from '../../components/ui'
+import { Alert, Button, Card, EmptyState, PageHeader, PageLoader, Pager, Spinner } from '../../components/ui'
+import { LIMITS } from '../../validation/rules'
 import { Stars } from '../../components/StarRating'
 
 const PAGE_SIZE = 20
@@ -65,6 +66,7 @@ export default function AdminFeedbackPage() {
                       <Stars rating={f.rating} size="sm" />
                     </div>
                     {f.comment ? <p className="feedback-comment">{f.comment}</p> : <p className="muted small">No comment</p>}
+                    <FeedbackReply item={f} onSaved={(next) => list.setData((d) => ({ ...d, items: d.items.map((x) => (x.id === next.id ? next : x)) }))} />
                   </div>
                 </li>
               )
@@ -73,6 +75,53 @@ export default function AdminFeedbackPage() {
         )}
         <Pager page={page} pages={pages} onChange={setPage} />
       </Card>
+    </div>
+  )
+}
+
+/** Leyah's reply, which the client sees on their Feedback page. */
+function FeedbackReply({ item, onSaved }) {
+  const [open, setOpen] = useState(false)
+  const [text, setText] = useState(item.reply ?? '')
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState(null)
+
+  const save = async (value) => {
+    setSaving(true)
+    setError(null)
+    try {
+      onSaved(await api.admin.replyToFeedback(item.id, value))
+      setOpen(false)
+    } catch (err) {
+      setError(errorMessage(err))
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  if (!open) {
+    return item.reply ? (
+      <div className="feedback-reply">
+        <span className="feedback-reply-label">Your reply</span>
+        <p>{item.reply}</p>
+        <Button variant="ghost" size="sm" onClick={() => { setText(item.reply); setOpen(true) }}>Edit reply</Button>
+      </div>
+    ) : (
+      <Button variant="ghost" size="sm" className="feedback-reply-open" onClick={() => setOpen(true)}>Reply</Button>
+    )
+  }
+  return (
+    <div className="feedback-reply-form">
+      <label className="sr-only" htmlFor={`reply-${item.id}`}>Reply to this feedback</label>
+      <textarea id={`reply-${item.id}`} className="input textarea" rows={2} maxLength={LIMITS.feedbackReplyMax} value={text}
+        placeholder="Thank you so much! See you next time." onChange={(e) => setText(e.target.value)} />
+      <p className="muted small">The client sees your reply on their Feedback page.</p>
+      {error && <div className="field-error">{error}</div>}
+      <div className="feedback-reply-actions">
+        {item.reply && <Button variant="danger-ghost" size="sm" disabled={saving} onClick={() => save(null)}>Remove reply</Button>}
+        <Button variant="secondary" size="sm" disabled={saving} onClick={() => setOpen(false)}>Cancel</Button>
+        <Button size="sm" loading={saving} disabled={!text.trim()} onClick={() => save(text.trim())}>Send reply</Button>
+      </div>
     </div>
   )
 }

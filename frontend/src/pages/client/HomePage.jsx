@@ -38,7 +38,7 @@ export default function HomePage() {
   const welcome = location.state?.welcome === 'verified'
   const dismissWelcome = () => navigate(location.pathname + location.hash, { replace: true, state: null })
 
-  // Photo viewer (Our Works photos and Leyah's price card); focus goes back to whatever opened it.
+  // Photo viewer (Our Works photos); focus goes back to whatever opened it.
   const [viewer, setViewer] = useState({ open: false, photo: null })
   const opener = useRef(null)
   const openPhoto = useCallback((photo, from) => { opener.current = from; setViewer({ open: true, photo }) }, [])
@@ -97,7 +97,7 @@ export default function HomePage() {
       <Hero bookTo={bookTo} deposit={deposit} typingStartsAfter={intro.lettersDone + 900} onJump={jump} />
       <CloseupTour catalog={catalog.data} />
       <WorksGallery onOpen={openPhoto} />
-      <PricingSection catalog={catalog} bookTo={bookTo} onOpenPhoto={openPhoto} />
+      <PricingSection catalog={catalog} bookTo={bookTo} />
       <RulesSection deposit={deposit} />
       <FaqSection deposit={deposit} hours={hours} />
       <section className="hm-find hm-section" id="find-us" tabIndex={-1} aria-labelledby="find-us-title">

@@ -13,6 +13,9 @@ public interface IClientDataService
     Task<ClientDataResponse> GetAsync(int clientId, CancellationToken ct = default);
     Task<PagedResponse<ClientListItemResponse>> SearchAsync(ClientSearchRequest request, CancellationToken ct = default);
     Task EraseAsync(int clientId, CancellationToken ct = default);
+
+    /// <summary>Leyah's private note about a client; empty clears it.</summary>
+    Task<ClientDataResponse> UpdateNoteAsync(int clientId, UpdateClientNoteRequest request, CancellationToken ct = default);
 }
 
 /// <summary>
@@ -63,7 +66,23 @@ public sealed class ClientDataService(
         var photos = await clientData.GetReferenceImagesAsync(client.Id, ct);
         var feedback = await clientData.GetFeedbackAsync(client.Id, ct);
         return new ClientDataResponse(client.Id, client.FirstName, client.LastName, client.Username, client.Email, client.PhoneNumber,
-            bookings.Count, bookings.Count(b => b.IsActive), photos.Count(p => !p.IsDeleted), feedback.Count);
+            bookings.Count, bookings.Count(b => b.IsActive), photos.Count(p => !p.IsDeleted), feedback.Count,
+            client.AdminNote, bookings.Count(b => b.Status == BookingStatus.NoShow), bookings.Count(b => b.Status == BookingStatus.Cancelled));
+    }
+
+    public async Task<ClientDataResponse> UpdateNoteAsync(int clientId, UpdateClientNoteRequest request, CancellationToken ct = default)
+    {
+        var client = await users.GetByIdAsync(clientId, ct);
+        if (client is null || client.Role != UserRole.Client || client.IsDeleted)
+            throw new NotFoundException(NotFoundMessage);
+        var note = string.IsNullOrWhiteSpace(request.Note) ? null : InputNormalizer.Text(request.Note);
+        if (note?.Length > InputLimits.AdminNoteMaxLength)
+            throw new ValidationAppException("note", $"The note must be {InputLimits.AdminNoteMaxLength} characters or fewer.");
+        client.AdminNote = note;
+        client.UpdatedAt = clock.UtcNow;
+        audit.Record(AuditActions.ClientNoteChanged, nameof(User), clientId, note is null ? "Note cleared" : "Note saved");
+        await unitOfWork.SaveChangesAsync(ct);
+        return await SummarizeAsync(client, ct);
     }
 
     public async Task EraseAsync(int clientId, CancellationToken ct = default)
@@ -86,6 +105,7 @@ public sealed class ClientDataService(
         var profilePhoto = client.PhotoFileName;
         client.PhotoFileName = null;
         client.PhotoContentType = null;
+        client.AdminNote = null;
         client.ChangePassword(hasher.Hash(Guid.NewGuid().ToString("N"))); // a new security stamp also ends every session
         client.UpdatedAt = clock.UtcNow;
         client.IsDeleted = true;
@@ -105,7 +125,10 @@ public sealed class ClientDataService(
             photo.IsDeleted = true;
 
         foreach (var feedback in await clientData.GetFeedbackAsync(clientId, ct))
+        {
             feedback.Comment = null; // the star rating stays in the salon's totals, no longer tied to anyone
+            feedback.Reply = null;
+        }
 
         foreach (var entry in await clientData.GetAuditLogsAsync(clientId, ct))
         {

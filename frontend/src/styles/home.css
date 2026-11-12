@@ -181,10 +181,21 @@ html { scroll-padding-top: var(--header-h); }
 .hm-unfold.open { grid-template-rows: 1fr; opacity: 1; }
 .hm-unfold > div { overflow: hidden; }
 .hm-full-list { max-width: 420px; margin: 34px auto 0; }
-.hm-full-list figure { margin: 0; text-align: center; }
-.hm-full-list figure button { display: block; width: 100%; padding: 0; border: 0; background: none; border-radius: 18px; cursor: zoom-in; }
-.hm-full-list figure img { display: block; width: 100%; height: auto; border-radius: 18px; border: 5px solid #fff; box-shadow: 0 16px 40px rgb(143 44 77 / .18); }
-.hm-full-list figcaption { margin-top: 10px; font-size: .85rem; color: var(--muted); }
+/* The full price list, in the style of Leyah's printed price card. */
+.pc { padding: 30px 30px 18px; border-radius: 18px; border: 5px solid #fff; background: #fdf1f4; box-shadow: 0 16px 40px rgb(143 44 77 / .18); text-align: center; color: #4a1f2e; }
+.pc-logo { display: block; width: 72%; max-width: 260px; height: auto; margin: 0 auto 6px; }
+.pc-title { display: flex; align-items: center; gap: 12px; margin: 0 0 22px; font-family: var(--font-display); font-size: .82rem; font-weight: 600; letter-spacing: .3em; text-transform: uppercase; color: #4a1f2e; }
+.pc-title::before, .pc-title::after { content: ''; flex: 1; height: 1px; background: #d98aa3; }
+.pc-group + .pc-group { margin-top: 20px; }
+.pc-pill { display: inline-flex; align-items: center; gap: 10px; margin: 0 0 12px; padding: 4px 24px; border: 1.5px solid #d98aa3; border-radius: 99px; background: #fbe1e9;
+  font-family: var(--font-display); font-size: 1.05rem; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: #4a1f2e; }
+.pc-pill small { font-size: .7em; letter-spacing: .04em; }
+.pc dl { margin: 0; display: grid; gap: 6px; }
+.pc-row { display: flex; align-items: baseline; gap: 8px; font-family: var(--font-display); font-size: 1.08rem; }
+.pc-row dt { text-align: left; }
+.pc-row dd { margin: 0; font-weight: 600; }
+.pc-dots { flex: 1; min-width: 20px; border-bottom: 2px dotted #c49aa6; transform: translateY(-4px); }
+.pc-foot { margin: 18px 0 0; color: #d0718f; font-size: 1.3rem; }
 
 /* ===== Nail rules ===== */
 .hm-rules { padding: 80px 20px; background: linear-gradient(var(--cream), var(--rose-50)); }

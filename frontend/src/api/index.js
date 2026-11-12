@@ -26,10 +26,11 @@ const get = (path, query) => call('GET', path, { query })
 const post = (path, body = {}) => call('POST', path, { body })
 const put = (path, body) => call('PUT', path, { body })
 const del = (path) => call('DELETE', path)
-const upload = (path, file) => {
+const upload = (path, file, fields = {}) => {
   const form = new FormData()
   form.append('file', file)
-  return call('POST', path, { form, file })
+  for (const [key, value] of Object.entries(fields)) if (value) form.append(key, value)
+  return call('POST', path, { form, file, body: fields })
 }
 
 /**
@@ -43,6 +44,10 @@ export const api = {
   /** The salon's public details: phone, payment account name, social links, bio and Leyah's photo. */
   salon: {
     get: () => get('/salon'),
+  },
+  /** Leyah's photos for the home page's Our Works gallery, newest first. */
+  gallery: {
+    list: () => get('/gallery'),
   },
   auth: {
     changePassword: (body) => post('/auth/change-password', body),
@@ -110,6 +115,8 @@ export const api = {
     recordBalance: (id, body) => post(`/admin/bookings/${id}/balance`, body),
     recordRefund: (id, body) => post(`/admin/bookings/${id}/refund`, body),
     markNoShow: (id) => post(`/admin/bookings/${id}/no-show`),
+    /** Leyah's answer to "Can't find your colour?": whether she has that shade. */
+    decideColorRequest: (id, available) => post(`/admin/bookings/${id}/color-request`, { available }),
     reschedule: (id, body) => post(`/admin/bookings/${id}/reschedule`, body),
     cancel: (id, body) => post(`/admin/bookings/${id}/cancel`, body),
     services: () => get('/admin/services'),
@@ -133,5 +140,16 @@ export const api = {
     client: (id) => get(`/admin/clients/${id}`),
     updateBlockedSlot: (id, body) => put(`/admin/blocked-slots/${id}`, body),
     deleteClientData: (id) => post(`/admin/clients/${id}/delete-data`),
+    /** Leyah's private note about a client; never shown to the client. */
+    updateClientNote: (id, note) => put(`/admin/clients/${id}/note`, { note }),
+    /** Leyah books for a client with an account (clientId) or a walk-in (guestName, guestPhone). */
+    createBooking: (body) => post('/admin/bookings', body),
+    bookingRules: () => get('/admin/booking-rules'),
+    updateBookingRules: (body) => put('/admin/booking-rules', body),
+    setColorStock: (color, inStock) => put('/admin/booking-rules/colors', { color, inStock }),
+    replyToFeedback: (id, reply) => put(`/admin/feedback/${id}/reply`, { reply }),
+    gallery: () => get('/admin/gallery'),
+    addGalleryPhoto: (file, caption) => upload('/admin/gallery', file, { caption }),
+    removeGalleryPhoto: (id) => del(`/admin/gallery/${id}`),
   },
 }

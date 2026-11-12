@@ -189,6 +189,16 @@ namespace NailsByLeah.Api.Data.Migrations
                         .HasColumnType("int")
                         .HasColumnName("client_id");
 
+                    b.Property<string>("ColorRequest")
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)")
+                        .HasColumnName("color_request");
+
+                    b.Property<string>("ColorRequestStatus")
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)")
+                        .HasColumnName("color_request_status");
+
                     b.Property<DateTime?>("ConfirmedAt")
                         .HasColumnType("datetime2")
                         .HasColumnName("confirmed_at");
@@ -201,6 +211,10 @@ namespace NailsByLeah.Api.Data.Migrations
                         .HasColumnType("datetime2")
                         .HasColumnName("created_at");
 
+                    b.Property<bool>("CreatedByAdmin")
+                        .HasColumnType("bit")
+                        .HasColumnName("created_by_admin");
+
                     b.Property<decimal>("DepositAmount")
                         .HasPrecision(10, 2)
                         .HasColumnType("decimal(10,2)")
@@ -209,6 +223,16 @@ namespace NailsByLeah.Api.Data.Migrations
                     b.Property<int>("DurationMinutes")
                         .HasColumnType("int")
                         .HasColumnName("duration_minutes");
+
+                    b.Property<string>("GuestName")
+                        .HasMaxLength(150)
+                        .HasColumnType("nvarchar(150)")
+                        .HasColumnName("guest_name");
+
+                    b.Property<string>("GuestPhone")
+                        .HasMaxLength(11)
+                        .HasColumnType("nvarchar(11)")
+                        .HasColumnName("guest_phone");
 
                     b.Property<bool>("IsDeleted")
                         .HasColumnType("bit")
@@ -229,6 +253,11 @@ namespace NailsByLeah.Api.Data.Migrations
                         .HasMaxLength(10)
                         .HasColumnType("nvarchar(10)")
                         .HasColumnName("payment_option");
+
+                    b.Property<string>("PerNailColors")
+                        .HasMaxLength(600)
+                        .HasColumnType("nvarchar(600)")
+                        .HasColumnName("per_nail_colors");
 
                     b.Property<decimal>("RefundDue")
                         .HasPrecision(10, 2)
@@ -256,6 +285,10 @@ namespace NailsByLeah.Api.Data.Migrations
                     b.Property<int?>("RemovalServiceId")
                         .HasColumnType("int")
                         .HasColumnName("removal_service_id");
+
+                    b.Property<int>("RescheduleCount")
+                        .HasColumnType("int")
+                        .HasColumnName("reschedule_count");
 
                     b.Property<byte[]>("RowVersion")
                         .IsConcurrencyToken()
@@ -490,6 +523,10 @@ namespace NailsByLeah.Api.Data.Migrations
                         .HasColumnType("datetime2")
                         .HasColumnName("created_at");
 
+                    b.Property<int?>("DesignOptionOfId")
+                        .HasColumnType("int")
+                        .HasColumnName("design_option_of_id");
+
                     b.Property<int>("DurationMinutes")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("int")
@@ -527,6 +564,9 @@ namespace NailsByLeah.Api.Data.Migrations
 
                     b.HasKey("Id")
                         .HasName("pk_services");
+
+                    b.HasIndex("DesignOptionOfId")
+                        .HasDatabaseName("ix_services_design_option_of_id");
 
                     b.HasIndex("category", "Name")
                         .IsUnique()
@@ -570,6 +610,15 @@ namespace NailsByLeah.Api.Data.Migrations
                         .HasColumnType("int")
                         .HasColumnName("rating");
 
+                    b.Property<DateTime?>("RepliedAt")
+                        .HasColumnType("datetime2")
+                        .HasColumnName("replied_at");
+
+                    b.Property<string>("Reply")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)")
+                        .HasColumnName("reply");
+
                     b.Property<Guid>("SubmissionKey")
                         .HasColumnType("uniqueidentifier")
                         .HasColumnName("submission_key");
@@ -591,6 +640,49 @@ namespace NailsByLeah.Api.Data.Migrations
                         {
                             t.HasCheckConstraint("ck_feedback_rating", "[rating] BETWEEN 1 AND 5");
                         });
+                });
+
+            modelBuilder.Entity("NailsByLeah.Api.Domain.GalleryPhoto", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasColumnName("id");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("Caption")
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)")
+                        .HasColumnName("caption");
+
+                    b.Property<string>("ContentType")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("nvarchar(40)")
+                        .HasColumnName("content_type");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2")
+                        .HasColumnName("created_at");
+
+                    b.Property<int?>("CreatedByUserId")
+                        .HasColumnType("int")
+                        .HasColumnName("created_by_user_id");
+
+                    b.Property<string>("FileName")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)")
+                        .HasColumnName("file_name");
+
+                    b.HasKey("Id")
+                        .HasName("pk_gallery_photos");
+
+                    b.HasIndex("CreatedAt")
+                        .HasDatabaseName("ix_gallery_photos_created_at");
+
+                    b.ToTable("gallery_photos", (string)null);
                 });
 
             modelBuilder.Entity("NailsByLeah.Api.Domain.Payment", b =>
@@ -727,6 +819,10 @@ namespace NailsByLeah.Api.Data.Migrations
                         .HasColumnType("datetime2")
                         .HasColumnName("created_at");
 
+                    b.Property<bool>("IsColorReference")
+                        .HasColumnType("bit")
+                        .HasColumnName("is_color_reference");
+
                     b.Property<bool>("IsDeleted")
                         .HasColumnType("bit")
                         .HasColumnName("is_deleted");
@@ -785,9 +881,18 @@ namespace NailsByLeah.Api.Data.Migrations
                         .HasColumnType("nvarchar(300)")
                         .HasColumnName("bio");
 
+                    b.Property<int?>("ClientRescheduleLimit")
+                        .HasColumnType("int")
+                        .HasColumnName("client_reschedule_limit");
+
                     b.Property<TimeOnly>("ClosingTime")
                         .HasColumnType("time")
                         .HasColumnName("closing_time");
+
+                    b.Property<decimal?>("DepositAmount")
+                        .HasPrecision(10, 2)
+                        .HasColumnType("decimal(10,2)")
+                        .HasColumnName("deposit_amount");
 
                     b.Property<string>("FacebookUrl")
                         .HasMaxLength(200)
@@ -803,6 +908,15 @@ namespace NailsByLeah.Api.Data.Migrations
                         .HasMaxLength(200)
                         .HasColumnType("nvarchar(200)")
                         .HasColumnName("instagram_url");
+
+                    b.Property<int?>("MaxDaysAhead")
+                        .HasColumnType("int")
+                        .HasColumnName("max_days_ahead");
+
+                    b.Property<string>("OutOfStockColors")
+                        .HasMaxLength(2000)
+                        .HasColumnType("nvarchar(2000)")
+                        .HasColumnName("out_of_stock_colors");
 
                     b.Property<string>("PaymentAccountName")
                         .HasMaxLength(60)
@@ -823,6 +937,10 @@ namespace NailsByLeah.Api.Data.Migrations
                         .HasMaxLength(100)
                         .HasColumnType("nvarchar(100)")
                         .HasColumnName("photo_file_name");
+
+                    b.Property<int?>("RescheduleMinimumHours")
+                        .HasColumnType("int")
+                        .HasColumnName("reschedule_minimum_hours");
 
                     b.Property<DateTime>("UpdatedAt")
                         .HasColumnType("datetime2")
@@ -950,6 +1068,16 @@ namespace NailsByLeah.Api.Data.Migrations
                             Name = "Embossed Art",
                             Price = 15m,
                             UpdatedAt = new DateTime(2026, 11, 1, 0, 0, 0, 0, DateTimeKind.Utc)
+                        },
+                        new
+                        {
+                            Id = 6,
+                            CreatedAt = new DateTime(2026, 11, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            IsActive = true,
+                            IsDeleted = false,
+                            Name = "Rhinestone",
+                            Price = 15m,
+                            UpdatedAt = new DateTime(2026, 11, 1, 0, 0, 0, 0, DateTimeKind.Utc)
                         });
                 });
 
@@ -961,6 +1089,11 @@ namespace NailsByLeah.Api.Data.Migrations
                         .HasColumnName("id");
 
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("AdminNote")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)")
+                        .HasColumnName("admin_note");
 
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("datetime2")
@@ -1209,6 +1342,7 @@ namespace NailsByLeah.Api.Data.Migrations
                             Id = 2,
                             AllowsAddOns = true,
                             CreatedAt = new DateTime(2026, 11, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            DesignOptionOfId = 1,
                             DurationMinutes = 180,
                             IsActive = true,
                             IsDeleted = false,
@@ -1226,6 +1360,31 @@ namespace NailsByLeah.Api.Data.Migrations
                             IsDeleted = false,
                             Name = "BIAB",
                             Price = 250m,
+                            UpdatedAt = new DateTime(2026, 11, 1, 0, 0, 0, 0, DateTimeKind.Utc)
+                        },
+                        new
+                        {
+                            Id = 6,
+                            AllowsAddOns = true,
+                            CreatedAt = new DateTime(2026, 11, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            DesignOptionOfId = 3,
+                            DurationMinutes = 180,
+                            IsActive = true,
+                            IsDeleted = false,
+                            Name = "BIAB with Design",
+                            Price = 350m,
+                            UpdatedAt = new DateTime(2026, 11, 1, 0, 0, 0, 0, DateTimeKind.Utc)
+                        },
+                        new
+                        {
+                            Id = 7,
+                            AllowsAddOns = true,
+                            CreatedAt = new DateTime(2026, 11, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            DurationMinutes = 120,
+                            IsActive = true,
+                            IsDeleted = false,
+                            Name = "Soft Gel Extension",
+                            Price = 399m,
                             UpdatedAt = new DateTime(2026, 11, 1, 0, 0, 0, 0, DateTimeKind.Utc)
                         });
                 });
@@ -1342,6 +1501,15 @@ namespace NailsByLeah.Api.Data.Migrations
                     b.Navigation("Booking");
 
                     b.Navigation("CancelledBy");
+                });
+
+            modelBuilder.Entity("NailsByLeah.Api.Domain.CatalogService", b =>
+                {
+                    b.HasOne("NailsByLeah.Api.Domain.CatalogService", null)
+                        .WithMany()
+                        .HasForeignKey("DesignOptionOfId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("fk_services_services_design_option_of_id");
                 });
 
             modelBuilder.Entity("NailsByLeah.Api.Domain.Feedback", b =>

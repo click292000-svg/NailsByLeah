@@ -72,13 +72,16 @@ public sealed class ScheduleService(
     private int Buffer => _options.BufferMinutes;
     private int Opening => DayPeriod.ToMinutes(_options.OpeningTime);
 
+    /// <summary>How far ahead clients can book: Leyah's setting, or the appsettings default.</summary>
+    private async Task<int> MaxDaysAheadAsync(CancellationToken ct) => (await settings.GetAsync(ct)).MaxDaysAhead ?? _options.MaxDaysAhead;
+
     public async Task<SalonHoursResponse> GetHoursAsync(CancellationToken ct = default) =>
         new(_options.OpeningTime, (await settings.GetAsync(ct)).ClosingTime, Interval, Buffer);
 
     public async Task<IReadOnlyList<DateOnly>> GetClosedDatesAsync(CancellationToken ct = default)
     {
         var from = clock.Today;
-        var to = from.AddDays(_options.MaxDaysAhead);
+        var to = from.AddDays(await MaxDaysAheadAsync(ct));
         var wholeDays = (await blockedSlots.GetInRangeAsync(from, to, ct)).Where(b => b.IsWholeDay).Select(b => b.Date).ToHashSet();
         var closed = new List<DateOnly>();
         for (var day = from; day <= to; day = day.AddDays(1))
@@ -122,7 +125,7 @@ public sealed class ScheduleService(
             .Select(a => new BookedTime(a.StartTime, a.DurationMinutes, Buffer))
             .ToList();
         var now = clock.LocalNow;
-        var beyondWindow = date > clock.Today.AddDays(_options.MaxDaysAhead);
+        var beyondWindow = date > clock.Today.AddDays(await MaxDaysAheadAsync(ct));
 
         var slots = starts.Select(start =>
         {
@@ -158,8 +161,9 @@ public sealed class ScheduleService(
             throw new ValidationAppException("startTime", "Please choose one of the available appointment times.");
         if (date.ToDateTime(startTime) <= clock.LocalNow)
             throw new ValidationAppException("bookingDate", "Please choose a future date and time.");
-        if (date > clock.Today.AddDays(_options.MaxDaysAhead))
-            throw new ValidationAppException("bookingDate", $"Bookings can be made up to {_options.MaxDaysAhead} days in advance.");
+        var maxDaysAhead = await MaxDaysAheadAsync(ct);
+        if (date > clock.Today.AddDays(maxDaysAhead))
+            throw new ValidationAppException("bookingDate", $"Bookings can be made up to {maxDaysAhead} days in advance.");
         if (_options.ClosedDays.Contains(date.DayOfWeek))
             throw new ConflictException("The salon is closed on this day.", "slot_unavailable");
 

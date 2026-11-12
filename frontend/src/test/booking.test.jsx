@@ -126,7 +126,7 @@ describe('Booking flow', () => {
     renderApp('/book')
 
     // Step 1: service, colour and add-ons; the total updates as they change (Ref 10.4).
-    await user.click(await screen.findByRole('checkbox', { name: /With Design/ }))
+    await user.click(await screen.findByRole('checkbox', { name: /^With Design/ }))
     const total = () => within(screen.getByRole('complementary')).getByText('Total').nextSibling.textContent
     expect(total()).toBe('₱400.00')
     // A new add-on goes on both hands, all 10 nails; one hand is 5, and the counter lowers it for an accent.
@@ -157,16 +157,15 @@ describe('Booking flow', () => {
     expect(screen.getByRole('button', { name: /^2:30 PM – 5:30 PM.*Available/ })).toBeEnabled()
     pickDate(dateFromToday(3))
     await user.click(await screen.findByRole('button', { name: /^11:00.*Available/ }))
-    await user.click(screen.getByRole('button', { name: /^Next:/ }))
 
-    // Step 3: note for Leyah (Ref 2.4).
+    // The note for Leyah sits under the date and time (Ref 2.4).
     // The note is typed; a quick-add suggestion adds a common phrase to it.
     await user.type(screen.getByLabelText(/Note for Leyah/), 'Short almond nails please')
     await user.click(screen.getByRole('button', { name: /I'll bring a reference photo/ }))
     expect(screen.getByLabelText(/Note for Leyah/)).toHaveValue("Short almond nails please. I'll bring a reference photo")
     await user.click(screen.getByRole('button', { name: /^Next:/ }))
 
-    // Step 4: summary and payment.
+    // Step 3: summary and payment.
     expect(screen.getByRole('heading', { name: 'Booking summary' })).toBeInTheDocument()
     expect(within(screen.getByRole('region', { name: 'Booking policy' })).getByText(/reschedule online up to 24 hours before/)).toBeInTheDocument()
     expect(screen.getByText(/French Tip — Right hand/)).toBeInTheDocument()

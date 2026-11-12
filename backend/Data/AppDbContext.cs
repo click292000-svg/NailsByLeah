@@ -24,6 +24,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<SalonSettings> SalonSettings => Set<SalonSettings>();
     public DbSet<BookingDraft> BookingDrafts => Set<BookingDraft>();
     public DbSet<Feedback> Feedback => Set<Feedback>();
+    public DbSet<GalleryPhoto> GalleryPhotos => Set<GalleryPhoto>();
 
     protected override void ConfigureConventions(ModelConfigurationBuilder configurationBuilder)
     {
@@ -35,6 +36,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
         configurationBuilder.Properties<UserTokenPurpose>().HaveConversion<string>().HaveMaxLength(30);
         configurationBuilder.Properties<NailHand>().HaveConversion<string>().HaveMaxLength(10);
         configurationBuilder.Properties<PaymentOption>().HaveConversion<string>().HaveMaxLength(10);
+        configurationBuilder.Properties<ColorRequestStatus>().HaveConversion<string>().HaveMaxLength(20);
 
         configurationBuilder.Properties<decimal>().HavePrecision(10, 2);
 

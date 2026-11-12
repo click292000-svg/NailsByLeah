@@ -10,7 +10,7 @@ import { CancelBookingDialog, RescheduleDialog } from '../../components/BookingD
 import { Modal } from '../../components/Modal'
 import { Receipt } from '../../components/Receipt'
 import { ReceiptDownload } from '../../components/ReceiptDownload'
-import { colorLabel } from '../../lib/shades'
+import { colorLabel, colorRequestLabel, perNailText } from '../../lib/shades'
 import { ReferenceImageGallery } from '../../components/ReferenceImageGallery'
 import { clearBookingDraft, draftHasProgress, loadBookingDraft } from '../../lib/bookingDraft'
 
@@ -18,6 +18,16 @@ const RESCHEDULE_HOURS = 24
 
 const isActive = (b) => b.status === 'Pending' || b.status === 'Confirmed'
 const isUpcoming = (b) => isActive(b) && startsAt(b.bookingDate, b.startTime) > new Date()
+// Cancelled and no-show bookings are one tab; everything else that is over (normally Completed) is the other.
+const isCancelled = (b) => b.status === 'Cancelled' || b.status === 'NoShow'
+const TABS = [
+  { value: 'upcoming', label: 'Upcoming', empty: 'No upcoming appointments' },
+  { value: 'completed', label: 'Completed', empty: 'No completed appointments yet' },
+  { value: 'cancelled', label: 'Cancelled', empty: 'No cancelled bookings' },
+]
+
+/** A client has had a successful visit once any booking is Completed; "Book again" and "Rate us" wait for that. */
+export const hasCompletedVisit = (bookings) => bookings.some((b) => b.status === 'Completed')
 
 /** Booking history with statuses, reschedule and cancel (Ref 10.3, 10.6, 2.5). */
 export default function MyBookingsPage() {
@@ -31,8 +41,12 @@ export default function MyBookingsPage() {
 
   const [bookings, lookups, draft, catalog] = history.data
   const upcoming = bookings.filter(isUpcoming).sort((a, b) => (a.bookingDate + a.startTime).localeCompare(b.bookingDate + b.startTime))
-  const past = bookings.filter((b) => !isUpcoming(b))
-  const shown = tab === 'upcoming' ? upcoming : past
+  const lists = {
+    upcoming,
+    completed: bookings.filter((b) => !isUpcoming(b) && !isCancelled(b)),
+    cancelled: bookings.filter((b) => !isUpcoming(b) && isCancelled(b)),
+  }
+  const shown = lists[tab]
 
   const done = (text) => {
     setDialog(null)
@@ -42,22 +56,22 @@ export default function MyBookingsPage() {
 
   return (
     <div className="stack">
-      <PageHeader title="My bookings" actions={<Link to="/book" className="btn btn-primary">Book again</Link>} />
+      <PageHeader title="My bookings" actions={hasCompletedVisit(bookings) ? <Link to="/book" className="btn btn-primary">Book again</Link> : null} />
       {message && <Alert kind="success" onClose={() => setMessage(null)}>{message}</Alert>}
       {draftHasProgress(draft) && (
         <DraftCard draft={draft} catalog={catalog} onDiscard={async () => { await clearBookingDraft(); history.reload() }} />
       )}
 
       <div className="tabs" role="tablist">
-        <button type="button" role="tab" aria-selected={tab === 'upcoming'} className={tab === 'upcoming' ? 'tab active' : 'tab'}
-          onClick={() => setTab('upcoming')}>Upcoming ({upcoming.length})</button>
-        <button type="button" role="tab" aria-selected={tab === 'past'} className={tab === 'past' ? 'tab active' : 'tab'}
-          onClick={() => setTab('past')}>Past &amp; cancelled ({past.length})</button>
+        {TABS.map((t) => (
+          <button key={t.value} type="button" role="tab" aria-selected={tab === t.value} className={tab === t.value ? 'tab active' : 'tab'}
+            onClick={() => setTab(t.value)}>{t.label} ({lists[t.value].length})</button>
+        ))}
         {history.loading && <Spinner small label="Refreshing" />}
       </div>
 
       {shown.length === 0 ? (
-        <EmptyState title={tab === 'upcoming' ? 'No upcoming appointments' : 'No past bookings yet'}>
+        <EmptyState title={TABS.find((t) => t.value === tab).empty}>
           {tab === 'upcoming' && <Link to="/book">Book an appointment</Link>}
         </EmptyState>
       ) : (
@@ -118,7 +132,9 @@ function DraftCard({ draft, catalog, onDiscard }) {
 
 function BookingCard({ booking: b, onAction }) {
   const upcoming = isUpcoming(b)
-  const canReschedule = upcoming && hoursUntil(b.bookingDate, b.startTime) >= RESCHEDULE_HOURS
+  const inTime = hoursUntil(b.bookingDate, b.startTime) >= RESCHEDULE_HOURS
+  const usedUp = b.rescheduleLimit > 0 && b.rescheduleCount >= b.rescheduleLimit
+  const canReschedule = upcoming && inTime && !usedUp
   return (
     <li className="booking-card">
       <div className="booking-card-head">
@@ -126,6 +142,12 @@ function BookingCard({ booking: b, onAction }) {
           <div className="booking-when">{formatDate(b.bookingDate)} · {formatTime(b.startTime)}</div>
           <div className="booking-what">{b.serviceName}{b.removalServiceName && ` + Removal (${b.removalServiceName})`}</div>
           {b.nailColor && <div className="muted small">Colour: {colorLabel(b.nailColor)}</div>}
+          {b.perNailColors && <div className="muted small">Each nail: {perNailText(b.perNailColors)}</div>}
+          {b.colorRequest && (
+            <div className="muted small">
+              Colour: {b.colorRequest} <span className={`color-request-badge is-${(b.colorRequestStatus ?? 'Pending').toLowerCase()}`}>{colorRequestLabel(b.colorRequestStatus)}</span>
+            </div>
+          )}
         </div>
         <StatusBadge status={b.status} />
       </div>
@@ -162,8 +184,14 @@ function BookingCard({ booking: b, onAction }) {
           </>
         )}
       </div>
-      {upcoming && !canReschedule && (
+      {upcoming && usedUp && (
+        <p className="hint-text">You&apos;ve rescheduled this appointment {b.rescheduleLimit} times, the most allowed. Message Leyah if you need to move it again.</p>
+      )}
+      {upcoming && !usedUp && !inTime && (
         <p className="hint-text">Rescheduling is only possible at least 24 hours before your appointment.</p>
+      )}
+      {upcoming && !usedUp && b.rescheduleCount > 0 && inTime && (
+        <p className="hint-text">Rescheduled {b.rescheduleCount} of {b.rescheduleLimit} times.</p>
       )}
     </li>
   )

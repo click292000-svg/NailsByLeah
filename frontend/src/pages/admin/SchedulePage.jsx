@@ -8,6 +8,7 @@ import { LIMITS } from '../../validation/rules'
 import { schedule } from '../../content/salon'
 import { TimeSelect } from '../../components/TimeSelect'
 import { Alert, Button, Card, PageHeader, PageLoader, SelectField, Spinner, TextField } from '../../components/ui'
+import { BookingRulesCard } from './BookingRulesCards'
 
 const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 
@@ -48,6 +49,7 @@ export default function SchedulePage() {
       <PageHeader title="Schedule" subtitle="Set the closing time and close days off, holidays, breaks or single times. Closed times cannot be booked." />
       {message && <Alert kind="success" onClose={() => setMessage(null)}>{message}</Alert>}
       <OpeningHoursCard onSaved={hoursSaved} />
+      <BookingRulesCard />
       <div className="schedule-layout">
         <Card>
           <div className="calendar-head">

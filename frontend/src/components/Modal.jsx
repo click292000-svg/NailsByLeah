@@ -72,7 +72,7 @@ export function LegalDocumentModal({ document: kind, onClose, onReadToEnd }) {
       <span className="muted small legal-progress" aria-live="polite">
         {atEnd ? '✓ You have read to the end.' : 'Scroll to the end to continue.'}
       </span>
-      <Button onClick={onClose} disabled={!atEnd}>{atEnd ? 'Done' : 'Keep reading'}</Button>
+      {atEnd && <Button onClick={onClose}>Done</Button>}
     </>
   ) : <Button onClick={onClose}>Close</Button>
 

@@ -146,17 +146,19 @@ describe('Hands for Stone add-ons', () => {
     await signIn(CLIENT)
     renderApp('/book')
 
-    await user.click(await screen.findByRole('checkbox', { name: /With Design/ }))
+    await user.click(await screen.findByRole('checkbox', { name: /^With Design/ }))
     await user.click(screen.getByRole('checkbox', { name: /Chrome/ }))
-    await user.click(screen.getByRole('checkbox', { name: /Plain/ }))
+    // Unticking "With design" leaves Plain on its own.
+    await user.click(screen.getByRole('checkbox', { name: /^With Design/ }))
+    expect(screen.getByRole('checkbox', { name: /^Plain/ })).toBeChecked()
 
-    expect(screen.getByText(/Stones aren.t available with Plain/)).toBeInTheDocument()
+    expect(screen.getByText(/Nail art isn.t available with Plain/)).toBeInTheDocument()
     expect(screen.getByRole('checkbox', { name: /Chrome/ })).toBeDisabled()
     expect(screen.getByRole('checkbox', { name: /Chrome/ })).not.toBeChecked()
     expect(within(screen.getByRole('complementary')).queryByText(/Chrome/)).toBeNull() // not charged
 
     // Back to With Design: the earlier Chrome is gone, not quietly restored.
-    await user.click(screen.getByRole('checkbox', { name: /With Design/ }))
+    await user.click(screen.getByRole('checkbox', { name: /^With Design/ }))
     expect(screen.getByRole('checkbox', { name: /Chrome/ })).not.toBeChecked()
   })
 
@@ -165,7 +167,7 @@ describe('Hands for Stone add-ons', () => {
     await signIn(CLIENT)
     renderApp('/book')
 
-    await user.click(await screen.findByRole('checkbox', { name: /With Design/ }))
+    await user.click(await screen.findByRole('checkbox', { name: /^With Design/ }))
     await user.click(screen.getByRole('checkbox', { name: /^My Work/ }))
     const aside = within(screen.getByRole('complementary'))
     expect(aside.getByText('Removal – My Work')).toBeInTheDocument()
@@ -175,7 +177,8 @@ describe('Hands for Stone add-ons', () => {
     // Only one removal at a time, and a removal alone needs no colour.
     await user.click(screen.getByRole('checkbox', { name: /^Not My Work/ }))
     expect(screen.getByRole('checkbox', { name: /^My Work/ })).not.toBeChecked()
-    await user.click(screen.getByRole('checkbox', { name: /With Design/ }))
+    // A second tap on the Plain card un-chooses the set, design and all.
+    await user.click(screen.getByRole('checkbox', { name: /^Plain/ }))
     expect(screen.queryByRole('radiogroup', { name: 'Nail colour' })).toBeNull()
     await user.click(screen.getByRole('button', { name: /^Next:/ }))
     expect(await screen.findByRole('radiogroup', { name: /Choose a date/ })).toBeInTheDocument()
@@ -185,7 +188,7 @@ describe('Hands for Stone add-ons', () => {
     const user = userEvent.setup()
     await signIn(CLIENT)
     renderApp('/book')
-    await user.click(await screen.findByRole('checkbox', { name: /With Design/ }))
+    await user.click(await screen.findByRole('checkbox', { name: /^With Design/ }))
     await user.click(screen.getByRole('checkbox', { name: /Chrome/ }))
     expect(screen.getByText('10 nails')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'More nails for Chrome' })).toBeDisabled()
@@ -207,7 +210,7 @@ describe('Booking drafts', () => {
     await signIn(CLIENT)
     const first = renderApp('/book')
 
-    await user.click(await screen.findByRole('checkbox', { name: /With Design/ }))
+    await user.click(await screen.findByRole('checkbox', { name: /^With Design/ }))
     await user.click(screen.getByRole('checkbox', { name: /Chrome/ }))
     await user.click(screen.getByRole('radio', { name: 'Right hand' }))
     await pickShade(user, '46')
@@ -215,7 +218,7 @@ describe('Booking drafts', () => {
     await user.click(screen.getByRole('button', { name: /Back to service/ }))
 
     // Going back keeps every choice.
-    expect(screen.getByRole('checkbox', { name: /With Design/ })).toBeChecked()
+    expect(screen.getByRole('checkbox', { name: /^With Design/ })).toBeChecked()
     expect(screen.getByRole('radio', { name: 'Right hand' })).toHaveAttribute('aria-checked', 'true')
     expect(screen.getByRole('button', { name: 'Colour #46 – Plum-Grey. Change colour' })).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: /^Next:/ }))

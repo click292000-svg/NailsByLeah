@@ -22,6 +22,24 @@ public class Booking : IPayable, ICancellable, ISoftDeletable
     /// <summary>The nail colour the client chose (from the salon's list), or null for a removal only.</summary>
     public string? NailColor { get; set; }
 
+    /// <summary>
+    /// Optional colours for each nail as JSON, {"left":[...5],"right":[...5]}, thumb first; a null nail has the main colour.
+    /// Kept as one text column: it is only ever read and shown with the booking.
+    /// </summary>
+    public string? PerNailColors { get; set; }
+
+    /// <summary>"Can't find your colour?": the shade the client described, when it isn't on the chart.</summary>
+    public string? ColorRequest { get; set; }
+
+    /// <summary>Whether Leyah has the requested shade; Pending until she answers. Null without a request.</summary>
+    public ColorRequestStatus? ColorRequestStatus { get; set; }
+
+    /// <summary>How many times the client moved the appointment themselves (Leyah's own moves don't count).</summary>
+    public int RescheduleCount { get; set; }
+
+    /// <summary>Clients may move an appointment this many times; after that they contact Leyah.</summary>
+    public const int ClientRescheduleLimit = 2;
+
     /// <summary>The Terms &amp; Conditions version the client agreed to when booking, and when.</summary>
     public string? TermsVersion { get; set; }
     public DateTime? TermsAcceptedAt { get; set; }
@@ -43,6 +61,16 @@ public class Booking : IPayable, ICancellable, ISoftDeletable
 
     /// <summary>Scheduled completion. The 30-minute gap before the next appointment starts here.</summary>
     public TimeOnly EndTime => StartTime.AddMinutes(DurationMinutes);
+
+    /// <summary>
+    /// Who the appointment is for when it isn't the account holder: a walk-in or Messenger client Leyah booked herself
+    /// (the booking then sits on her own account). Shown instead of the account holder's name everywhere.
+    /// </summary>
+    public string? GuestName { get; set; }
+    public string? GuestPhone { get; set; }
+
+    /// <summary>Leyah made this booking from the admin side rather than the client online.</summary>
+    public bool CreatedByAdmin { get; set; }
 
     /// <summary>What the client typed for Leyah (optional).</summary>
     public string? Note { get; set; }
@@ -189,6 +217,17 @@ public class Booking : IPayable, ICancellable, ISoftDeletable
         return amount;
     }
 
+    /// <summary>Leyah checked whether she has the shade the client asked for.</summary>
+    public void DecideColorRequest(bool available, DateTime utcNow)
+    {
+        if (ColorRequestStatus is null)
+            throw new ConflictException("This booking has no colour request.", "no_color_request");
+        if (!IsActive)
+            throw new ConflictException($"A {Status} booking's colour request can no longer be changed.", "invalid_status");
+        ColorRequestStatus = available ? Domain.ColorRequestStatus.Available : Domain.ColorRequestStatus.Unavailable;
+        UpdatedAt = utcNow;
+    }
+
     public void MoveTo(DateOnly date, TimeOnly startTime, DateTime utcNow)
     {
         if (!IsActive)
@@ -248,4 +287,22 @@ public class Feedback
     public Guid SubmissionKey { get; set; }
 
     public DateTime CreatedAt { get; set; }
+
+    /// <summary>Leyah's answer, shown to the client on their Feedback page.</summary>
+    public string? Reply { get; set; }
+    public DateTime? RepliedAt { get; set; }
+}
+
+/// <summary>A photo of Leyah's work for the home page's Our Works gallery, in the same private storage as design photos.</summary>
+public class GalleryPhoto
+{
+    public const int MaxPhotos = 30;
+
+    public int Id { get; set; }
+    public string FileName { get; set; } = "";
+    public string ContentType { get; set; } = "";
+    /// <summary>A few words about the set, shown under the photo (optional).</summary>
+    public string? Caption { get; set; }
+    public DateTime CreatedAt { get; set; }
+    public int? CreatedByUserId { get; set; }
 }

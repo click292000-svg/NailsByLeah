@@ -6,7 +6,8 @@
 
 import { api } from '../api'
 
-const VERSION = 2
+// 3: three steps (photos with the colour, the note with the date and time), colours per nail and colour requests.
+const VERSION = 3
 
 /** The signed-in client's saved draft, or null. Drafts from an older version of the page are ignored. */
 export async function loadBookingDraft() {
@@ -21,4 +22,4 @@ export const clearBookingDraft = () => api.bookingDraft.remove().catch(() => {})
 
 /** Whether a draft has anything worth resuming. */
 export const draftHasProgress = (draft) =>
-  Boolean(draft && (draft.serviceId || draft.removalId || draft.date || draft.referenceImages?.length || Object.keys(draft.nails ?? {}).length))
+  Boolean(draft && (draft.serviceId || draft.removalId || draft.date || draft.referenceImages?.length || draft.colorImages?.length || Object.keys(draft.nails ?? {}).length))
