@@ -18,7 +18,7 @@ describe('Payment step', () => {
     render(panel({ onPay }))
 
     expect(screen.getByRole('note')).toHaveTextContent('₱150.00 booking depositNon-refundable for cancellations and no-shows. This amount is deducted from your total service cost.')
-    expect(screen.getByText('Please accept the booking policy to continue.')).toBeInTheDocument()
+    expect(screen.getByText('Read the booking policies in step 1 to continue.')).toBeInTheDocument()
     const pay = screen.getByRole('button', { name: /Pay/ })
     expect(pay).toBeDisabled()
     await user.click(pay)

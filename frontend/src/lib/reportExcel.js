@@ -37,30 +37,31 @@ export function buildSalesReportWorkbook(ExcelJS, { period, report, generatedAt 
     views: [{ showGridLines: false }],
     pageSetup: { orientation: 'portrait', fitToPage: true, fitToWidth: 1, fitToHeight: 0, margins: { left: 0.6, right: 0.6, top: 0.7, bottom: 0.7, header: 0.3, footer: 0.3 } },
   })
-  sheet.columns = [{ width: 4 }, { width: 44 }, { width: 20 }, { width: 4 }]
+  sheet.columns = [{ width: 4 }, { width: 60 }, { width: 24 }, { width: 4 }]
 
   // Title block
   sheet.mergeCells('B2:C2')
   Object.assign(sheet.getCell('B2'), { value: 'Nails by Leyah' })
-  sheet.getCell('B2').font = { name: 'Georgia', size: 20, bold: true, color: { argb: BURGUNDY } }
-  sheet.getRow(2).height = 30
+  sheet.getCell('B2').font = { name: 'Georgia', size: 26, bold: true, color: { argb: BURGUNDY } }
+  sheet.getRow(2).height = 38
   sheet.mergeCells('B3:C3')
   sheet.getCell('B3').value = `Sales report · ${period}`
-  sheet.getCell('B3').font = { name: 'Calibri', size: 13, bold: true, color: { argb: 'FF3B2A30' } }
+  sheet.getCell('B3').font = { name: 'Calibri', size: 16, bold: true, color: { argb: 'FF3B2A30' } }
+  sheet.getRow(3).height = 24
   sheet.mergeCells('B4:C4')
   sheet.getCell('B4').value = `Generated ${generatedAt.toLocaleString('en-PH', { dateStyle: 'medium', timeStyle: 'short' })}`
-  sheet.getCell('B4').font = { name: 'Calibri', size: 9, italic: true, color: { argb: MUTED } }
+  sheet.getCell('B4').font = { name: 'Calibri', size: 11, italic: true, color: { argb: MUTED } }
 
   let r = 6
   const section = (title, valueLabel) => {
     const row = sheet.getRow(r)
     row.getCell(2).value = title
     row.getCell(3).value = valueLabel
-    row.height = 22
+    row.height = 28
     for (const c of [2, 3]) {
       const cell = row.getCell(c)
       cell.fill = fill(BURGUNDY)
-      cell.font = { name: 'Calibri', size: 11, bold: true, color: { argb: 'FFFFFFFF' } }
+      cell.font = { name: 'Calibri', size: 14, bold: true, color: { argb: 'FFFFFFFF' } }
       cell.alignment = { vertical: 'middle', horizontal: c === 3 ? 'right' : 'left', indent: 1 }
       cell.border = box
     }
@@ -68,14 +69,14 @@ export function buildSalesReportWorkbook(ExcelJS, { period, report, generatedAt 
   }
   const line = (label, value, format, { strong = false, note } = {}) => {
     const row = sheet.getRow(r)
-    row.getCell(2).value = note ? { richText: [{ text: label }, { text: `  ${note}`, font: { size: 9, italic: true, color: { argb: MUTED } } }] } : label
+    row.getCell(2).value = note ? { richText: [{ text: label }, { text: `  ${note}`, font: { size: 11, italic: true, color: { argb: MUTED } } }] } : label
     row.getCell(3).value = value
     row.getCell(3).numFmt = format
-    row.height = 20
+    row.height = 26
     for (const c of [2, 3]) {
       const cell = row.getCell(c)
       cell.fill = fill(strong ? ROSE : (r % 2 ? 'FFFFFFFF' : ROSE_LIGHT))
-      cell.font = { name: 'Calibri', size: 11, bold: strong, color: { argb: strong ? BURGUNDY : 'FF3B2A30' } }
+      cell.font = { name: 'Calibri', size: 14, bold: strong, color: { argb: strong ? BURGUNDY : 'FF3B2A30' } }
       cell.alignment = { vertical: 'middle', horizontal: c === 3 ? 'right' : 'left', indent: 1 }
       cell.border = box
     }
@@ -102,7 +103,7 @@ export function buildSalesReportWorkbook(ExcelJS, { period, report, generatedAt 
   ]) {
     sheet.mergeCells(`B${r}:C${r}`)
     sheet.getCell(`B${r}`).value = text
-    sheet.getCell(`B${r}`).font = { name: 'Calibri', size: 9, italic: true, color: { argb: MUTED } }
+    sheet.getCell(`B${r}`).font = { name: 'Calibri', size: 11, italic: true, color: { argb: MUTED } }
     r += 1
   }
 
@@ -117,32 +118,32 @@ function addDaysSheet(book, period, days) {
     pageSetup: { orientation: 'landscape', fitToPage: true, fitToWidth: 1, fitToHeight: 0 },
   })
   const columns = [
-    { header: 'Date', key: 'date', width: 16, format: null },
-    { header: 'Made', key: 'bookingsMade', width: 10, format: COUNT },
-    { header: 'Completed', key: 'bookingsCompleted', width: 12, format: COUNT },
-    { header: 'Cancelled', key: 'bookingsCancelled', width: 12, format: COUNT },
-    { header: 'No-show', key: 'bookingsNoShow', width: 10, format: COUNT },
-    { header: 'Paid online', key: 'depositsCollected', width: 16, format: PESO },
-    { header: 'Balances received', key: 'balancesReceived', width: 19, format: PESO },
-    { header: 'Total received', key: 'total', width: 17, format: PESO },
+    { header: 'Date', key: 'date', width: 19, format: null },
+    { header: 'Made', key: 'bookingsMade', width: 11, format: COUNT },
+    { header: 'Completed', key: 'bookingsCompleted', width: 14, format: COUNT },
+    { header: 'Cancelled', key: 'bookingsCancelled', width: 14, format: COUNT },
+    { header: 'No-show', key: 'bookingsNoShow', width: 12, format: COUNT },
+    { header: 'Paid online', key: 'depositsCollected', width: 19, format: PESO },
+    { header: 'Balances received', key: 'balancesReceived', width: 23, format: PESO },
+    { header: 'Total received', key: 'total', width: 20, format: PESO },
   ]
   sheet.columns = columns.map(({ key, width }) => ({ key, width }))
 
   sheet.mergeCells(1, 1, 1, columns.length)
   sheet.getCell('A1').value = `Days with activity · ${period}`
-  sheet.getCell('A1').font = { name: 'Georgia', size: 14, bold: true, color: { argb: BURGUNDY } }
-  sheet.getRow(1).height = 24
+  sheet.getCell('A1').font = { name: 'Georgia', size: 18, bold: true, color: { argb: BURGUNDY } }
+  sheet.getRow(1).height = 30
 
   const header = sheet.getRow(3)
   columns.forEach((c, i) => {
     const cell = header.getCell(i + 1)
     cell.value = c.header
     cell.fill = fill(BURGUNDY)
-    cell.font = { name: 'Calibri', size: 11, bold: true, color: { argb: 'FFFFFFFF' } }
+    cell.font = { name: 'Calibri', size: 13, bold: true, color: { argb: 'FFFFFFFF' } }
     cell.alignment = { vertical: 'middle', horizontal: i === 0 ? 'left' : 'right', indent: i === 0 ? 1 : 0 }
     cell.border = box
   })
-  header.height = 22
+  header.height = 28
 
   const active = days.filter(hasActivity)
   if (active.length === 0) {
@@ -173,12 +174,12 @@ function addDaysSheet(book, period, days) {
 }
 
 function style(row, columns, background, strong) {
-  row.height = 19
+  row.height = 24
   columns.forEach((c, i) => {
     const cell = row.getCell(i + 1)
     if (c.format) cell.numFmt = c.format
     cell.fill = fill(background)
-    cell.font = { name: 'Calibri', size: 11, bold: strong, color: { argb: strong ? BURGUNDY : 'FF3B2A30' } }
+    cell.font = { name: 'Calibri', size: 13, bold: strong, color: { argb: strong ? BURGUNDY : 'FF3B2A30' } }
     cell.alignment = { vertical: 'middle', horizontal: i === 0 ? 'left' : 'right', indent: i === 0 ? 1 : 0 }
     cell.border = box
   })

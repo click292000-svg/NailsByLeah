@@ -251,6 +251,10 @@ export function ColorPickerModal({ value, onChoose, onClose, nails: savedNails, 
         <section className="cp-side">
           <h2 id={titleId}>Choose Nail Color</h2>
           <p className="cp-intro">Select a color from the {COLLECTION.name} collection.</p>
+          <p className="cp-notice" role="note">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9" /><path d="M12 11v5M12 8h.01" /></svg>
+            <span>Colours on screen may look different from the real polish, depending on your phone or computer. Leyah can show you the actual bottle at the salon.</span>
+          </p>
 
           {/* One card for the shade: large nails, its number and name, and what it looks like. */}
           <div className={shown ? 'cp-pick' : 'cp-pick is-empty'} aria-live="polite">
@@ -333,10 +337,10 @@ export function ColorChooser({ colors, value, onChange, request = null, onReques
   const asking = request !== null
   const otherChosen = !shade && !asking && others.includes(value)
   const chosen = Boolean(shade || eachNail || asking || otherChosen)
-  const title = shade ? colorLabel(value) : asking ? 'Colour request' : otherChosen ? value : eachNail ? 'A colour for each nail' : 'Choose from 58 shades'
+  const title = shade ? colorLabel(value) : asking ? 'Colour request' : otherChosen ? value : eachNail ? 'A colour for each nail' : 'Tap here to choose your colour'
   const sub = shade || eachNail ? `${COLLECTION.name} ${COLLECTION.code}`
     : asking ? (request.trim() || 'Describe the colour in the chart')
-      : otherChosen ? 'Leyah helps you choose at the salon' : `Open the ${COLLECTION.name} colour chart`
+      : otherChosen ? 'Leyah helps you choose at the salon' : `58 shades from the ${COLLECTION.name} colour chart`
   return (
     <div className="cc">
       <button type="button" className={chosen ? 'cc-card chosen' : 'cc-card'} onClick={() => setOpen(true)}
@@ -349,7 +353,7 @@ export function ColorChooser({ colors, value, onChange, request = null, onReques
           <strong>{title}</strong>
           <span>{sub}</span>
         </span>
-        <span className="cc-action">{chosen ? 'Change' : 'Open chart'}</span>
+        <span className="cc-action">{chosen ? 'Change' : 'Choose colour'}<span aria-hidden="true"> ›</span></span>
       </button>
       {nailsComplete(nails) && <p className="cc-nails-text muted small">Each nail: {perNailText(nails)}</p>}
       {open && (

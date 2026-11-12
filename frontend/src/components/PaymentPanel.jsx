@@ -10,9 +10,6 @@ const Icon = ({ children, className = 'agree-icon' }) => (
 const CalendarCheckIcon = () => (
   <Icon className="agree-deposit-icon"><rect x="3" y="5" width="16" height="15" rx="2.5" /><path d="M3 10h16M8 3v4M14 3v4" /><circle cx="18" cy="18" r="4" fill="var(--white)" /><path d="M16.3 18l1.2 1.2 2.2-2.4" /></Icon>
 )
-const DocumentIcon = () => (
-  <Icon><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z" /><path d="M14 3v5h5M9 13h6M9 17h6" /></Icon>
-)
 const ChevronIcon = () => <Icon className="agree-chevron"><path d="M9 6l6 6-6 6" /></Icon>
 const InfoIcon = () => <Icon className="agree-info"><circle cx="12" cy="12" r="9" /><path d="M12 11v5M12 8h.01" /></Icon>
 
@@ -112,26 +109,28 @@ export function PaymentPanel({ quote, option, onOptionChange, onPay, error }) {
             </div>
           </div>
 
-          <button type="button" className={read ? 'agree-review is-read' : 'agree-review'}
+          <p className="agree-steps-intro">Two quick steps before you can pay:</p>
+          <button type="button" className={read ? 'agree-review is-read' : 'agree-review is-next'}
             onClick={() => { setNudge(null); setShowTerms(read ? 'reference' : 'read') }}>
-            <span className="agree-review-icon"><DocumentIcon /></span>
+            <span className={read ? 'agree-step done' : 'agree-step'} aria-hidden="true">{read ? '✓' : '1'}</span>
             <span className="agree-review-text">
               <span className="agree-review-title">Review booking policies</span>
-              <span className="agree-review-sub">{read ? 'Terms & Conditions · ✓ Read to the end' : 'Terms & Conditions · Required before payment'}</span>
+              <span className="agree-review-sub">{read ? 'Terms & Conditions · ✓ Read to the end' : 'Terms & Conditions · Required before payment: open it and scroll to the end'}</span>
             </span>
-            <ChevronIcon />
+            <span className={read ? 'agree-review-action is-done' : 'agree-review-action'}>{read ? 'Open again' : 'Read now'}<ChevronIcon /></span>
           </button>
 
           {/* The click on a disabled box doesn't reach it, so the wrapper explains why it can't be ticked yet. */}
           <label className={read ? 'agree-check' : 'agree-check is-locked'}
             onClick={() => !read && setNudge('Please open and read the booking policies to the end first.')}>
+            <span className={understood ? 'agree-step done' : read ? 'agree-step' : 'agree-step locked'} aria-hidden="true">{understood ? '✓' : '2'}</span>
             <span>I have read and agree to the <strong>booking policies</strong> and <strong>Terms &amp; Conditions</strong>.</span>
             <input type="checkbox" checked={understood} disabled={paying || !read} aria-describedby="terms-help"
               onChange={(e) => { setUnderstood(e.target.checked); setNudge(null) }} />
           </label>
           <p id="terms-help" className={nudge ? 'agree-hint field-error' : 'agree-hint'}>
             <InfoIcon />
-            <span>{nudge ?? (understood ? 'Agreed. You can pay now.' : read ? 'Tick the box to agree.' : 'You can tick this once you have read the policies to the end.')}</span>
+            <span>{nudge ?? (understood ? 'Agreed. You can pay now.' : read ? 'Now tick the box to agree.' : 'Step 2 unlocks once you have read the policies to the end.')}</span>
           </p>
         </div>
       </div>
@@ -148,7 +147,8 @@ export function PaymentPanel({ quote, option, onOptionChange, onPay, error }) {
         Pay <Money amount={amountNow(quote, option)} />{option === 'Full' ? ' in full' : ' deposit'}
       </Button>
       <p className="pay-note muted small">
-        {understood ? 'You get a receipt right away. Leyah then checks the payment and confirms your appointment.' : 'Please accept the booking policy to continue.'}
+        {understood ? 'You get a receipt right away. Leyah then checks the payment and confirms your appointment.'
+          : read ? 'Tick the box in step 2 to continue.' : 'Read the booking policies in step 1 to continue.'}
       </p>
       {/* Once read, opening them again is just for reference: no need to scroll to the end a second time. */}
       {showTerms && <LegalDocumentModal document="terms" onClose={() => setShowTerms(null)} onReadToEnd={showTerms === 'read' ? () => setRead(true) : undefined} />}
