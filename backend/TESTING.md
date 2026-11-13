@@ -6,9 +6,10 @@ Run everything from the repository root:
 dotnet test NailsByLeah.slnx
 ```
 
-Integration tests use SQL Server LocalDB. If a terminal run fails with "LocalDB instance startup: SQL Server process
-failed to start", run them from Visual Studio's Test Explorer (**Test → Run All Tests**). Rate limits are off in the
-shared test host; `RateLimitTests` switches them on with small numbers.
+Integration tests use the Postgres test database in the API's user secrets (`ConnectionStrings:Tests`, or else
+`ConnectionStrings:Default`): each test class gets its own temporary schema there, dropped when it finishes. They need an
+internet connection when that database is on Supabase. Rate limits are off in the shared test host; `RateLimitTests`
+switches them on with small numbers.
 
 ## Automated test coverage (backend doc 9)
 

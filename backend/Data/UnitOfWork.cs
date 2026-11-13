@@ -1,7 +1,7 @@
 using System.Data;
-using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
 using NailsByLeah.Api.Errors;
+using Npgsql;
 
 namespace NailsByLeah.Api.Data;
 
@@ -22,9 +22,7 @@ public interface IUnitOfWork
 
 public sealed class EfUnitOfWork(AppDbContext db) : IUnitOfWork
 {
-    private const int SqlUniqueIndexViolation = 2601;
-    private const int SqlUniqueConstraintViolation = 2627;
-    private const int SqlDeadlockVictim = 1205;
+    private const string BusyMessage = "The system is busy with another request for the same time. Please try again.";
 
     public async Task SaveChangesAsync(CancellationToken ct = default)
     {
@@ -32,9 +30,9 @@ public sealed class EfUnitOfWork(AppDbContext db) : IUnitOfWork
         {
             await db.SaveChangesAsync(ct);
         }
-        catch (DbUpdateException ex) when (ex.InnerException is SqlException sql)
+        catch (DbUpdateException ex) when (ex.InnerException is PostgresException pg)
         {
-            throw Translate(ex, sql);
+            throw Translate(ex, pg);
         }
     }
 
@@ -48,11 +46,11 @@ public sealed class EfUnitOfWork(AppDbContext db) : IUnitOfWork
             await transaction.CommitAsync(ct);
             return result;
         }
-        catch (SqlException sql) when (sql.Number == SqlDeadlockVictim)
+        catch (PostgresException pg) when (IsBusy(pg.SqlState))
         {
             await transaction.RollbackAsync(CancellationToken.None);
             DiscardChanges();
-            throw new ConflictException("The system is busy with another request for the same time. Please try again.", "concurrency_conflict");
+            throw new ConflictException(BusyMessage, "concurrency_conflict");
         }
         catch
         {
@@ -64,20 +62,15 @@ public sealed class EfUnitOfWork(AppDbContext db) : IUnitOfWork
 
     public void DiscardChanges() => db.ChangeTracker.Clear();
 
-    private static Exception Translate(DbUpdateException ex, SqlException sql) => sql.Number switch
+    /// <summary>Deadlock, serialization failure, or a lock that wasn't granted in time: worth trying again.</summary>
+    private static bool IsBusy(string sqlState) =>
+        sqlState is PostgresErrorCodes.DeadlockDetected or PostgresErrorCodes.SerializationFailure or PostgresErrorCodes.LockNotAvailable;
+
+    // Postgres names the violated index itself, so duplicates map to the same index names as before (IndexNames).
+    private static Exception Translate(DbUpdateException ex, PostgresException pg) => pg.SqlState switch
     {
-        SqlUniqueIndexViolation or SqlUniqueConstraintViolation => new UniqueConstraintViolationException(FindIndexName(sql.Message), ex),
-        SqlDeadlockVictim => new ConflictException("The system is busy with another request for the same time. Please try again.", "concurrency_conflict"),
+        PostgresErrorCodes.UniqueViolation => new UniqueConstraintViolationException(pg.ConstraintName, ex),
+        _ when IsBusy(pg.SqlState) => new ConflictException(BusyMessage, "concurrency_conflict"),
         _ => ex,
     };
-
-    private static string? FindIndexName(string message)
-    {
-        // SQL Server message: "... with unique index 'ux_users_username'. ..."
-        var start = message.IndexOf("'ux_", StringComparison.Ordinal);
-        if (start < 0)
-            return null;
-        var end = message.IndexOf('\'', start + 1);
-        return end < 0 ? null : message[(start + 1)..end];
-    }
 }

@@ -2,9 +2,9 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
-using Microsoft.EntityFrameworkCore.Metadata;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using NailsByLeah.Api.Data;
+using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
 #nullable disable
 
@@ -18,25 +18,25 @@ namespace NailsByLeah.Api.Data.Migrations
 #pragma warning disable 612, 618
             modelBuilder
                 .HasAnnotation("ProductVersion", "10.0.14")
-                .HasAnnotation("Relational:MaxIdentifierLength", 128);
+                .HasAnnotation("Relational:MaxIdentifierLength", 63);
 
-            SqlServerModelBuilderExtensions.UseIdentityColumns(modelBuilder);
+            NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
             modelBuilder.Entity("Microsoft.AspNetCore.DataProtection.EntityFrameworkCore.DataProtectionKey", b =>
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("int")
+                        .HasColumnType("integer")
                         .HasColumnName("id");
 
-                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
 
                     b.Property<string>("FriendlyName")
-                        .HasColumnType("nvarchar(max)")
+                        .HasColumnType("text")
                         .HasColumnName("friendly_name");
 
                     b.Property<string>("Xml")
-                        .HasColumnType("nvarchar(max)")
+                        .HasColumnType("text")
                         .HasColumnName("xml");
 
                     b.HasKey("Id")
@@ -49,43 +49,43 @@ namespace NailsByLeah.Api.Data.Migrations
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("int")
+                        .HasColumnType("integer")
                         .HasColumnName("id");
 
-                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
 
                     b.Property<string>("Action")
                         .IsRequired()
                         .HasMaxLength(100)
-                        .HasColumnType("nvarchar(100)")
+                        .HasColumnType("character varying(100)")
                         .HasColumnName("action");
 
                     b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("datetime2")
+                        .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at");
 
                     b.Property<string>("Details")
                         .HasMaxLength(500)
-                        .HasColumnType("nvarchar(500)")
+                        .HasColumnType("character varying(500)")
                         .HasColumnName("details");
 
                     b.Property<string>("EntityId")
                         .HasMaxLength(50)
-                        .HasColumnType("nvarchar(50)")
+                        .HasColumnType("character varying(50)")
                         .HasColumnName("entity_id");
 
                     b.Property<string>("EntityType")
                         .HasMaxLength(50)
-                        .HasColumnType("nvarchar(50)")
+                        .HasColumnType("character varying(50)")
                         .HasColumnName("entity_type");
 
                     b.Property<string>("IpAddress")
                         .HasMaxLength(45)
-                        .HasColumnType("nvarchar(45)")
+                        .HasColumnType("character varying(45)")
                         .HasColumnName("ip_address");
 
                     b.Property<int?>("UserId")
-                        .HasColumnType("int")
+                        .HasColumnType("integer")
                         .HasColumnName("user_id");
 
                     b.HasKey("Id")
@@ -104,17 +104,17 @@ namespace NailsByLeah.Api.Data.Migrations
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("int")
+                        .HasColumnType("integer")
                         .HasColumnName("id");
 
-                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
 
                     b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("datetime2")
+                        .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at");
 
                     b.Property<int>("CreatedByUserId")
-                        .HasColumnType("int")
+                        .HasColumnType("integer")
                         .HasColumnName("created_by_user_id");
 
                     b.Property<DateOnly>("Date")
@@ -122,20 +122,20 @@ namespace NailsByLeah.Api.Data.Migrations
                         .HasColumnName("date");
 
                     b.Property<TimeOnly?>("EndTime")
-                        .HasColumnType("time")
+                        .HasColumnType("time without time zone")
                         .HasColumnName("end_time");
 
                     b.Property<bool>("IsDeleted")
-                        .HasColumnType("bit")
+                        .HasColumnType("boolean")
                         .HasColumnName("is_deleted");
 
                     b.Property<string>("Reason")
                         .HasMaxLength(200)
-                        .HasColumnType("nvarchar(200)")
+                        .HasColumnType("character varying(200)")
                         .HasColumnName("reason");
 
                     b.Property<TimeOnly?>("StartTime")
-                        .HasColumnType("time")
+                        .HasColumnType("time without time zone")
                         .HasColumnName("start_time");
 
                     b.HasKey("Id")
@@ -149,7 +149,7 @@ namespace NailsByLeah.Api.Data.Migrations
 
                     b.ToTable("blocked_slots", null, t =>
                         {
-                            t.HasCheckConstraint("ck_blocked_slots_period", "([start_time] IS NULL AND [end_time] IS NULL) OR [end_time] > [start_time]");
+                            t.HasCheckConstraint("ck_blocked_slots_period", "(start_time IS NULL AND end_time IS NULL) OR end_time > start_time");
                         });
                 });
 
@@ -157,28 +157,28 @@ namespace NailsByLeah.Api.Data.Migrations
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("int")
+                        .HasColumnType("integer")
                         .HasColumnName("id");
 
-                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
 
                     b.Property<decimal>("AmountPaid")
                         .HasPrecision(10, 2)
-                        .HasColumnType("decimal(10,2)")
+                        .HasColumnType("numeric(10,2)")
                         .HasColumnName("amount_paid");
 
                     b.Property<decimal>("BalanceReceived")
                         .HasPrecision(10, 2)
-                        .HasColumnType("decimal(10,2)")
+                        .HasColumnType("numeric(10,2)")
                         .HasColumnName("balance_received");
 
                     b.Property<DateTime?>("BalanceReceivedAt")
-                        .HasColumnType("datetime2")
+                        .HasColumnType("timestamp with time zone")
                         .HasColumnName("balance_received_at");
 
                     b.Property<string>("BalanceReference")
                         .HasMaxLength(50)
-                        .HasColumnType("nvarchar(50)")
+                        .HasColumnType("character varying(50)")
                         .HasColumnName("balance_reference");
 
                     b.Property<DateOnly>("BookingDate")
@@ -186,147 +186,146 @@ namespace NailsByLeah.Api.Data.Migrations
                         .HasColumnName("booking_date");
 
                     b.Property<int>("ClientId")
-                        .HasColumnType("int")
+                        .HasColumnType("integer")
                         .HasColumnName("client_id");
 
                     b.Property<string>("ColorRequest")
                         .HasMaxLength(200)
-                        .HasColumnType("nvarchar(200)")
+                        .HasColumnType("character varying(200)")
                         .HasColumnName("color_request");
 
                     b.Property<string>("ColorRequestStatus")
                         .HasMaxLength(20)
-                        .HasColumnType("nvarchar(20)")
+                        .HasColumnType("character varying(20)")
                         .HasColumnName("color_request_status");
 
                     b.Property<DateTime?>("ConfirmedAt")
-                        .HasColumnType("datetime2")
+                        .HasColumnType("timestamp with time zone")
                         .HasColumnName("confirmed_at");
 
                     b.Property<int?>("ConfirmedByUserId")
-                        .HasColumnType("int")
+                        .HasColumnType("integer")
                         .HasColumnName("confirmed_by_user_id");
 
                     b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("datetime2")
+                        .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at");
 
                     b.Property<bool>("CreatedByAdmin")
-                        .HasColumnType("bit")
+                        .HasColumnType("boolean")
                         .HasColumnName("created_by_admin");
 
                     b.Property<decimal>("DepositAmount")
                         .HasPrecision(10, 2)
-                        .HasColumnType("decimal(10,2)")
+                        .HasColumnType("numeric(10,2)")
                         .HasColumnName("deposit_amount");
 
                     b.Property<int>("DurationMinutes")
-                        .HasColumnType("int")
+                        .HasColumnType("integer")
                         .HasColumnName("duration_minutes");
 
                     b.Property<string>("GuestName")
                         .HasMaxLength(150)
-                        .HasColumnType("nvarchar(150)")
+                        .HasColumnType("character varying(150)")
                         .HasColumnName("guest_name");
 
                     b.Property<string>("GuestPhone")
                         .HasMaxLength(11)
-                        .HasColumnType("nvarchar(11)")
+                        .HasColumnType("character varying(11)")
                         .HasColumnName("guest_phone");
 
                     b.Property<bool>("IsDeleted")
-                        .HasColumnType("bit")
+                        .HasColumnType("boolean")
                         .HasColumnName("is_deleted");
 
                     b.Property<string>("NailColor")
                         .HasMaxLength(40)
-                        .HasColumnType("nvarchar(40)")
+                        .HasColumnType("character varying(40)")
                         .HasColumnName("nail_color");
 
                     b.Property<string>("Note")
                         .HasMaxLength(300)
-                        .HasColumnType("nvarchar(300)")
+                        .HasColumnType("character varying(300)")
                         .HasColumnName("note");
 
                     b.Property<string>("PaymentOption")
                         .IsRequired()
                         .HasMaxLength(10)
-                        .HasColumnType("nvarchar(10)")
+                        .HasColumnType("character varying(10)")
                         .HasColumnName("payment_option");
 
                     b.Property<string>("PerNailColors")
                         .HasMaxLength(600)
-                        .HasColumnType("nvarchar(600)")
+                        .HasColumnType("character varying(600)")
                         .HasColumnName("per_nail_colors");
 
                     b.Property<decimal>("RefundDue")
                         .HasPrecision(10, 2)
-                        .HasColumnType("decimal(10,2)")
+                        .HasColumnType("numeric(10,2)")
                         .HasColumnName("refund_due");
 
                     b.Property<string>("RefundReference")
                         .HasMaxLength(50)
-                        .HasColumnType("nvarchar(50)")
+                        .HasColumnType("character varying(50)")
                         .HasColumnName("refund_reference");
 
                     b.Property<DateTime?>("RefundSentAt")
-                        .HasColumnType("datetime2")
+                        .HasColumnType("timestamp with time zone")
                         .HasColumnName("refund_sent_at");
 
                     b.Property<DateTime?>("ReminderSentAt")
-                        .HasColumnType("datetime2")
+                        .HasColumnType("timestamp with time zone")
                         .HasColumnName("reminder_sent_at");
 
                     b.Property<decimal>("RemovalPrice")
                         .HasPrecision(10, 2)
-                        .HasColumnType("decimal(10,2)")
+                        .HasColumnType("numeric(10,2)")
                         .HasColumnName("removal_price");
 
                     b.Property<int?>("RemovalServiceId")
-                        .HasColumnType("int")
+                        .HasColumnType("integer")
                         .HasColumnName("removal_service_id");
 
                     b.Property<int>("RescheduleCount")
-                        .HasColumnType("int")
+                        .HasColumnType("integer")
                         .HasColumnName("reschedule_count");
 
-                    b.Property<byte[]>("RowVersion")
+                    b.Property<uint>("RowVersion")
                         .IsConcurrencyToken()
-                        .IsRequired()
                         .ValueGeneratedOnAddOrUpdate()
-                        .HasColumnType("rowversion")
-                        .HasColumnName("row_version");
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
 
                     b.Property<int>("ServiceId")
-                        .HasColumnType("int")
+                        .HasColumnType("integer")
                         .HasColumnName("service_id");
 
                     b.Property<decimal>("ServicePrice")
                         .HasPrecision(10, 2)
-                        .HasColumnType("decimal(10,2)")
+                        .HasColumnType("numeric(10,2)")
                         .HasColumnName("service_price");
 
                     b.Property<TimeOnly>("StartTime")
-                        .HasColumnType("time")
+                        .HasColumnType("time without time zone")
                         .HasColumnName("start_time");
 
                     b.Property<string>("Status")
                         .IsRequired()
                         .HasMaxLength(20)
-                        .HasColumnType("nvarchar(20)")
+                        .HasColumnType("character varying(20)")
                         .HasColumnName("status");
 
                     b.Property<DateTime?>("TermsAcceptedAt")
-                        .HasColumnType("datetime2")
+                        .HasColumnType("timestamp with time zone")
                         .HasColumnName("terms_accepted_at");
 
                     b.Property<string>("TermsVersion")
                         .HasMaxLength(20)
-                        .HasColumnType("nvarchar(20)")
+                        .HasColumnType("character varying(20)")
                         .HasColumnName("terms_version");
 
                     b.Property<DateTime>("UpdatedAt")
-                        .HasColumnType("datetime2")
+                        .HasColumnType("timestamp with time zone")
                         .HasColumnName("updated_at");
 
                     b.HasKey("Id")
@@ -353,23 +352,23 @@ namespace NailsByLeah.Api.Data.Migrations
                     b.HasIndex(new[] { "BookingDate", "StartTime" }, "ux_bookings_active_slot")
                         .IsUnique()
                         .HasDatabaseName("ux_bookings_active_slot")
-                        .HasFilter("[status] IN ('Pending', 'Confirmed') AND [is_deleted] = 0");
+                        .HasFilter("status IN ('Pending', 'Confirmed') AND NOT is_deleted");
 
                     b.ToTable("bookings", null, t =>
                         {
-                            t.HasCheckConstraint("ck_bookings_amount_paid_non_negative", "[amount_paid] >= 0");
+                            t.HasCheckConstraint("ck_bookings_amount_paid_non_negative", "amount_paid >= 0");
 
-                            t.HasCheckConstraint("ck_bookings_balance_received_non_negative", "[balance_received] >= 0");
+                            t.HasCheckConstraint("ck_bookings_balance_received_non_negative", "balance_received >= 0");
 
-                            t.HasCheckConstraint("ck_bookings_deposit_non_negative", "[deposit_amount] >= 0");
+                            t.HasCheckConstraint("ck_bookings_deposit_non_negative", "deposit_amount >= 0");
 
-                            t.HasCheckConstraint("ck_bookings_duration_positive", "[duration_minutes] > 0");
+                            t.HasCheckConstraint("ck_bookings_duration_positive", "duration_minutes > 0");
 
-                            t.HasCheckConstraint("ck_bookings_refund_due_non_negative", "[refund_due] >= 0");
+                            t.HasCheckConstraint("ck_bookings_refund_due_non_negative", "refund_due >= 0");
 
-                            t.HasCheckConstraint("ck_bookings_removal_price_non_negative", "[removal_price] >= 0");
+                            t.HasCheckConstraint("ck_bookings_removal_price_non_negative", "removal_price >= 0");
 
-                            t.HasCheckConstraint("ck_bookings_service_price_non_negative", "[service_price] >= 0");
+                            t.HasCheckConstraint("ck_bookings_service_price_non_negative", "service_price >= 0");
                         });
                 });
 
@@ -377,32 +376,32 @@ namespace NailsByLeah.Api.Data.Migrations
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("int")
+                        .HasColumnType("integer")
                         .HasColumnName("id");
 
-                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
 
                     b.Property<int>("AddOnId")
-                        .HasColumnType("int")
+                        .HasColumnType("integer")
                         .HasColumnName("add_on_id");
 
                     b.Property<int>("BookingId")
-                        .HasColumnType("int")
+                        .HasColumnType("integer")
                         .HasColumnName("booking_id");
 
                     b.Property<string>("Hand")
                         .IsRequired()
                         .HasMaxLength(10)
-                        .HasColumnType("nvarchar(10)")
+                        .HasColumnType("character varying(10)")
                         .HasColumnName("hand");
 
                     b.Property<decimal>("LinePrice")
                         .HasPrecision(10, 2)
-                        .HasColumnType("decimal(10,2)")
+                        .HasColumnType("numeric(10,2)")
                         .HasColumnName("line_price");
 
                     b.Property<int>("NailCount")
-                        .HasColumnType("int")
+                        .HasColumnType("integer")
                         .HasColumnName("nail_count");
 
                     b.HasKey("Id")
@@ -417,11 +416,11 @@ namespace NailsByLeah.Api.Data.Migrations
 
                     b.ToTable("booking_addons", null, t =>
                         {
-                            t.HasCheckConstraint("ck_booking_addons_hand", "[hand] = 'Both' OR ([hand] IN ('Left', 'Right') AND [nail_count] <= 5)");
+                            t.HasCheckConstraint("ck_booking_addons_hand", "hand = 'Both' OR (hand IN ('Left', 'Right') AND nail_count <= 5)");
 
-                            t.HasCheckConstraint("ck_booking_addons_line_price_non_negative", "[line_price] >= 0");
+                            t.HasCheckConstraint("ck_booking_addons_line_price_non_negative", "line_price >= 0");
 
-                            t.HasCheckConstraint("ck_booking_addons_nail_count", "[nail_count] BETWEEN 1 AND 10");
+                            t.HasCheckConstraint("ck_booking_addons_nail_count", "nail_count BETWEEN 1 AND 10");
                         });
                 });
 
@@ -429,23 +428,23 @@ namespace NailsByLeah.Api.Data.Migrations
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("int")
+                        .HasColumnType("integer")
                         .HasColumnName("id");
 
-                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
 
                     b.Property<int>("ClientId")
-                        .HasColumnType("int")
+                        .HasColumnType("integer")
                         .HasColumnName("client_id");
 
                     b.Property<string>("Data")
                         .IsRequired()
                         .HasMaxLength(4000)
-                        .HasColumnType("nvarchar(4000)")
+                        .HasColumnType("character varying(4000)")
                         .HasColumnName("data");
 
                     b.Property<DateTime>("UpdatedAt")
-                        .HasColumnType("datetime2")
+                        .HasColumnType("timestamp with time zone")
                         .HasColumnName("updated_at");
 
                     b.HasKey("Id")
@@ -457,7 +456,7 @@ namespace NailsByLeah.Api.Data.Migrations
 
                     b.ToTable("booking_drafts", null, t =>
                         {
-                            t.HasCheckConstraint("ck_booking_drafts_data_json", "ISJSON([data]) = 1");
+                            t.HasCheckConstraint("ck_booking_drafts_data_json", "data IS JSON");
                         });
                 });
 
@@ -465,32 +464,32 @@ namespace NailsByLeah.Api.Data.Migrations
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("int")
+                        .HasColumnType("integer")
                         .HasColumnName("id");
 
-                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
 
                     b.Property<int>("BookingId")
-                        .HasColumnType("int")
+                        .HasColumnType("integer")
                         .HasColumnName("booking_id");
 
                     b.Property<DateTime>("CancelledAt")
-                        .HasColumnType("datetime2")
+                        .HasColumnType("timestamp with time zone")
                         .HasColumnName("cancelled_at");
 
                     b.Property<int>("CancelledByUserId")
-                        .HasColumnType("int")
+                        .HasColumnType("integer")
                         .HasColumnName("cancelled_by_user_id");
 
                     b.Property<string>("Explanation")
                         .HasMaxLength(500)
-                        .HasColumnType("nvarchar(500)")
+                        .HasColumnType("character varying(500)")
                         .HasColumnName("explanation");
 
                     b.Property<string>("Reason")
                         .IsRequired()
                         .HasMaxLength(40)
-                        .HasColumnType("nvarchar(40)")
+                        .HasColumnType("character varying(40)")
                         .HasColumnName("reason");
 
                     b.HasKey("Id")
@@ -510,56 +509,57 @@ namespace NailsByLeah.Api.Data.Migrations
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("int")
+                        .HasColumnType("integer")
                         .HasColumnName("id");
 
-                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+                    NpgsqlPropertyBuilderExtensions.HasIdentityOptions(b.Property<int>("Id"), 100L, null, null, null, null, null);
 
                     b.Property<bool>("AllowsAddOns")
-                        .HasColumnType("bit")
+                        .HasColumnType("boolean")
                         .HasColumnName("allows_add_ons");
 
                     b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("datetime2")
+                        .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at");
 
                     b.Property<int?>("DesignOptionOfId")
-                        .HasColumnType("int")
+                        .HasColumnType("integer")
                         .HasColumnName("design_option_of_id");
 
                     b.Property<int>("DurationMinutes")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("int")
+                        .HasColumnType("integer")
                         .HasDefaultValue(60)
                         .HasColumnName("duration_minutes");
 
                     b.Property<bool>("IsActive")
-                        .HasColumnType("bit")
+                        .HasColumnType("boolean")
                         .HasColumnName("is_active");
 
                     b.Property<bool>("IsDeleted")
-                        .HasColumnType("bit")
+                        .HasColumnType("boolean")
                         .HasColumnName("is_deleted");
 
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasMaxLength(100)
-                        .HasColumnType("nvarchar(100)")
+                        .HasColumnType("character varying(100)")
                         .HasColumnName("name");
 
                     b.Property<decimal>("Price")
                         .HasPrecision(10, 2)
-                        .HasColumnType("decimal(10,2)")
+                        .HasColumnType("numeric(10,2)")
                         .HasColumnName("price");
 
                     b.Property<DateTime>("UpdatedAt")
-                        .HasColumnType("datetime2")
+                        .HasColumnType("timestamp with time zone")
                         .HasColumnName("updated_at");
 
                     b.Property<string>("category")
                         .IsRequired()
                         .HasMaxLength(30)
-                        .HasColumnType("nvarchar(30)")
+                        .HasColumnType("character varying(30)")
                         .HasColumnName("category");
 
                     b.HasKey("Id")
@@ -574,9 +574,9 @@ namespace NailsByLeah.Api.Data.Migrations
 
                     b.ToTable("services", null, t =>
                         {
-                            t.HasCheckConstraint("ck_services_duration_range", "[duration_minutes] BETWEEN 15 AND 480");
+                            t.HasCheckConstraint("ck_services_duration_range", "duration_minutes BETWEEN 15 AND 480");
 
-                            t.HasCheckConstraint("ck_services_price_non_negative", "[price] >= 0");
+                            t.HasCheckConstraint("ck_services_price_non_negative", "price >= 0");
                         });
 
                     b.HasDiscriminator<string>("category").HasValue("CatalogService");
@@ -588,39 +588,39 @@ namespace NailsByLeah.Api.Data.Migrations
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("int")
+                        .HasColumnType("integer")
                         .HasColumnName("id");
 
-                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
 
                     b.Property<int>("ClientId")
-                        .HasColumnType("int")
+                        .HasColumnType("integer")
                         .HasColumnName("client_id");
 
                     b.Property<string>("Comment")
                         .HasMaxLength(1000)
-                        .HasColumnType("nvarchar(1000)")
+                        .HasColumnType("character varying(1000)")
                         .HasColumnName("comment");
 
                     b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("datetime2")
+                        .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at");
 
                     b.Property<int>("Rating")
-                        .HasColumnType("int")
+                        .HasColumnType("integer")
                         .HasColumnName("rating");
 
                     b.Property<DateTime?>("RepliedAt")
-                        .HasColumnType("datetime2")
+                        .HasColumnType("timestamp with time zone")
                         .HasColumnName("replied_at");
 
                     b.Property<string>("Reply")
                         .HasMaxLength(500)
-                        .HasColumnType("nvarchar(500)")
+                        .HasColumnType("character varying(500)")
                         .HasColumnName("reply");
 
                     b.Property<Guid>("SubmissionKey")
-                        .HasColumnType("uniqueidentifier")
+                        .HasColumnType("uuid")
                         .HasColumnName("submission_key");
 
                     b.HasKey("Id")
@@ -638,7 +638,7 @@ namespace NailsByLeah.Api.Data.Migrations
 
                     b.ToTable("feedback", null, t =>
                         {
-                            t.HasCheckConstraint("ck_feedback_rating", "[rating] BETWEEN 1 AND 5");
+                            t.HasCheckConstraint("ck_feedback_rating", "rating BETWEEN 1 AND 5");
                         });
                 });
 
@@ -646,34 +646,34 @@ namespace NailsByLeah.Api.Data.Migrations
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("int")
+                        .HasColumnType("integer")
                         .HasColumnName("id");
 
-                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
 
                     b.Property<string>("Caption")
                         .HasMaxLength(100)
-                        .HasColumnType("nvarchar(100)")
+                        .HasColumnType("character varying(100)")
                         .HasColumnName("caption");
 
                     b.Property<string>("ContentType")
                         .IsRequired()
                         .HasMaxLength(40)
-                        .HasColumnType("nvarchar(40)")
+                        .HasColumnType("character varying(40)")
                         .HasColumnName("content_type");
 
                     b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("datetime2")
+                        .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at");
 
                     b.Property<int?>("CreatedByUserId")
-                        .HasColumnType("int")
+                        .HasColumnType("integer")
                         .HasColumnName("created_by_user_id");
 
                     b.Property<string>("FileName")
                         .IsRequired()
                         .HasMaxLength(100)
-                        .HasColumnType("nvarchar(100)")
+                        .HasColumnType("character varying(100)")
                         .HasColumnName("file_name");
 
                     b.HasKey("Id")
@@ -689,76 +689,76 @@ namespace NailsByLeah.Api.Data.Migrations
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("int")
+                        .HasColumnType("integer")
                         .HasColumnName("id");
 
-                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
 
                     b.Property<decimal>("Amount")
                         .HasPrecision(10, 2)
-                        .HasColumnType("decimal(10,2)")
+                        .HasColumnType("numeric(10,2)")
                         .HasColumnName("amount");
 
                     b.Property<decimal>("BalanceAfter")
                         .HasPrecision(10, 2)
-                        .HasColumnType("decimal(10,2)")
+                        .HasColumnType("numeric(10,2)")
                         .HasColumnName("balance_after");
 
                     b.Property<int>("BookingId")
-                        .HasColumnType("int")
+                        .HasColumnType("integer")
                         .HasColumnName("booking_id");
 
                     b.Property<int>("ClientId")
-                        .HasColumnType("int")
+                        .HasColumnType("integer")
                         .HasColumnName("client_id");
 
                     b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("datetime2")
+                        .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at");
 
                     b.Property<Guid>("IdempotencyKey")
-                        .HasColumnType("uniqueidentifier")
+                        .HasColumnType("uuid")
                         .HasColumnName("idempotency_key");
 
                     b.Property<string>("Method")
                         .IsRequired()
                         .HasMaxLength(20)
-                        .HasColumnType("nvarchar(20)")
+                        .HasColumnType("character varying(20)")
                         .HasColumnName("method");
 
                     b.Property<string>("Option")
                         .IsRequired()
                         .HasMaxLength(10)
-                        .HasColumnType("nvarchar(10)")
+                        .HasColumnType("character varying(10)")
                         .HasColumnName("option");
 
                     b.Property<DateTime>("PaidAt")
-                        .HasColumnType("datetime2")
+                        .HasColumnType("timestamp with time zone")
                         .HasColumnName("paid_at");
 
                     b.Property<string>("ReferenceNumber")
                         .IsRequired()
                         .HasMaxLength(64)
-                        .HasColumnType("nvarchar(64)")
+                        .HasColumnType("character varying(64)")
                         .HasColumnName("reference_number");
 
                     b.Property<string>("Status")
                         .IsRequired()
                         .HasMaxLength(20)
-                        .HasColumnType("nvarchar(20)")
+                        .HasColumnType("character varying(20)")
                         .HasColumnName("status");
 
                     b.Property<decimal>("TotalAmount")
                         .HasPrecision(10, 2)
-                        .HasColumnType("decimal(10,2)")
+                        .HasColumnType("numeric(10,2)")
                         .HasColumnName("total_amount");
 
                     b.Property<DateTime?>("VerifiedAt")
-                        .HasColumnType("datetime2")
+                        .HasColumnType("timestamp with time zone")
                         .HasColumnName("verified_at");
 
                     b.Property<int?>("VerifiedByUserId")
-                        .HasColumnType("int")
+                        .HasColumnType("integer")
                         .HasColumnName("verified_by_user_id");
 
                     b.HasKey("Id")
@@ -786,9 +786,9 @@ namespace NailsByLeah.Api.Data.Migrations
 
                     b.ToTable("payments", null, t =>
                         {
-                            t.HasCheckConstraint("ck_payments_amount_positive", "[amount] > 0");
+                            t.HasCheckConstraint("ck_payments_amount_positive", "amount > 0");
 
-                            t.HasCheckConstraint("ck_payments_balance_after", "[balance_after] >= 0 AND [total_amount] >= 0");
+                            t.HasCheckConstraint("ck_payments_balance_after", "balance_after >= 0 AND total_amount >= 0");
                         });
                 });
 
@@ -796,35 +796,35 @@ namespace NailsByLeah.Api.Data.Migrations
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("int")
+                        .HasColumnType("integer")
                         .HasColumnName("id");
 
-                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
 
                     b.Property<int?>("BookingId")
-                        .HasColumnType("int")
+                        .HasColumnType("integer")
                         .HasColumnName("booking_id");
 
                     b.Property<int>("ClientId")
-                        .HasColumnType("int")
+                        .HasColumnType("integer")
                         .HasColumnName("client_id");
 
                     b.Property<string>("ContentType")
                         .IsRequired()
                         .HasMaxLength(20)
-                        .HasColumnType("nvarchar(20)")
+                        .HasColumnType("character varying(20)")
                         .HasColumnName("content_type");
 
                     b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("datetime2")
+                        .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at");
 
                     b.Property<bool>("IsColorReference")
-                        .HasColumnType("bit")
+                        .HasColumnType("boolean")
                         .HasColumnName("is_color_reference");
 
                     b.Property<bool>("IsDeleted")
-                        .HasColumnType("bit")
+                        .HasColumnType("boolean")
                         .HasColumnName("is_deleted");
 
                     b.Property<long>("SizeBytes")
@@ -834,7 +834,7 @@ namespace NailsByLeah.Api.Data.Migrations
                     b.Property<string>("StoredFileName")
                         .IsRequired()
                         .HasMaxLength(64)
-                        .HasColumnType("nvarchar(64)")
+                        .HasColumnType("character varying(64)")
                         .HasColumnName("stored_file_name");
 
                     b.HasKey("Id")
@@ -852,102 +852,102 @@ namespace NailsByLeah.Api.Data.Migrations
 
                     b.ToTable("reference_images", null, t =>
                         {
-                            t.HasCheckConstraint("ck_reference_images_content_type", "[content_type] IN ('image/jpeg', 'image/png', 'image/webp')");
+                            t.HasCheckConstraint("ck_reference_images_content_type", "content_type IN ('image/jpeg', 'image/png', 'image/webp')");
 
-                            t.HasCheckConstraint("ck_reference_images_size", "[size_bytes] > 0 AND [size_bytes] <= 5242880");
+                            t.HasCheckConstraint("ck_reference_images_size", "size_bytes > 0 AND size_bytes <= 5242880");
                         });
                 });
 
             modelBuilder.Entity("NailsByLeah.Api.Domain.SalonSettings", b =>
                 {
                     b.Property<int>("Id")
-                        .HasColumnType("int")
+                        .HasColumnType("integer")
                         .HasColumnName("id");
 
                     b.Property<bool>("AlertCancellation")
-                        .HasColumnType("bit")
+                        .HasColumnType("boolean")
                         .HasColumnName("alert_cancellation");
 
                     b.Property<bool>("AlertNewBooking")
-                        .HasColumnType("bit")
+                        .HasColumnType("boolean")
                         .HasColumnName("alert_new_booking");
 
                     b.Property<bool>("AlertReschedule")
-                        .HasColumnType("bit")
+                        .HasColumnType("boolean")
                         .HasColumnName("alert_reschedule");
 
                     b.Property<string>("Bio")
                         .HasMaxLength(300)
-                        .HasColumnType("nvarchar(300)")
+                        .HasColumnType("character varying(300)")
                         .HasColumnName("bio");
 
                     b.Property<int?>("ClientRescheduleLimit")
-                        .HasColumnType("int")
+                        .HasColumnType("integer")
                         .HasColumnName("client_reschedule_limit");
 
                     b.Property<TimeOnly>("ClosingTime")
-                        .HasColumnType("time")
+                        .HasColumnType("time without time zone")
                         .HasColumnName("closing_time");
 
                     b.Property<decimal?>("DepositAmount")
                         .HasPrecision(10, 2)
-                        .HasColumnType("decimal(10,2)")
+                        .HasColumnType("numeric(10,2)")
                         .HasColumnName("deposit_amount");
 
                     b.Property<string>("FacebookUrl")
                         .HasMaxLength(200)
-                        .HasColumnType("nvarchar(200)")
+                        .HasColumnType("character varying(200)")
                         .HasColumnName("facebook_url");
 
                     b.Property<string>("InstagramHandle")
                         .HasMaxLength(31)
-                        .HasColumnType("nvarchar(31)")
+                        .HasColumnType("character varying(31)")
                         .HasColumnName("instagram_handle");
 
                     b.Property<string>("InstagramUrl")
                         .HasMaxLength(200)
-                        .HasColumnType("nvarchar(200)")
+                        .HasColumnType("character varying(200)")
                         .HasColumnName("instagram_url");
 
                     b.Property<int?>("MaxDaysAhead")
-                        .HasColumnType("int")
+                        .HasColumnType("integer")
                         .HasColumnName("max_days_ahead");
 
                     b.Property<string>("OutOfStockColors")
                         .HasMaxLength(2000)
-                        .HasColumnType("nvarchar(2000)")
+                        .HasColumnType("character varying(2000)")
                         .HasColumnName("out_of_stock_colors");
 
                     b.Property<string>("PaymentAccountName")
                         .HasMaxLength(60)
-                        .HasColumnType("nvarchar(60)")
+                        .HasColumnType("character varying(60)")
                         .HasColumnName("payment_account_name");
 
                     b.Property<string>("Phone")
                         .HasMaxLength(20)
-                        .HasColumnType("nvarchar(20)")
+                        .HasColumnType("character varying(20)")
                         .HasColumnName("phone");
 
                     b.Property<string>("PhotoContentType")
                         .HasMaxLength(40)
-                        .HasColumnType("nvarchar(40)")
+                        .HasColumnType("character varying(40)")
                         .HasColumnName("photo_content_type");
 
                     b.Property<string>("PhotoFileName")
                         .HasMaxLength(100)
-                        .HasColumnType("nvarchar(100)")
+                        .HasColumnType("character varying(100)")
                         .HasColumnName("photo_file_name");
 
                     b.Property<int?>("RescheduleMinimumHours")
-                        .HasColumnType("int")
+                        .HasColumnType("integer")
                         .HasColumnName("reschedule_minimum_hours");
 
                     b.Property<DateTime>("UpdatedAt")
-                        .HasColumnType("datetime2")
+                        .HasColumnType("timestamp with time zone")
                         .HasColumnName("updated_at");
 
                     b.Property<int?>("UpdatedByUserId")
-                        .HasColumnType("int")
+                        .HasColumnType("integer")
                         .HasColumnName("updated_by_user_id");
 
                     b.HasKey("Id")
@@ -955,7 +955,7 @@ namespace NailsByLeah.Api.Data.Migrations
 
                     b.ToTable("salon_settings", null, t =>
                         {
-                            t.HasCheckConstraint("ck_salon_settings_single_row", "[id] = 1");
+                            t.HasCheckConstraint("ck_salon_settings_single_row", "id = 1");
                         });
 
                     b.HasData(
@@ -974,36 +974,37 @@ namespace NailsByLeah.Api.Data.Migrations
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("int")
+                        .HasColumnType("integer")
                         .HasColumnName("id");
 
-                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+                    NpgsqlPropertyBuilderExtensions.HasIdentityOptions(b.Property<int>("Id"), 100L, null, null, null, null, null);
 
                     b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("datetime2")
+                        .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at");
 
                     b.Property<bool>("IsActive")
-                        .HasColumnType("bit")
+                        .HasColumnType("boolean")
                         .HasColumnName("is_active");
 
                     b.Property<bool>("IsDeleted")
-                        .HasColumnType("bit")
+                        .HasColumnType("boolean")
                         .HasColumnName("is_deleted");
 
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasMaxLength(100)
-                        .HasColumnType("nvarchar(100)")
+                        .HasColumnType("character varying(100)")
                         .HasColumnName("name");
 
                     b.Property<decimal>("Price")
                         .HasPrecision(10, 2)
-                        .HasColumnType("decimal(10,2)")
+                        .HasColumnType("numeric(10,2)")
                         .HasColumnName("price");
 
                     b.Property<DateTime>("UpdatedAt")
-                        .HasColumnType("datetime2")
+                        .HasColumnType("timestamp with time zone")
                         .HasColumnName("updated_at");
 
                     b.HasKey("Id")
@@ -1015,7 +1016,7 @@ namespace NailsByLeah.Api.Data.Migrations
 
                     b.ToTable("addons", null, t =>
                         {
-                            t.HasCheckConstraint("ck_addons_price_non_negative", "[price] >= 0");
+                            t.HasCheckConstraint("ck_addons_price_non_negative", "price >= 0");
                         });
 
                     b.HasData(
@@ -1085,110 +1086,118 @@ namespace NailsByLeah.Api.Data.Migrations
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("int")
+                        .HasColumnType("integer")
                         .HasColumnName("id");
 
-                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
 
                     b.Property<string>("AdminNote")
                         .HasMaxLength(500)
-                        .HasColumnType("nvarchar(500)")
+                        .HasColumnType("character varying(500)")
                         .HasColumnName("admin_note");
 
                     b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("datetime2")
+                        .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at");
 
                     b.Property<string>("Email")
                         .IsRequired()
                         .HasMaxLength(254)
-                        .HasColumnType("nvarchar(254)")
+                        .HasColumnType("character varying(254)")
                         .HasColumnName("email");
 
                     b.Property<bool>("EmailVerified")
-                        .HasColumnType("bit")
+                        .HasColumnType("boolean")
                         .HasColumnName("email_verified");
 
                     b.Property<DateTime?>("EmailVerifiedAt")
-                        .HasColumnType("datetime2")
+                        .HasColumnType("timestamp with time zone")
                         .HasColumnName("email_verified_at");
 
                     b.Property<int>("FailedLoginCount")
-                        .HasColumnType("int")
+                        .HasColumnType("integer")
                         .HasColumnName("failed_login_count");
 
                     b.Property<string>("FirstName")
                         .IsRequired()
                         .HasMaxLength(75)
-                        .HasColumnType("nvarchar(75)")
+                        .HasColumnType("character varying(75)")
                         .HasColumnName("first_name");
 
                     b.Property<bool>("IsDeleted")
-                        .HasColumnType("bit")
+                        .HasColumnType("boolean")
                         .HasColumnName("is_deleted");
 
                     b.Property<string>("LastName")
                         .IsRequired()
                         .HasMaxLength(75)
-                        .HasColumnType("nvarchar(75)")
+                        .HasColumnType("character varying(75)")
                         .HasColumnName("last_name");
 
                     b.Property<DateTime?>("LockoutEndUtc")
-                        .HasColumnType("datetime2")
+                        .HasColumnType("timestamp with time zone")
                         .HasColumnName("lockout_end_utc");
 
                     b.Property<string>("PasswordHash")
                         .IsRequired()
                         .HasMaxLength(100)
-                        .HasColumnType("nvarchar(100)")
+                        .HasColumnType("character varying(100)")
                         .HasColumnName("password_hash");
 
                     b.Property<string>("PhoneNumber")
                         .IsRequired()
                         .HasMaxLength(11)
-                        .HasColumnType("nvarchar(11)")
+                        .HasColumnType("character varying(11)")
                         .HasColumnName("phone_number");
 
                     b.Property<string>("PhotoContentType")
                         .HasMaxLength(40)
-                        .HasColumnType("nvarchar(40)")
+                        .HasColumnType("character varying(40)")
                         .HasColumnName("photo_content_type");
 
                     b.Property<string>("PhotoFileName")
                         .HasMaxLength(100)
-                        .HasColumnType("nvarchar(100)")
+                        .HasColumnType("character varying(100)")
                         .HasColumnName("photo_file_name");
 
                     b.Property<string>("Role")
                         .IsRequired()
                         .HasMaxLength(20)
-                        .HasColumnType("nvarchar(20)")
+                        .HasColumnType("character varying(20)")
                         .HasColumnName("role");
 
                     b.Property<string>("SecurityStamp")
                         .IsRequired()
                         .HasMaxLength(40)
-                        .HasColumnType("nvarchar(40)")
+                        .HasColumnType("character varying(40)")
                         .HasColumnName("security_stamp");
 
                     b.Property<DateTime?>("TermsAcceptedAt")
-                        .HasColumnType("datetime2")
+                        .HasColumnType("timestamp with time zone")
                         .HasColumnName("terms_accepted_at");
 
                     b.Property<string>("TermsVersion")
                         .HasMaxLength(20)
-                        .HasColumnType("nvarchar(20)")
+                        .HasColumnType("character varying(20)")
                         .HasColumnName("terms_version");
 
                     b.Property<DateTime>("UpdatedAt")
-                        .HasColumnType("datetime2")
+                        .HasColumnType("timestamp with time zone")
                         .HasColumnName("updated_at");
 
                     b.Property<string>("Username")
                         .IsRequired()
                         .HasMaxLength(50)
-                        .HasColumnType("nvarchar(50)")
+                        .HasColumnType("character varying(50)")
                         .HasColumnName("username");
+
+                    b.Property<string>("UsernameKey")
+                        .IsRequired()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)")
+                        .HasColumnName("username_key")
+                        .HasComputedColumnSql("lower(username)", true);
 
                     b.HasKey("Id")
                         .HasName("pk_users");
@@ -1201,19 +1210,19 @@ namespace NailsByLeah.Api.Data.Migrations
                         .IsUnique()
                         .HasDatabaseName("ux_users_phone_number");
 
-                    b.HasIndex("Username")
+                    b.HasIndex("UsernameKey")
                         .IsUnique()
                         .HasDatabaseName("ux_users_username");
 
                     b.ToTable("users", null, t =>
                         {
-                            t.HasCheckConstraint("ck_users_failed_login_count", "[failed_login_count] >= 0");
+                            t.HasCheckConstraint("ck_users_failed_login_count", "failed_login_count >= 0");
 
-                            t.HasCheckConstraint("ck_users_first_name_length", "LEN([first_name]) BETWEEN 1 AND 75");
+                            t.HasCheckConstraint("ck_users_first_name_length", "char_length(first_name) BETWEEN 1 AND 75");
 
-                            t.HasCheckConstraint("ck_users_last_name_length", "LEN([last_name]) BETWEEN 1 AND 75");
+                            t.HasCheckConstraint("ck_users_last_name_length", "char_length(last_name) BETWEEN 1 AND 75");
 
-                            t.HasCheckConstraint("ck_users_phone_digits", "[phone_number] NOT LIKE '%[^0-9]%' AND LEN([phone_number]) = 11");
+                            t.HasCheckConstraint("ck_users_phone_digits", "phone_number ~ '^[0-9]{11}$'");
                         });
                 });
 
@@ -1221,41 +1230,41 @@ namespace NailsByLeah.Api.Data.Migrations
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("int")
+                        .HasColumnType("integer")
                         .HasColumnName("id");
 
-                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
 
                     b.Property<DateTime?>("ConsumedAt")
-                        .HasColumnType("datetime2")
+                        .HasColumnType("timestamp with time zone")
                         .HasColumnName("consumed_at");
 
                     b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("datetime2")
+                        .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at");
 
                     b.Property<DateTime>("ExpiresAt")
-                        .HasColumnType("datetime2")
+                        .HasColumnType("timestamp with time zone")
                         .HasColumnName("expires_at");
 
                     b.Property<int>("FailedAttempts")
-                        .HasColumnType("int")
+                        .HasColumnType("integer")
                         .HasColumnName("failed_attempts");
 
                     b.Property<string>("Purpose")
                         .IsRequired()
                         .HasMaxLength(30)
-                        .HasColumnType("nvarchar(30)")
+                        .HasColumnType("character varying(30)")
                         .HasColumnName("purpose");
 
                     b.Property<string>("TokenHash")
                         .IsRequired()
                         .HasMaxLength(64)
-                        .HasColumnType("nvarchar(64)")
+                        .HasColumnType("character varying(64)")
                         .HasColumnName("token_hash");
 
                     b.Property<int>("UserId")
-                        .HasColumnType("int")
+                        .HasColumnType("integer")
                         .HasColumnName("user_id");
 
                     b.HasKey("Id")
@@ -1277,9 +1286,9 @@ namespace NailsByLeah.Api.Data.Migrations
 
                     b.ToTable("services", null, t =>
                         {
-                            t.HasCheckConstraint("ck_services_duration_range", "[duration_minutes] BETWEEN 15 AND 480");
+                            t.HasCheckConstraint("ck_services_duration_range", "duration_minutes BETWEEN 15 AND 480");
 
-                            t.HasCheckConstraint("ck_services_price_non_negative", "[price] >= 0");
+                            t.HasCheckConstraint("ck_services_price_non_negative", "price >= 0");
                         });
 
                     b.HasDiscriminator().HasValue("Removal");
@@ -1317,9 +1326,9 @@ namespace NailsByLeah.Api.Data.Migrations
 
                     b.ToTable("services", null, t =>
                         {
-                            t.HasCheckConstraint("ck_services_duration_range", "[duration_minutes] BETWEEN 15 AND 480");
+                            t.HasCheckConstraint("ck_services_duration_range", "duration_minutes BETWEEN 15 AND 480");
 
-                            t.HasCheckConstraint("ck_services_price_non_negative", "[price] >= 0");
+                            t.HasCheckConstraint("ck_services_price_non_negative", "price >= 0");
                         });
 
                     b.HasDiscriminator().HasValue("SoftGel");

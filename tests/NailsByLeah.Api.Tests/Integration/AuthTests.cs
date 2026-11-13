@@ -40,6 +40,33 @@ public sealed class AuthTests(ApiFactory factory) : IClassFixture<ApiFactory>
         Assert.Contains("Username is already taken.", (await response.ReadProblemAsync()).ErrorsFor("username"));
     }
 
+    [Fact] // Postgres compares text case by case; usernames and emails must not.
+    public async Task Usernames_and_emails_ignore_case_for_sign_in_sign_up_and_search()
+    {
+        var n = factory.NextUserNumber();
+        var registration = factory.NewRegistration(username: $"Kyla.Case{n}");
+        var user = await factory.CreateClientAsync(registration);
+
+        // Signs in with the username or email in any case.
+        await (await factory.NewClient().PostJsonAsync("/api/auth/login", new LoginRequest($"kyla.case{n}", ApiFactory.DefaultPassword)))
+            .ShouldHaveStatus(HttpStatusCode.OK);
+        await (await factory.NewClient().PostJsonAsync("/api/auth/login", new LoginRequest(user.Email.ToUpperInvariant(), ApiFactory.DefaultPassword)))
+            .ShouldHaveStatus(HttpStatusCode.OK);
+
+        // "KYLA.CASE…" is the same name, so it is taken.
+        var taken = await factory.NewClient().GetAsync<UsernameAvailabilityResponse>($"/api/auth/username-availability?username=KYLA.CASE{n}");
+        Assert.False(taken.Available);
+        var again = await factory.NewClient().PostJsonAsync("/api/auth/register", factory.NewRegistration(username: $"kyla.case{n}"));
+        await again.ShouldHaveStatus(HttpStatusCode.BadRequest);
+        Assert.Contains("Username is already taken.", (await again.ReadProblemAsync()).ErrorsFor("username"));
+
+        // The admin's client search finds her whatever the case.
+        var admin = await factory.CreateAdminClientAsync();
+        var found = await (await admin.PostJsonAsync("/api/admin/clients/search", new ClientSearchRequest($"KYLA.CASE{n}")))
+            .ReadAsync<PagedResponse<ClientListItemResponse>>();
+        Assert.Contains(found.Items, c => c.Id == user.Id);
+    }
+
     [Fact] // Ref 9.2
     public async Task Username_availability_reports_taken_usernames()
     {

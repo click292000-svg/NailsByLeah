@@ -2,6 +2,7 @@ using System.Collections.Concurrent;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.TestHost;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Time.Testing;
@@ -9,11 +10,13 @@ using NailsByLeah.Api.Data;
 using NailsByLeah.Api.Domain;
 using NailsByLeah.Api.Notifications;
 using NailsByLeah.Api.Payments;
+using Npgsql;
 
 namespace NailsByLeah.Api.Tests.Integration;
 
 /// <summary>
-/// Hosts the real API against a throwaway LocalDB database. Time, outgoing messages and the
+/// Hosts the real API against a throwaway schema in the Postgres test database (the Supabase test project, from the
+/// API's user secrets: ConnectionStrings:Tests, or else ConnectionStrings:Default). Time, outgoing messages and the
 /// payment provider are replaced with test doubles the tests can control and inspect.
 /// </summary>
 public sealed class ApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
@@ -29,7 +32,9 @@ public sealed class ApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
     // Far enough apart for the longest seeded service (With Design or BIAB, 3 hours) plus the 30-minute break.
     public static readonly TimeOnly[] SlotTimes = [new(11, 0), new(14, 30), new(18, 0)];
 
-    private readonly string _databaseName = $"NailsByLeah_Tests_{Guid.NewGuid():N}";
+    /// <summary>This host's own schema: created before it starts, dropped with everything in it when it stops.</summary>
+    private readonly string _schema = $"test_{Guid.NewGuid():N}";
+    private readonly string _connectionString = TestConnectionString();
 
     /// <summary>Throwaway folder for uploaded reference photos.</summary>
     public string UploadFolder { get; } = Path.Combine(Path.GetTempPath(), $"nbl-test-uploads-{Guid.NewGuid():N}");
@@ -43,8 +48,8 @@ public sealed class ApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
         builder.UseEnvironment("Development");
-        builder.UseSetting("ConnectionStrings:Default",
-            $"Server=(localdb)\\MSSQLLocalDB;Database={_databaseName};Trusted_Connection=True;TrustServerCertificate=True");
+        builder.UseSetting("ConnectionStrings:Default", _connectionString);
+        builder.UseSetting("Database:Schema", _schema);
         builder.UseSetting("Database:ApplyMigrationsOnStartup", "true");
         builder.UseSetting("Auth:BcryptWorkFactor", "4");
         builder.UseSetting("Notifications:ReminderCheckIntervalMinutes", "0");
@@ -97,19 +102,42 @@ public sealed class ApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
         return query(scope.ServiceProvider.GetRequiredService<AppDbContext>());
     }
 
-    public Task InitializeAsync()
+    public async Task InitializeAsync()
     {
+        await RunAsync($"CREATE SCHEMA {_schema}");
         _ = Server; // starts the host: applies migrations and seeds the administrator
-        return Task.CompletedTask;
     }
 
     async Task IAsyncLifetime.DisposeAsync()
     {
-        await using (var scope = Services.CreateAsyncScope())
-            await scope.ServiceProvider.GetRequiredService<AppDbContext>().Database.EnsureDeletedAsync();
         await base.DisposeAsync();
+        await RunAsync($"DROP SCHEMA IF EXISTS {_schema} CASCADE");
         if (Directory.Exists(UploadFolder))
             Directory.Delete(UploadFolder, recursive: true);
+    }
+
+    private async Task RunAsync(string sql)
+    {
+        await using var connection = new NpgsqlConnection(_connectionString);
+        await connection.OpenAsync();
+        await using var command = new NpgsqlCommand(sql, connection);
+        await command.ExecuteNonQueryAsync();
+    }
+
+    /// <summary>
+    /// The test database, from the API's user secrets or the environment. The pool is small and shared by every test host,
+    /// because Supabase's session pooler allows only a few connections at once.
+    /// </summary>
+    private static string TestConnectionString()
+    {
+        var config = new ConfigurationBuilder()
+            .AddUserSecrets(typeof(Program).Assembly, optional: true)
+            .AddEnvironmentVariables()
+            .Build();
+        var value = config.GetConnectionString("Tests") ?? config.GetConnectionString("Default")
+            ?? throw new InvalidOperationException(
+                "No test database: set ConnectionStrings:Tests (or ConnectionStrings:Default) in the API's user secrets.");
+        return new NpgsqlConnectionStringBuilder(PostgresConnectionString.Normalize(value)) { MaxPoolSize = 8, Timeout = 60, CommandTimeout = 60 }.ConnectionString;
     }
 }
 

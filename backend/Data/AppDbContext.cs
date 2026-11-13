@@ -50,7 +50,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
         modelBuilder.ApplyConfigurationsFromAssembly(typeof(AppDbContext).Assembly);
 
         // No cascading deletes anywhere: records are soft-deleted, and a booking with
-        // payments can never be removed (Ref 13.4). SQL Server implements RESTRICT as NO ACTION.
+        // payments can never be removed (Ref 13.4).
         foreach (var foreignKey in modelBuilder.Model.GetEntityTypes().SelectMany(e => e.GetForeignKeys()))
             foreignKey.DeleteBehavior = DeleteBehavior.Restrict;
     }

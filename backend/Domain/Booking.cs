@@ -85,8 +85,8 @@ public class Booking : IPayable, ICancellable, ISoftDeletable
     public DateTime? ReminderSentAt { get; set; }
     public bool IsDeleted { get; set; }
 
-    /// <summary>Optimistic concurrency token.</summary>
-    public byte[] RowVersion { get; set; } = [];
+    /// <summary>Optimistic concurrency token: Postgres's own row version (the xmin system column).</summary>
+    public uint RowVersion { get; set; }
 
     public List<BookingAddOn> AddOns { get; set; } = [];
     public List<Payment> Payments { get; set; } = [];

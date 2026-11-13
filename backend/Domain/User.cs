@@ -6,6 +6,14 @@ public class User : IAuthenticatable, ISoftDeletable
     public string FirstName { get; set; } = "";
     public string LastName { get; set; } = "";
     public string Username { get; set; } = "";
+
+    /// <summary>
+    /// The username in lower case, kept by the database itself (a generated column). Postgres compares text case by case,
+    /// so sign-in and "username taken" use this: "Kyla" and "kyla" are the same account.
+    /// </summary>
+    public string UsernameKey { get; private set; } = "";
+
+    /// <summary>Always stored in lower case (InputNormalizer.Email).</summary>
     public string Email { get; set; } = "";
     public string PhoneNumber { get; set; } = "";
 

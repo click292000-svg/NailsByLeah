@@ -14,11 +14,11 @@ internal sealed class UserConfiguration : IEntityTypeConfiguration<User>
     {
         b.ToTable("users", t =>
         {
-            t.HasCheckConstraint("ck_users_first_name_length", $"LEN([first_name]) BETWEEN 1 AND {InputLimits.NameMaxLength}");
-            t.HasCheckConstraint("ck_users_last_name_length", $"LEN([last_name]) BETWEEN 1 AND {InputLimits.NameMaxLength}");
+            t.HasCheckConstraint("ck_users_first_name_length", $"char_length(first_name) BETWEEN 1 AND {InputLimits.NameMaxLength}");
+            t.HasCheckConstraint("ck_users_last_name_length", $"char_length(last_name) BETWEEN 1 AND {InputLimits.NameMaxLength}");
             t.HasCheckConstraint("ck_users_phone_digits",
-                $"[phone_number] NOT LIKE '%[^0-9]%' AND LEN([phone_number]) = {InputLimits.PhoneDigits}");
-            t.HasCheckConstraint("ck_users_failed_login_count", "[failed_login_count] >= 0");
+                $"phone_number ~ '^[0-9]{{{InputLimits.PhoneDigits}}}$'");
+            t.HasCheckConstraint("ck_users_failed_login_count", "failed_login_count >= 0");
         });
         b.Property(x => x.PhotoFileName).HasMaxLength(100);
         b.Property(x => x.PhotoContentType).HasMaxLength(40);
@@ -26,6 +26,8 @@ internal sealed class UserConfiguration : IEntityTypeConfiguration<User>
         b.Property(u => u.FirstName).HasMaxLength(InputLimits.NameMaxLength).IsRequired();
         b.Property(u => u.LastName).HasMaxLength(InputLimits.NameMaxLength).IsRequired();
         b.Property(u => u.Username).HasMaxLength(InputLimits.UsernameMaxLength).IsRequired();
+        // Kept by the database: the username in lower case, so sign-in and uniqueness ignore case (see User.UsernameKey).
+        b.Property(u => u.UsernameKey).HasMaxLength(InputLimits.UsernameMaxLength).HasComputedColumnSql("lower(username)", stored: true);
         b.Property(u => u.Email).HasMaxLength(InputLimits.EmailMaxLength).IsRequired();
         b.Property(u => u.PhoneNumber).HasMaxLength(InputLimits.PhoneDigits).IsRequired();
         b.Property(u => u.PasswordHash).HasMaxLength(100).IsRequired();
@@ -34,7 +36,7 @@ internal sealed class UserConfiguration : IEntityTypeConfiguration<User>
         b.Property(u => u.AdminNote).HasMaxLength(InputLimits.AdminNoteMaxLength);
 
         // Indexes on username and email (Ref 13.3) double as the UNIQUE constraints (Ref 6.2).
-        b.HasIndex(u => u.Username).IsUnique().HasDatabaseName(IndexNames.UsersUsername);
+        b.HasIndex(u => u.UsernameKey).IsUnique().HasDatabaseName(IndexNames.UsersUsername);
         b.HasIndex(u => u.Email).IsUnique().HasDatabaseName(IndexNames.UsersEmail);
         b.HasIndex(u => u.PhoneNumber).IsUnique().HasDatabaseName(IndexNames.UsersPhoneNumber);
     }
@@ -46,10 +48,12 @@ internal sealed class CatalogServiceConfiguration : IEntityTypeConfiguration<Cat
     {
         b.ToTable("services", t =>
         {
-            t.HasCheckConstraint("ck_services_price_non_negative", "[price] >= 0");
+            t.HasCheckConstraint("ck_services_price_non_negative", "price >= 0");
             t.HasCheckConstraint("ck_services_duration_range",
-                $"[duration_minutes] BETWEEN {InputLimits.ServiceDurationMinMinutes} AND {InputLimits.ServiceDurationMaxMinutes}");
+                $"duration_minutes BETWEEN {InputLimits.ServiceDurationMinMinutes} AND {InputLimits.ServiceDurationMaxMinutes}");
         });
+        // The price list is seeded with fixed ids (PriceListSeed), which Postgres's id counter doesn't skip: new services start at 100.
+        b.Property(s => s.Id).HasIdentityOptions(startValue: SeededRows.FirstNewId);
         b.Property(s => s.DurationMinutes).HasDefaultValue(CatalogService.DefaultDurationMinutes);
         b.Property(s => s.Name).HasMaxLength(InputLimits.ServiceNameMaxLength).IsRequired();
         b.HasOne<CatalogService>().WithMany().HasForeignKey(s => s.DesignOptionOfId).OnDelete(DeleteBehavior.Restrict);
@@ -67,7 +71,8 @@ internal sealed class StoneAddOnConfiguration : IEntityTypeConfiguration<StoneAd
 {
     public void Configure(EntityTypeBuilder<StoneAddOn> b)
     {
-        b.ToTable("addons", t => t.HasCheckConstraint("ck_addons_price_non_negative", "[price] >= 0"));
+        b.ToTable("addons", t => t.HasCheckConstraint("ck_addons_price_non_negative", "price >= 0"));
+        b.Property(a => a.Id).HasIdentityOptions(startValue: SeededRows.FirstNewId); // seeded with fixed ids too
         b.Property(a => a.Name).HasMaxLength(InputLimits.ServiceNameMaxLength).IsRequired();
         b.HasIndex(a => a.Name).IsUnique().HasDatabaseName("ux_addons_name");
     }
@@ -79,13 +84,13 @@ internal sealed class BookingConfiguration : IEntityTypeConfiguration<Booking>
     {
         b.ToTable("bookings", t =>
         {
-            t.HasCheckConstraint("ck_bookings_service_price_non_negative", "[service_price] >= 0");
-            t.HasCheckConstraint("ck_bookings_deposit_non_negative", "[deposit_amount] >= 0");
-            t.HasCheckConstraint("ck_bookings_duration_positive", "[duration_minutes] > 0");
-            t.HasCheckConstraint("ck_bookings_amount_paid_non_negative", "[amount_paid] >= 0");
-            t.HasCheckConstraint("ck_bookings_balance_received_non_negative", "[balance_received] >= 0");
-            t.HasCheckConstraint("ck_bookings_removal_price_non_negative", "[removal_price] >= 0");
-            t.HasCheckConstraint("ck_bookings_refund_due_non_negative", "[refund_due] >= 0");
+            t.HasCheckConstraint("ck_bookings_service_price_non_negative", "service_price >= 0");
+            t.HasCheckConstraint("ck_bookings_deposit_non_negative", "deposit_amount >= 0");
+            t.HasCheckConstraint("ck_bookings_duration_positive", "duration_minutes > 0");
+            t.HasCheckConstraint("ck_bookings_amount_paid_non_negative", "amount_paid >= 0");
+            t.HasCheckConstraint("ck_bookings_balance_received_non_negative", "balance_received >= 0");
+            t.HasCheckConstraint("ck_bookings_removal_price_non_negative", "removal_price >= 0");
+            t.HasCheckConstraint("ck_bookings_refund_due_non_negative", "refund_due >= 0");
         });
 
         b.Property(x => x.NailColor).HasMaxLength(InputLimits.NailColorMaxLength);
@@ -94,6 +99,7 @@ internal sealed class BookingConfiguration : IEntityTypeConfiguration<Booking>
         b.Property(x => x.TermsVersion).HasMaxLength(20);
         b.HasOne(x => x.RemovalService).WithMany().HasForeignKey(x => x.RemovalServiceId).OnDelete(DeleteBehavior.Restrict);
 
+        // Postgres's own row version (xmin) is the optimistic concurrency token.
         b.Property(x => x.RowVersion).IsRowVersion();
         b.Property(x => x.Note).HasMaxLength(InputLimits.NoteMaxLength);
         b.Property(x => x.GuestName).HasMaxLength(InputLimits.GuestNameMaxLength);
@@ -118,7 +124,7 @@ internal sealed class BookingConfiguration : IEntityTypeConfiguration<Booking>
         b.HasIndex(x => new { x.BookingDate, x.StartTime }, IndexNames.BookingsActiveSlot)
             .HasDatabaseName(IndexNames.BookingsActiveSlot)
             .IsUnique()
-            .HasFilter("[status] IN ('Pending', 'Confirmed') AND [is_deleted] = 0");
+            .HasFilter("status IN ('Pending', 'Confirmed') AND NOT is_deleted");
     }
 }
 
@@ -128,10 +134,10 @@ internal sealed class BookingAddOnConfiguration : IEntityTypeConfiguration<Booki
     {
         b.ToTable("booking_addons", t =>
         {
-            t.HasCheckConstraint("ck_booking_addons_nail_count", $"[nail_count] BETWEEN 1 AND {StoneAddOn.MaxNails}");
-            t.HasCheckConstraint("ck_booking_addons_line_price_non_negative", "[line_price] >= 0");
+            t.HasCheckConstraint("ck_booking_addons_nail_count", $"nail_count BETWEEN 1 AND {StoneAddOn.MaxNails}");
+            t.HasCheckConstraint("ck_booking_addons_line_price_non_negative", "line_price >= 0");
             t.HasCheckConstraint("ck_booking_addons_hand",
-                $"[hand] = 'Both' OR ([hand] IN ('Left', 'Right') AND [nail_count] <= {StoneAddOn.MaxNailsPerHand})");
+                $"hand = 'Both' OR (hand IN ('Left', 'Right') AND nail_count <= {StoneAddOn.MaxNailsPerHand})");
         });
         b.HasOne(x => x.AddOn).WithMany().HasForeignKey(x => x.AddOnId);
         b.HasIndex(x => new { x.BookingId, x.AddOnId }).IsUnique().HasDatabaseName("ux_booking_addons_booking_addon");
@@ -144,8 +150,8 @@ internal sealed class PaymentConfiguration : IEntityTypeConfiguration<Payment>
     {
         b.ToTable("payments", t =>
         {
-            t.HasCheckConstraint("ck_payments_amount_positive", "[amount] > 0");
-            t.HasCheckConstraint("ck_payments_balance_after", "[balance_after] >= 0 AND [total_amount] >= 0");
+            t.HasCheckConstraint("ck_payments_amount_positive", "amount > 0");
+            t.HasCheckConstraint("ck_payments_balance_after", "balance_after >= 0 AND total_amount >= 0");
         });
         b.HasOne<User>().WithMany().HasForeignKey(x => x.ClientId);
         b.HasOne<User>().WithMany().HasForeignKey(x => x.VerifiedByUserId);
@@ -189,7 +195,7 @@ internal sealed class BlockedSlotConfiguration : IEntityTypeConfiguration<Blocke
     {
         b.ToTable("blocked_slots", t =>
         {
-            t.HasCheckConstraint("ck_blocked_slots_period", "([start_time] IS NULL AND [end_time] IS NULL) OR [end_time] > [start_time]");
+            t.HasCheckConstraint("ck_blocked_slots_period", "(start_time IS NULL AND end_time IS NULL) OR end_time > start_time");
         });
         b.Property(x => x.Reason).HasMaxLength(InputLimits.BlockReasonMaxLength);
         b.HasOne(x => x.CreatedBy).WithMany().HasForeignKey(x => x.CreatedByUserId);
@@ -215,8 +221,8 @@ internal sealed class ReferenceImageConfiguration : IEntityTypeConfiguration<Ref
     {
         b.ToTable("reference_images", t =>
         {
-            t.HasCheckConstraint("ck_reference_images_size", $"[size_bytes] > 0 AND [size_bytes] <= {UploadLimits.ReferenceImageMaxBytes}");
-            t.HasCheckConstraint("ck_reference_images_content_type", "[content_type] IN ('image/jpeg', 'image/png', 'image/webp')");
+            t.HasCheckConstraint("ck_reference_images_size", $"size_bytes > 0 AND size_bytes <= {UploadLimits.ReferenceImageMaxBytes}");
+            t.HasCheckConstraint("ck_reference_images_content_type", "content_type IN ('image/jpeg', 'image/png', 'image/webp')");
         });
         b.Ignore(x => x.IsAttached);
         b.Property(x => x.StoredFileName).HasMaxLength(64).IsRequired();
@@ -233,7 +239,7 @@ internal sealed class BookingDraftConfiguration : IEntityTypeConfiguration<Booki
 {
     public void Configure(EntityTypeBuilder<BookingDraft> b)
     {
-        b.ToTable("booking_drafts", t => t.HasCheckConstraint("ck_booking_drafts_data_json", "ISJSON([data]) = 1"));
+        b.ToTable("booking_drafts", t => t.HasCheckConstraint("ck_booking_drafts_data_json", "data IS JSON"));
         b.Property(x => x.Data).HasMaxLength(InputLimits.BookingDraftMaxLength).IsRequired();
         b.HasOne(x => x.Client).WithMany().HasForeignKey(x => x.ClientId);
         // One draft per client.
@@ -246,7 +252,7 @@ internal sealed class FeedbackConfiguration : IEntityTypeConfiguration<Feedback>
     public void Configure(EntityTypeBuilder<Feedback> b)
     {
         b.ToTable("feedback", t =>
-            t.HasCheckConstraint("ck_feedback_rating", $"[rating] BETWEEN {Feedback.MinRating} AND {Feedback.MaxRating}"));
+            t.HasCheckConstraint("ck_feedback_rating", $"rating BETWEEN {Feedback.MinRating} AND {Feedback.MaxRating}"));
         b.Property(x => x.Comment).HasMaxLength(InputLimits.FeedbackCommentMaxLength);
         b.Property(x => x.Reply).HasMaxLength(InputLimits.FeedbackReplyMaxLength);
         b.HasOne(x => x.Client).WithMany().HasForeignKey(x => x.ClientId);
@@ -268,6 +274,12 @@ internal sealed class GalleryPhotoConfiguration : IEntityTypeConfiguration<Galle
     }
 }
 
+/// <summary>Ids from here on are free for rows added in the app; seeded rows use lower ones.</summary>
+internal static class SeededRows
+{
+    public const long FirstNewId = 100;
+}
+
 public static class IndexNames
 {
     public const string BookingDraftsClient = "ux_booking_drafts_client_id";
@@ -283,7 +295,7 @@ internal sealed class SalonSettingsConfiguration : IEntityTypeConfiguration<Salo
 {
     public void Configure(EntityTypeBuilder<SalonSettings> b)
     {
-        b.ToTable("salon_settings", t => t.HasCheckConstraint("ck_salon_settings_single_row", $"[id] = {SalonSettings.SingletonId}"));
+        b.ToTable("salon_settings", t => t.HasCheckConstraint("ck_salon_settings_single_row", $"id = {SalonSettings.SingletonId}"));
         b.Property(x => x.Id).ValueGeneratedNever();
         b.Property(x => x.Phone).HasMaxLength(20);
         b.Property(x => x.PaymentAccountName).HasMaxLength(Services.SalonProfileService.PaymentNameMaxLength);

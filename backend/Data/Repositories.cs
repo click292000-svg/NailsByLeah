@@ -149,15 +149,31 @@ internal sealed class UserRepository(AppDbContext db) : IUserRepository
 
     public Task<User?> GetByIdAsync(int id, CancellationToken ct) => Live.FirstOrDefaultAsync(u => u.Id == id, ct);
 
-    public Task<User?> FindByUsernameOrEmailAsync(string usernameOrEmail, CancellationToken ct) =>
-        Live.FirstOrDefaultAsync(u => u.Username == usernameOrEmail || u.Email == usernameOrEmail, ct);
+    // Postgres compares text case by case: usernames are matched on their lower-case copy, emails are stored in lower case.
+    public Task<User?> FindByUsernameOrEmailAsync(string usernameOrEmail, CancellationToken ct)
+    {
+        var key = usernameOrEmail.ToLowerInvariant();
+        return Live.FirstOrDefaultAsync(u => u.UsernameKey == key || u.Email == key, ct);
+    }
 
-    public Task<User?> FindByEmailAsync(string email, CancellationToken ct) => Live.FirstOrDefaultAsync(u => u.Email == email, ct);
-
+    public Task<User?> FindByEmailAsync(string email, CancellationToken ct)
+    {
+        var key = email.ToLowerInvariant();
+        return Live.FirstOrDefaultAsync(u => u.Email == key, ct);
+    }
 
     // Uniqueness checks include soft-deleted rows because the UNIQUE indexes do too.
-    public Task<bool> UsernameExistsAsync(string username, CancellationToken ct) => db.Users.AnyAsync(u => u.Username == username, ct);
-    public Task<bool> EmailExistsAsync(string email, CancellationToken ct) => db.Users.AnyAsync(u => u.Email == email, ct);
+    public Task<bool> UsernameExistsAsync(string username, CancellationToken ct)
+    {
+        var key = username.ToLowerInvariant();
+        return db.Users.AnyAsync(u => u.UsernameKey == key, ct);
+    }
+
+    public Task<bool> EmailExistsAsync(string email, CancellationToken ct)
+    {
+        var key = email.ToLowerInvariant();
+        return db.Users.AnyAsync(u => u.Email == key, ct);
+    }
     public Task<bool> PhoneNumberExistsAsync(string phoneNumber, CancellationToken ct) => db.Users.AnyAsync(u => u.PhoneNumber == phoneNumber, ct);
     public Task<bool> PhoneNumberUsedByOtherAsync(string phoneNumber, int userId, CancellationToken ct) =>
         db.Users.AnyAsync(u => u.PhoneNumber == phoneNumber && u.Id != userId, ct);
@@ -167,9 +183,10 @@ internal sealed class UserRepository(AppDbContext db) : IUserRepository
         var query = Live.Where(u => u.Role == UserRole.Client);
         if (!string.IsNullOrWhiteSpace(search))
         {
-            var text = search.Trim();
-            query = query.Where(u => u.Username.Contains(text) || u.Email.Contains(text) || u.PhoneNumber.Contains(text)
-                                     || (u.FirstName + " " + u.LastName).Contains(text));
+            // Case doesn't matter in a search: "kyla" finds "Kyla".
+            var text = search.Trim().ToLowerInvariant();
+            query = query.Where(u => u.UsernameKey.Contains(text) || u.Email.Contains(text) || u.PhoneNumber.Contains(text)
+                                     || (u.FirstName + " " + u.LastName).ToLower().Contains(text));
         }
         var total = await query.CountAsync(ct);
         var items = await query.OrderBy(u => u.Username).Skip((page - 1) * pageSize).Take(pageSize).AsNoTracking().ToListAsync(ct);
@@ -263,12 +280,12 @@ internal sealed class BookingRepository(AppDbContext db) : IBookingRepository
             query = query.Where(b => b.ServiceId == serviceId || b.RemovalServiceId == serviceId);
         if (!string.IsNullOrWhiteSpace(c.ClientName))
         {
-            var name = c.ClientName.Trim();
+            // Case doesn't matter in a search ("gc-2026" finds "GC-2026…", "kyla" finds "Kyla").
+            var name = c.ClientName.Trim().ToLowerInvariant();
             query = query.Where(b =>
-                (b.GuestName != null && b.GuestName.Contains(name)) ||
-                b.Client.FirstName.Contains(name) || b.Client.LastName.Contains(name) ||
-                (b.Client.FirstName + " " + b.Client.LastName).Contains(name) || b.Client.Username.Contains(name) ||
-                b.Service.Name.Contains(name) || b.Payments.Any(p => p.ReferenceNumber.Contains(name)));
+                (b.GuestName != null && b.GuestName.ToLower().Contains(name)) ||
+                (b.Client.FirstName + " " + b.Client.LastName).ToLower().Contains(name) || b.Client.UsernameKey.Contains(name) ||
+                b.Service.Name.ToLower().Contains(name) || b.Payments.Any(p => p.ReferenceNumber.ToLower().Contains(name)));
         }
 
         var total = await query.CountAsync(ct);
@@ -338,20 +355,24 @@ internal sealed class BookingRepository(AppDbContext db) : IBookingRepository
                                b.BookingDate >= fromDate && b.BookingDate <= toDate)
             .ToListAsync(ct);
 
+    /// <summary>Keeps the booking-day locks apart from any other advisory locks in the database.</summary>
+    private const int BookingDayLockSpace = 4201;
+
     public async Task LockDayAsync(DateOnly date, CancellationToken ct)
     {
-        // An application lock named after the date, owned by the transaction: released on commit or rollback.
-        // Interpolated values become SQL parameters; this is not string concatenation.
-        var resource = $"nbl-booking-day:{date:yyyy-MM-dd}";
-        var result = await db.Database.SqlQuery<int>($"""
-            DECLARE @result int;
-            EXEC @result = sp_getapplock @Resource = {resource}, @LockMode = 'Exclusive', @LockOwner = 'Transaction', @LockTimeout = 15000;
-            SELECT @result AS [Value];
-            """).ToListAsync(ct);
-
-        // 0 = granted, 1 = granted after waiting; negative = timed out, deadlock or error.
-        if (result.Count != 1 || result[0] < 0)
+        // A Postgres advisory lock keyed on the date, held until the transaction commits or rolls back. A request that
+        // waits more than 15 seconds gives up (lock_timeout covers advisory locks too) and the client is asked to retry.
+        // The day number is a plain integer parameter, not text pasted into the SQL.
+        var day = date.DayNumber;
+        try
+        {
+            await db.Database.ExecuteSqlRawAsync("SET LOCAL lock_timeout = '15s'", ct);
+            await db.Database.ExecuteSqlAsync($"SELECT pg_advisory_xact_lock({BookingDayLockSpace}, {day})", ct);
+        }
+        catch (Npgsql.PostgresException pg) when (pg.SqlState is Npgsql.PostgresErrorCodes.LockNotAvailable or Npgsql.PostgresErrorCodes.DeadlockDetected)
+        {
             throw new ConflictException("The system is busy with another request for the same day. Please try again.", "concurrency_conflict");
+        }
     }
 }
 

@@ -47,10 +47,24 @@ public static class ServiceRegistration
         services.AddScoped<ICurrentUser, HttpCurrentUser>();
 
         // Data layer
-        services.AddDbContext<AppDbContext>((sp, options) => options
-            .UseSqlServer(sp.GetRequiredService<IConfiguration>().GetConnectionString("Default")
-                          ?? throw new InvalidOperationException("ConnectionStrings:Default is not configured."))
-            .UseSnakeCaseNamingConvention());
+        services.AddDbContext<AppDbContext>((sp, options) =>
+        {
+            var config = sp.GetRequiredService<IConfiguration>();
+            // Postgres (Supabase, through its session pooler). Database:Schema is only set by the tests, which give each
+            // test host its own schema in the shared test database; it keeps the migrations' bookkeeping in that schema too.
+            var schema = config["Database:Schema"];
+            options
+                .UseNpgsql(PostgresConnectionString.Normalize(
+                        config.GetConnectionString("Default") ?? throw new InvalidOperationException("ConnectionStrings:Default is not configured.")),
+                    npgsql =>
+                    {
+                        if (!string.IsNullOrWhiteSpace(schema))
+                            npgsql.MigrationsHistoryTable("__EFMigrationsHistory", schema);
+                    })
+                .UseSnakeCaseNamingConvention();
+            if (!string.IsNullOrWhiteSpace(schema))
+                options.AddInterceptors(new SearchPathInterceptor(schema));
+        });
         // Login cookies are signed with these keys; hosts wipe their disk, so they live in the database.
         services.AddDataProtection().SetApplicationName("NailsByLeah").PersistKeysToDbContext<AppDbContext>();
         services.AddScoped<IUnitOfWork, EfUnitOfWork>();

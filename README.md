@@ -2,7 +2,7 @@
 
 Nail salon booking and management system.
 
-- `backend/` — C# ASP.NET Core Web API (.NET 10) with SQL Server. Setup, configuration and API reference: [backend/README.md](backend/README.md)
+- `backend/` — C# ASP.NET Core Web API (.NET 10) with PostgreSQL (Supabase). Setup, configuration and API reference: [backend/README.md](backend/README.md)
 - `tests/` — backend unit and integration tests ([backend/TESTING.md](backend/TESTING.md))
 - `frontend/` — React (Vite). [frontend/README.md](frontend/README.md)
 - `docs/` — the plan for going live (Supabase Postgres, hosting, PayMongo): [docs/GO-LIVE-PLAN.md](docs/GO-LIVE-PLAN.md)
@@ -38,8 +38,8 @@ cd frontend
 npm test
 ```
 
-The backend tests need SQL Server LocalDB. If they fail with "LocalDB instance startup: SQL Server process failed to
-start" from a terminal, run them from Visual Studio instead (**Test → Run All Tests**).
+The backend tests run against the Postgres test database in user secrets (`ConnectionStrings:Tests`, or else
+`ConnectionStrings:Default`). Each test class gets its own temporary schema there, dropped when it finishes.
 
 ## Security at a glance
 

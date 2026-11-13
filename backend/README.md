@@ -1,13 +1,14 @@
 # Nails by Leyah — Backend API
 
-ASP.NET Core Web API (.NET 10, C#) with SQL Server and EF Core. Built for Visual Studio 2026.
+ASP.NET Core Web API (.NET 10, C#) with PostgreSQL (Supabase) and EF Core. Built for Visual Studio 2026.
 The numbered requirements it implements are in [inputs/](inputs/README.md).
 
 ## Prerequisites
 
 - .NET 10 SDK (included with Visual Studio 2026)
-- SQL Server LocalDB (installed with Visual Studio's "Data storage and processing" workload) or any SQL Server
-- `sqlcmd`, only for the backup scripts
+- A PostgreSQL 16+ database: the Supabase test project, reached through its **session pooler**. Put its .NET connection
+  string in user secrets (`dotnet user-secrets set "ConnectionStrings:Default" "<string>"`), never in `appsettings.json`
+- The backup scripts in `database/` still use SQL Server's `sqlcmd` and need rewriting with `pg_dump`
 
 ## First-time setup
 
@@ -75,7 +76,7 @@ settings or secrets: the host supplies them, and the app refuses to start until 
 dotnet test NailsByLeah.slnx
 ```
 
-Integration tests create a temporary LocalDB database per test class and drop it afterwards. See [TESTING.md](TESTING.md).
+Integration tests create a temporary schema per test class in the test database (`ConnectionStrings:Tests` in user secrets, or `ConnectionStrings:Default`) and drop it afterwards. See [TESTING.md](TESTING.md).
 
 ## Configuration
 
@@ -84,7 +85,7 @@ All settings are in `appsettings.json`. Override any of them with user secrets o
 | Section | Purpose |
 |---|---|
 | `AllowedHosts` | Addresses the API answers to, separated by `;`. This computer's addresses by default; set the real address on the host (for example `AllowedHosts=nailsbyleyah.onrender.com`). Other addresses get 400 |
-| `ConnectionStrings:Default` | SQL Server connection (LocalDB by default) |
+| `ConnectionStrings:Default` | PostgreSQL connection (Supabase session pooler; set it in user secrets or on the host) |
 | `Auth` | Lockout (5 attempts / 15 min), idle session timeout (30 min), reset link lifetime (15 min), bcrypt cost |
 | `Booking` | Deposit (PHP 150), minimum notice for rescheduling (24 h) |
 | `Schedule` | Time zone (Asia/Manila), the 11:00 AM opening time, the 30-minute start-time grid, the 30-minute break after every appointment, the booking window (30 days ahead), closed weekdays. The closing time (default 9:00 PM) is set by administrators on the Schedule page and stored in `salon_settings` |
