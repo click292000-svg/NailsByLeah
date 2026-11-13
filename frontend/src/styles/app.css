@@ -1455,7 +1455,7 @@ select.input { appearance: auto; }
 .fb-search .fb-icon { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: var(--muted); pointer-events: none; }
 .fb-search .input { padding-left: 38px; width: 100%; }
 .fb-date { display: flex; gap: 8px; flex-wrap: wrap; }
-.fb-more { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 14px 0 4px; }
+.list-paging { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 14px 0 4px; }
 .fb-select { position: relative; display: inline-flex; align-items: center; }
 .fb-select .fb-icon { position: absolute; left: 11px; color: var(--rose-600); pointer-events: none; }
 .fb-select .fb-icon + .sr-only + select { padding-left: 36px; }
@@ -2060,4 +2060,4 @@ td .color-request-badge { margin: 2px 0 0; align-self: flex-start; }
 .stack.is-disabled .cc-card { cursor: not-allowed; }
 
 /* Paged lists scroll back to their top on a page change, clear of the sticky header. */
-.activity-card, .fb-list { scroll-margin-top: 84px; }
+.activity-card, .fb-list, .clients-card { scroll-margin-top: 84px; }

@@ -6,7 +6,8 @@ import { formatDate, humanize } from '../../lib/format'
 import { toIsoDate } from '../../lib/dates'
 
 const dayLabel = (day) => (day.slice(0, 4) === String(new Date().getFullYear()) ? formatDate(day).replace(/, \d{4}$/, '') : formatDate(day))
-import { Alert, Card, EmptyState, PageHeader, PageLoader, Pager, SelectField, Spinner } from '../../components/ui'
+import { Alert, Card, EmptyState, PageHeader, PageLoader, SelectField, Spinner } from '../../components/ui'
+import { LIST_PAGE_SIZE, ListPaging, usePageParam } from '../../components/ListPaging'
 
 const ACTIONS = [
   'BookingCreated', 'BookingConfirmed', 'BookingRescheduled', 'BookingCompleted', 'BookingCancelled',
@@ -14,7 +15,6 @@ const ACTIONS = [
   'UserRegistered', 'EmailVerified', 'LoginSucceeded', 'LoginFailed', 'AccountLocked', 'PasswordResetRequested', 'PasswordReset', 'ClientDataDeleted',
 ].map((a) => ({ value: a, label: humanize(a) }))
 
-const PAGE_SIZE = 10 // entries per page, like Find bookings
 
 /** The colour of an entry's dot: problems red, payments green, bookings rose, price list and schedule amber, accounts blue. */
 function tone(action) {
@@ -33,19 +33,15 @@ export default function ActivityLogPage() {
   // page change keeps the old entries on screen while the next ones load, then returns to the top of the list.
   const [params, setParams] = useSearchParams()
   const action = params.get('action') ?? ''
-  const page = Math.max(1, Number(params.get('page')) || 1)
-  const logs = useAsync(() => api.admin.activityLogs({ action, page, pageSize: PAGE_SIZE }), [action, page])
+  const { page, goTo: setPage } = usePageParam('.activity-card')
+  const logs = useAsync(() => api.admin.activityLogs({ action, page, pageSize: LIST_PAGE_SIZE }), [action, page])
   const count = logs.data?.totalCount ?? 0
-  const totalPages = Math.max(1, Math.ceil(count / PAGE_SIZE))
-  const show = (changes) => {
+  const setAction = (value) => {
     const next = new URLSearchParams(params)
-    Object.entries(changes).forEach(([key, value]) => (value && value !== 1 ? next.set(key, String(value)) : next.delete(key)))
+    if (value) next.set('action', value)
+    else next.delete('action')
+    next.delete('page') // a new filter starts again at page 1
     setParams(next, { replace: true })
-  }
-  const setAction = (value) => show({ action: value, page: 1 })
-  const setPage = (n) => {
-    show({ page: n })
-    document.querySelector('.activity-card')?.scrollIntoView?.({ block: 'start' })
   }
 
   // Entries arrive newest first; consecutive entries from the same day share a day heading.
@@ -103,14 +99,7 @@ export default function ActivityLogPage() {
             ))}
           </div>
         ))}
-        {count > 0 && (
-          <div className="fb-more">
-            <span className="muted small">
-              {count > PAGE_SIZE ? `Showing ${(page - 1) * PAGE_SIZE + 1}–${Math.min(page * PAGE_SIZE, count)} of ${count}` : `All ${count} ${count === 1 ? 'entry' : 'entries'} shown`}
-            </span>
-            <Pager page={page} pages={totalPages} onChange={setPage} />
-          </div>
-        )}
+        <ListPaging page={page} count={count} onChange={setPage} noun={['entry', 'entries']} />
       </Card>
     </div>
   )

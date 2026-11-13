@@ -3,13 +3,13 @@ import { api } from '../../api'
 import { errorMessage } from '../../api/errors'
 import { useAsync, useDebouncedValue } from '../../hooks/useAsync'
 import { formatDateTime } from '../../lib/format'
-import { Alert, Button, Card, PageHeader, PageLoader, Pager, Spinner, TextField } from '../../components/ui'
+import { Alert, Button, Card, PageHeader, PageLoader, Spinner, TextField } from '../../components/ui'
 import { Modal } from '../../components/Modal'
+import { LIST_PAGE_SIZE, ListPaging, usePageParam } from '../../components/ListPaging'
 import { apiPhotoSrc } from '../../lib/photos'
 import { LIMITS } from '../../validation/rules'
 
 const CONFIRM_WORD = 'DELETE'
-const PAGE_SIZE = 20
 
 /**
  * Every registered client, A to Z by username, a page at a time, with a search by username, name, email or phone.
@@ -17,9 +17,10 @@ const PAGE_SIZE = 20
  */
 export default function ClientDataPage() {
   const [search, setSearch] = useState('')
-  const [page, setPage] = useState(1)
+  // 10 a page like Find bookings and the Activity log; the page is in the address and a new search starts at page 1.
+  const { page, goTo, reset } = usePageParam('.clients-card')
   const debounced = useDebouncedValue(search.trim(), 300)
-  const list = useAsync(() => api.admin.searchClients({ search: debounced || null, page, pageSize: PAGE_SIZE }), [debounced, page])
+  const list = useAsync(() => api.admin.searchClients({ search: debounced || null, page, pageSize: LIST_PAGE_SIZE }), [debounced, page])
   const [client, setClient] = useState(null)
   const [error, setError] = useState(null)
   const [deleted, setDeleted] = useState(false)
@@ -47,7 +48,6 @@ export default function ClientDataPage() {
   }
 
   const total = list.data?.totalCount ?? 0
-  const pages = Math.max(1, Math.ceil(total / PAGE_SIZE))
 
   return (
     <div className="stack-lg">
@@ -59,7 +59,7 @@ export default function ClientDataPage() {
       )}
       {error && <Alert kind="error" onClose={() => setError(null)}>{error}</Alert>}
 
-      <Card title="All clients" actions={
+      <Card className="clients-card" title="All clients" actions={
         <span className="results-count">
           {list.loading && list.data && <Spinner small label="Refreshing" />}
           {list.data && `${total} client${total === 1 ? '' : 's'}`}
@@ -67,7 +67,7 @@ export default function ClientDataPage() {
       }>
         <div className="stack">
           <TextField label="Search clients" type="search" autoComplete="off" value={search} hint="Username, name, email or phone number"
-            onChange={(e) => { setSearch(e.target.value); setPage(1) }} />
+            onChange={(e) => { setSearch(e.target.value); reset() }} />
           {list.loading && !list.data && <PageLoader label="Loading clients…" />}
           {list.error && <Alert kind="error">{errorMessage(list.error)}</Alert>}
           {list.data && list.data.items.length === 0 && (
@@ -104,7 +104,7 @@ export default function ClientDataPage() {
               </table>
             </div>
           )}
-          <Pager page={page} pages={pages} onChange={setPage} />
+          <ListPaging page={page} count={total} onChange={goTo} noun={['client', 'clients']} />
         </div>
       </Card>
 

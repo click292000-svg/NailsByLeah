@@ -5,10 +5,11 @@ import { useAsync, useDebouncedValue } from '../../hooks/useAsync'
 import { errorMessage } from '../../api/errors'
 import { addDays, daysInMonth, toIsoDate, today } from '../../lib/dates'
 import { formatDate } from '../../lib/format'
-import { Alert, Button, Card, PageLoader, Pager, Spinner } from '../../components/ui'
+import { Alert, Button, Card, PageLoader, Spinner } from '../../components/ui'
 import { AdminBookingTable } from './AdminBookingTable'
 import { bookingClientName } from '../../lib/bookingClient'
 import { NewBookingDialog } from './NewBookingDialog'
+import { LIST_PAGE_SIZE, ListPaging, usePageParam } from '../../components/ListPaging'
 
 const Icon = ({ children }) => (
   <svg className="fb-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"
@@ -32,7 +33,6 @@ const STATUSES = [
   { value: 'Cancelled', label: 'Cancelled', title: 'Cancelled bookings', icon: <CrossIcon /> },
   { value: 'NoShow', label: 'No-show', title: 'No-shows', icon: <BanIcon /> },
 ]
-const PAGE_SIZE = 10 // bookings per page
 const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 const PANELS_KEY = 'nbl.bookingPanels'
 
@@ -77,16 +77,9 @@ export default function BookingsPage() {
 
   const catalog = useAsync(() => api.admin.services(), [])
   // 10 bookings a page; the page is in the address (?page=2), and a new filter goes back to page 1.
-  const page = Math.max(1, Number(params.get('page')) || 1)
-  const results = useAsync(() => api.admin.searchBookings({ date, status, clientName: debouncedSearch, serviceId, page, pageSize: PAGE_SIZE }),
+  const { page, goTo: goToPage } = usePageParam('.fb-list')
+  const results = useAsync(() => api.admin.searchBookings({ date, status, clientName: debouncedSearch, serviceId, page, pageSize: LIST_PAGE_SIZE }),
     [date, status, debouncedSearch, serviceId, page, refresh])
-  const goToPage = (n) => {
-    const next = new URLSearchParams(params)
-    if (n > 1) next.set('page', String(n))
-    else next.delete('page')
-    setParams(next, { replace: true })
-    document.querySelector('.fb-list')?.scrollIntoView?.({ block: 'start' }) // back to the top of the list
-  }
 
   const update = (changes) => {
     const next = new URLSearchParams(params)
@@ -104,7 +97,6 @@ export default function BookingsPage() {
   const clear = () => { setSearch(''); setParams(new URLSearchParams(), { replace: true }) }
   const count = results.data?.totalCount ?? 0
   const loaded = results.data?.items.length ?? 0
-  const pages = Math.max(1, Math.ceil(count / PAGE_SIZE))
   const tab = STATUSES.find((s) => s.value === status) ?? STATUSES[0]
   const both = panels.calendar && panels.day
 
@@ -183,14 +175,7 @@ export default function BookingsPage() {
           <>
             <AdminBookingTable bookings={results.data.items} onChanged={changed}
               emptyText={filtered ? 'Try another date, status or service, or clear the filters.' : 'New bookings show up here.'} />
-            {loaded > 0 && (
-              <div className="fb-more">
-                <span className="muted small">
-                  {count > PAGE_SIZE ? `Showing ${(page - 1) * PAGE_SIZE + 1}–${Math.min(page * PAGE_SIZE, count)} of ${count}` : `All ${count} booking${count === 1 ? '' : 's'} shown`}
-                </span>
-                <Pager page={page} pages={pages} onChange={goToPage} />
-              </div>
-            )}
+            {loaded > 0 && <ListPaging page={page} count={count} onChange={goToPage} noun={['booking', 'bookings']} />}
           </>
         )}
       </Card>
