@@ -54,6 +54,27 @@ describe('Shade stock and booking rules', () => {
     await expect(mockRequest('POST', '/bookings', { body: {} })).rejects.toBeTruthy() // still requires a full booking
   })
 
+  it('keeps "with design" at its set price + ₱100 and its set time + 1 hour', async () => {
+    const user = userEvent.setup()
+    await signIn(ADMIN)
+    renderApp('/admin/services')
+    // The design version's price and time can't be typed in; they follow the set.
+    expect(await screen.findByLabelText('Price of Soft Gel Extension with Design')).toHaveAttribute('readonly')
+    expect(screen.getByLabelText('Duration of Soft Gel Extension with Design in minutes')).toHaveAttribute('readonly')
+
+    const price = screen.getByLabelText('Price of Soft Gel Extension')
+    await user.clear(price)
+    await user.type(price, '350')
+    const minutes = screen.getByLabelText('Duration of Soft Gel Extension in minutes')
+    await user.clear(minutes)
+    await user.type(minutes, '150')
+    await user.click(within(price.closest('.catalog-row')).getByRole('button', { name: 'Save' }))
+    expect(await screen.findByText('Soft Gel Extension saved.')).toBeInTheDocument()
+
+    const design = (await mockRequest('GET', '/services')).services.find((s) => s.name === 'Soft Gel Extension with Design')
+    expect(design).toMatchObject({ price: 450, durationMinutes: 210 })
+  })
+
   it('changes the deposit, which the price list then uses', async () => {
     const user = userEvent.setup()
     await signIn(ADMIN)

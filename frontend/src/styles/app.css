@@ -508,7 +508,18 @@ select.input { appearance: auto; }
 .data-table tbody tr:hover { background: #fffbf9; }
 .data-table .num, .data-table td .money { font-variant-numeric: tabular-nums; }
 .row-actions { display: flex; flex-wrap: wrap; gap: 4px; justify-content: flex-end; }
-.pager { display: flex; justify-content: center; align-items: center; gap: 12px; font-size: var(--fs-body); }
+.pager { display: flex; justify-content: center; align-items: center; flex-wrap: wrap; gap: 8px 12px; font-size: var(--fs-body); }
+.pager-pages { display: flex; align-items: center; gap: 4px; }
+.pager-page { min-width: 36px; height: 36px; padding: 0 8px; border-radius: 99px; border: 1px solid var(--nude-200); background: var(--white);
+  font: inherit; font-size: var(--fs-small); font-weight: 600; color: var(--rose-700); cursor: pointer; }
+.pager-page:hover:not(.is-current) { border-color: var(--rose-500); background: var(--rose-50); }
+.pager-page:focus-visible { outline: none; box-shadow: var(--focus); }
+.pager-page.is-current { background: var(--burgundy); border-color: var(--burgundy); color: var(--white); cursor: default; }
+.pager-gap { padding: 0 2px; color: var(--muted); }
+/* Phones: the numbers get their own row on top, Previous and Next side by side under them. */
+@media (max-width: 559px) {
+  .pager-pages { order: -1; flex-basis: 100%; justify-content: center; }
+}
 
 @media (max-width: 759px) {
   .data-table thead { display: none; }
@@ -651,7 +662,9 @@ select.input { appearance: auto; }
 .modal { background: var(--white); width: 100%; max-height: 92vh; border-radius: 18px 18px 0 0; display: flex; flex-direction: column; outline: none; box-shadow: 0 24px 60px rgb(48 37 42 / 0.25); animation: modal-in .28s var(--ease) both; }
 .modal-header { display: flex; justify-content: space-between; align-items: center; padding: 12px 12px 12px 18px; border-bottom: 1px solid var(--line); gap: 10px; }
 .modal-header h2 { font-family: var(--font-display); color: var(--burgundy); font-size: var(--fs-title); }
-.modal-body { padding: 16px 18px 18px; overflow-y: auto; }
+/* Scrolls by wheel, touch and keyboard as before, but without a visible scroll bar. */
+.modal-body { padding: 16px 18px 18px; overflow-y: auto; scrollbar-width: none; -ms-overflow-style: none; }
+.modal-body::-webkit-scrollbar { display: none; }
 @keyframes modal-fade { from { opacity: 0; } }
 @keyframes modal-in { from { opacity: 0; transform: translateY(16px) scale(0.98); } }
 @media (prefers-reduced-motion: reduce) { .modal-backdrop, .modal { animation: none; } }
@@ -993,7 +1006,13 @@ select.input { appearance: auto; }
 .pay-option-note { font-size: var(--fs-small); line-height: 1.35; color: var(--muted); }
 @media (max-width: 420px) { .pay-options, .method-options { grid-template-columns: 1fr; } }
 .receipt-addons { list-style: none; padding: 0; margin: 2px 0 0; font-size: var(--fs-small); color: var(--ink-soft); }
-.receipt-pending { margin: 10px 0 0; padding: 8px 12px; border-radius: 12px; background: var(--rose-50); color: var(--rose-700); font-size: var(--fs-small); }
+.receipt-pending, .receipt-note { margin: 10px 0 0; padding: 10px 14px; border-radius: 12px; font-size: var(--fs-small); line-height: 1.45; }
+.receipt-pending { background: var(--rose-50); border: 1px solid var(--rose-100); color: var(--rose-700); }
+.receipt-note { background: #fff7e6; border: 1px solid #f5dfb0; color: #6b4a12; } /* a warning, like the deposit note when paying */
+.receipt-foot { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; width: 100%; }
+.receipt-foot-left { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; min-width: 0; }
+.receipt-foot-left .receipt-download { margin-right: 0; }
+.receipt-foot-hint { margin: 0; }
 @media (prefers-reduced-motion: reduce) { .pay-option { transition: none; } .pay-option:hover { transform: none; } }
 .pay-check-waiting { color: var(--amber-700); font-weight: 600; }
 
@@ -1342,10 +1361,12 @@ select.input { appearance: auto; }
 
 /* ---- Payment: booking policy and agreement ---- */
 .agree-box { display: flex; flex-direction: column; gap: 10px; padding: 12px; border-radius: 16px; background: #fdf6f3; border: 1px solid var(--nude-200); }
-.agree-deposit { display: flex; align-items: center; gap: 14px; padding: 12px 14px; border-radius: 14px; background: var(--rose-50); border: 1px solid var(--rose-100); }
-.agree-deposit-icon { width: 34px; height: 34px; flex: none; color: var(--rose-600); padding-right: 12px; box-sizing: content-box; border-right: 1px solid var(--rose-100); }
-.agree-deposit-title { margin: 0 0 2px; font-family: var(--font-display); font-size: var(--fs-title); font-weight: 700; color: var(--burgundy); }
-.agree-deposit-text { margin: 0; font-size: var(--fs-small); line-height: 1.4; color: var(--ink); }
+/* The deposit warning: amber like the Terms reminders, and the same shape as the Terms box under it. */
+.agree-deposit { display: flex; align-items: flex-start; gap: 12px; padding: 14px 18px; border-radius: 14px; background: #fff7e6; border: 1px solid #f5dfb0; }
+.agree-deposit-icon { width: 22px; height: 22px; flex: none; margin-top: 1px; color: #b7790f; }
+.agree-deposit-label { margin: 0; font-size: var(--fs-small); font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: #a8730f; }
+.agree-deposit-title { margin: 2px 0; font-weight: 700; color: #6b4a12; }
+.agree-deposit-text { margin: 0; font-size: var(--fs-small); line-height: 1.45; color: #6b4a12; }
 .agree-review { display: flex; align-items: center; gap: 12px; width: 100%; padding: 10px 12px; border-radius: 14px; border: 1px solid var(--nude-200); background: var(--white); text-align: left; cursor: pointer; transition: border-color .15s, transform .15s var(--ease); }
 .agree-review:hover { border-color: var(--rose-500); transform: translateY(-1px); }
 .agree-review:focus-visible { outline: none; box-shadow: var(--focus); }
@@ -1368,7 +1389,6 @@ select.input { appearance: auto; }
 .agree-box.agreed .agree-check { border-color: #cde8d6; background: var(--green-100); }
 .agree-box.agreed .agree-hint { color: var(--green-700, #2f7a4b); font-style: normal; }
 .agree-box.agreed .agree-info { color: currentColor; }
-@media (max-width: 420px) { .agree-deposit-icon { width: 28px; height: 28px; padding-right: 10px; } }
 .agree-check input { appearance: none; -webkit-appearance: none; display: grid; place-items: center; border-radius: 50%; border: 1.5px solid var(--rose-500); background: var(--white); transition: background .15s, border-color .15s; }
 .agree-check input::after { content: ''; width: 6px; height: 11px; margin-top: -3px; border: solid var(--white); border-width: 0 2px 2px 0; transform: rotate(45deg) scale(0); transition: transform .15s var(--ease); }
 .agree-check input:checked { background: var(--rose-600); border-color: var(--rose-600); }
@@ -1377,9 +1397,6 @@ select.input { appearance: auto; }
 .agree-check input:disabled { border-color: var(--nude-200); background: #faf6f4; }
 @media (max-width: 480px) {
   .agree-box { padding: 0; background: none; border: 0; }
-  .agree-deposit { gap: 10px; padding: 10px 12px; }
-  .agree-deposit-icon, .agree-deposit-icon:is(svg) { width: 24px; height: 24px; padding-right: 0; border-right: 0; }
-  .agree-deposit-title { font-size: var(--fs-lead); }
   .agree-review { gap: 10px; padding: 10px; }
   .agree-review-icon { width: 34px; height: 34px; }
   .agree-check { padding: 10px 12px; }
@@ -1967,10 +1984,11 @@ td .color-request-badge { margin: 2px 0 0; align-self: flex-start; }
 }
 .calendar-pop-day:disabled { color: #d4c7cc; cursor: not-allowed; background: none; }
 .date-stepper-arrow:disabled { color: #d4c7cc; cursor: not-allowed; background: none; }
-.nb .date-filter { display: flex; flex-direction: column; gap: 6px; }
+.nb .date-filter { position: relative; display: flex; flex-direction: column; gap: 6px; }
 .nb .date-stepper { width: 100%; }
 .nb .date-stepper-pick { flex: 1; justify-content: center; }
-.nb .calendar-pop { position: static; inset: auto; transform: none; margin: 8px auto 0; width: 100%; max-width: 340px; } /* opens in place inside the booking window, so its scroll area never cuts it off */
+/* Floats over the note below instead of pushing it down; the window's own scroll area grows to fit it. */
+.nb .calendar-pop { position: absolute; top: calc(100% + 8px); left: 0; right: auto; transform: none; margin: 0; width: 100%; max-width: 340px; z-index: 40; }
 
 /* The admin menu on a phone: one height for every row, only the current page filled, and each group's pages behind a guide line. */
 @media (max-width: 639px) {
@@ -1998,25 +2016,48 @@ td .color-request-badge { margin: 2px 0 0; align-self: flex-start; }
 .agree-review-action.is-done { background: var(--white); color: var(--rose-700); border: 1px solid var(--nude-200); }
 .agree-check { gap: 12px; }
 
-/* Sign up: a light card with a row per document, then the agreement. */
-.su-terms { padding: 4px 0 0; border-top: 1px solid var(--line); }
-.su-terms-title { margin: 8px 0 8px; font-size: var(--fs-small); font-weight: 600; color: var(--ink-soft); }
-.su-docs { list-style: none; margin: 0 0 10px; padding: 0; border: 1px solid var(--nude-200); border-radius: 14px; overflow: hidden; background: var(--white); }
-.su-docs li + li { border-top: 1px solid var(--line); }
-.su-doc { display: flex; align-items: center; gap: 12px; width: 100%; padding: 11px 14px; border: 0; background: none; font: inherit; text-align: left; cursor: pointer;
-  transition: background .15s; }
-.su-doc:hover { background: var(--rose-50); }
-.su-doc:focus-visible { outline: none; box-shadow: inset var(--focus); }
-.su-doc-icon { display: grid; place-items: center; width: 34px; height: 34px; flex: none; border-radius: 10px; background: var(--rose-50); color: var(--rose-600); }
-.su-doc-icon svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
-.su-doc.is-read .su-doc-icon { background: var(--green-100); color: var(--green-700, #2f7a4b); }
-.su-doc-name { flex: 1; font-weight: 600; color: var(--ink); }
-.su-doc-state { font-size: var(--fs-small); font-weight: 600; color: var(--rose-600); }
-.su-doc.is-read .su-doc-state { color: var(--green-700, #2f7a4b); }
-.su-doc-chevron { width: 18px; height: 18px; flex: none; fill: none; stroke: var(--muted); stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
-.su-agree { display: flex; align-items: flex-start; gap: 10px; font-size: var(--fs-body); line-height: 1.45; color: var(--ink); cursor: pointer; }
-.su-agree input { width: 20px; height: 20px; margin: 2px 0 0; flex: none; accent-color: var(--rose-600); cursor: pointer; }
-.su-agree.is-locked { color: var(--muted); cursor: not-allowed; }
-.su-agree.is-locked input { cursor: not-allowed; }
-.su-hint { margin: 6px 0 0 30px; font-size: var(--fs-small); color: var(--muted); }
-.su-terms.agreed .su-hint { color: var(--green-700, #2f7a4b); }
+/* Legal documents: version line, important reminders, then the full text in its own scroll box. */
+.legal-lead { margin: -4px 0 2px; color: var(--ink-soft); }
+.legal-meta { margin: 0 0 12px; font-size: var(--fs-small); color: var(--muted); }
+.legal-meta-dot { margin: 0 6px; }
+.legal-reminders-group + .legal-reminders-group { margin-top: 8px; }
+.legal-reminders-sub { margin: 0 0 4px; font-size: var(--fs-small); font-weight: 700; text-transform: uppercase; letter-spacing: .04em; opacity: .8; }
+.legal-part + .legal-part { margin-top: 18px; padding-top: 14px; border-top: 2px solid var(--line); }
+.legal-part-title { margin: 0 0 8px; font-family: var(--font-display, inherit); font-size: 1.25rem; color: var(--burgundy); }
+.legal-reminders { margin-bottom: 12px; padding: 12px 16px; border-radius: 14px; background: #fff7e6; border: 1px solid #f5dfb0; color: #6b4a12; }
+.legal-reminders-title { margin: 0 0 6px; font-weight: 700; }
+.legal-reminders ul { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 4px; font-size: var(--fs-small); line-height: 1.45; }
+.legal-scroll { padding: 14px 16px; border: 1px solid var(--line); border-radius: 14px; background: var(--white); max-height: 40vh; }
+.legal-agree-foot { display: flex; flex-direction: column; gap: 12px; width: 100%; }
+.legal-actions { display: flex; justify-content: flex-end; gap: 10px; }
+@media (max-width: 480px) { .legal-actions .btn { flex: 1; } }
+.legal-agree { display: flex; align-items: center; gap: 12px; padding: 10px 14px; border-radius: 12px; border: 1px solid var(--nude-200);
+  background: var(--white); font-weight: 600; color: var(--ink); cursor: pointer; }
+.legal-agree input { width: 20px; height: 20px; flex: none; margin: 0; accent-color: var(--rose-600); cursor: pointer; }
+.legal-agree-text { display: flex; flex-direction: column; gap: 1px; line-height: 1.35; }
+.legal-agree-text small { font-size: var(--fs-small); font-weight: 500; color: var(--muted); }
+.legal-agree.is-locked { color: var(--ink-soft); background: #faf6f4; cursor: not-allowed; }
+.legal-agree.is-locked input { cursor: not-allowed; }
+
+/* Sign up: one line with the two documents, and the review status under it. */
+.su-terms { padding: 14px 18px; border-radius: 14px; border: 1px solid var(--nude-200); background: var(--white); }
+.su-terms-text { margin: 0; color: var(--ink-soft); line-height: 1.5; }
+/* Always underlined, so it reads as a link to open (sign-up and payment). */
+.su-terms-link { border: 0; background: none; padding: 0; font: inherit; font-weight: 700; color: var(--rose-700); cursor: pointer;
+  text-decoration: underline; text-decoration-thickness: 1.5px; text-underline-offset: 3px; }
+.su-terms-link:hover { color: var(--burgundy); }
+.su-terms-link:focus-visible { outline: none; box-shadow: var(--focus); border-radius: 4px; }
+.su-terms-status { margin: 6px 0 0; font-size: var(--fs-small); font-weight: 700; color: #a8730f; }
+.su-terms.is-done { border-color: #cde8d6; background: var(--green-100); }
+.su-terms.is-done .su-terms-status { color: var(--green-700, #2f7a4b); }
+.su-terms.is-error { border-color: var(--red-700); }
+.su-terms .field-error { margin: 4px 0 0; }
+
+/* Services: a design version's price and time follow its set, so they are shown but not typed in. */
+.catalog-row .input[readonly] { background: #faf6f4; color: var(--ink-soft); cursor: default; }
+.design-hint { margin: -2px 0 10px; }
+.stack.is-disabled { opacity: .5; }
+.stack.is-disabled .cc-card { cursor: not-allowed; }
+
+/* Paged lists scroll back to their top on a page change, clear of the sticky header. */
+.activity-card, .fb-list { scroll-margin-top: 84px; }

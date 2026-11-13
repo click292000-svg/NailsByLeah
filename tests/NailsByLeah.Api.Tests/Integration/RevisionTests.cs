@@ -8,7 +8,7 @@ namespace NailsByLeah.Api.Tests.Integration;
 public sealed class RevisionTests(ApiFactory factory) : IClassFixture<ApiFactory>
 {
     private const int Plain = 1;
-    private const int WithDesign = 2;
+    private const int SoftGelExtensionWithDesign = 8;
     private const int Biab = 3;
     private const int BiabWithDesign = 6;
     private const int SoftGelExtension = 7;
@@ -19,10 +19,13 @@ public sealed class RevisionTests(ApiFactory factory) : IClassFixture<ApiFactory
         var catalog = await factory.NewClient().GetAsync<CatalogResponse>("/api/services");
 
         var byId = catalog.Services.ToDictionary(s => s.Id);
-        Assert.Equal(Plain, byId[WithDesign].DesignOptionOfId);
+        // Only Soft Gel Extension and BIAB take a design: Plain's "With Design" (id 2) is retired.
+        Assert.False(byId.ContainsKey(2));
+        Assert.DoesNotContain(catalog.Services, s => s.DesignOptionOfId == Plain);
+        Assert.Equal(SoftGelExtension, byId[SoftGelExtensionWithDesign].DesignOptionOfId);
+        Assert.Equal((499m, 180), (byId[SoftGelExtensionWithDesign].Price, byId[SoftGelExtensionWithDesign].DurationMinutes));
         Assert.Equal(Biab, byId[BiabWithDesign].DesignOptionOfId);
         Assert.Equal(350m, byId[BiabWithDesign].Price);
-        Assert.Null(byId[SoftGelExtension].DesignOptionOfId);
         Assert.Equal(399m, byId[SoftGelExtension].Price);
         Assert.Equal(120, byId[SoftGelExtension].DurationMinutes);
         Assert.Contains(catalog.AddOns, a => a.Name == "Rhinestone" && a.Price == 15m);

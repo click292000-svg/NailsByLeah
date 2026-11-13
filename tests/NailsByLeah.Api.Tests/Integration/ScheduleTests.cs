@@ -6,9 +6,9 @@ namespace NailsByLeah.Api.Tests.Integration;
 /// <summary>Opening hours (11:00 AM to an administrator-set closing time), service durations and the 30-minute break.</summary>
 public sealed class ScheduleTests(ApiFactory factory) : IClassFixture<ApiFactory>
 {
-    // Seeded durations: Plain 2 hours, With Design 3 hours, removals 1 hour.
+    // Seeded durations: Plain 2 hours, Soft Gel Extension with Design 3 hours, removals 1 hour.
     private const int Plain = 1;
-    private const int WithDesign = 2;
+    private const int WithDesign = 8; // Soft Gel Extension with Design
 
     private static (DateOnly, TimeOnly) At(int daysAhead, int hour, int minute = 0) =>
         (ApiFactory.StartDate.AddDays(daysAhead), new TimeOnly(hour, minute));
@@ -193,11 +193,11 @@ public sealed class ScheduleTests(ApiFactory factory) : IClassFixture<ApiFactory
         int Minutes(string name) => catalog.Services.Single(s => s.Name == name).DurationMinutes!.Value;
 
         Assert.Equal(120, Minutes("Plain"));
-        Assert.Equal(180, Minutes("With Design"));
+        Assert.Equal(180, Minutes("Soft Gel Extension with Design"));
         Assert.Equal(180, Minutes("BIAB"));
         Assert.All(catalog.Services.Where(s => s.Category == "Removal"), s => Assert.Equal(60, s.DurationMinutes));
         Assert.False(catalog.Services.Single(s => s.Name == "Plain").AllowsAddOns);
-        Assert.True(catalog.Services.Single(s => s.Name == "With Design").AllowsAddOns);
+        Assert.True(catalog.Services.Single(s => s.Name == "Soft Gel Extension with Design").AllowsAddOns);
     }
 
     [Fact] // Removal (1 hour) + With Design (3 hours) = a 4-hour appointment.
@@ -213,7 +213,7 @@ public sealed class ScheduleTests(ApiFactory factory) : IClassFixture<ApiFactory
         var booked = await user.Client.BookAsync(TestHelpers.NewBooking(At(13, 11), WithDesign) with { RemovalServiceId = RemovalMyWork });
         Assert.Equal(240, booked.Booking.DurationMinutes);
         Assert.Equal(new TimeOnly(15, 0), booked.Booking.EndTime);
-        Assert.Equal(500m, booked.Booking.TotalPrice); // 400 + 100
+        Assert.Equal(599m, booked.Booking.TotalPrice); // 499 + 100
         Assert.Equal("My Work", booked.Booking.RemovalServiceName);
 
         // The next appointment can start only after the whole appointment and its break.

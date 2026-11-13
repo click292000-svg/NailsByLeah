@@ -144,7 +144,7 @@ function BookingWizard({ catalog, lookups, draft, onStartOver }) {
   const [stepError, setStepError] = useState(null)
   const [payError, setPayError] = useState(null)
   const [result, setResult] = useState(null)
-  const [paymentOption, setPaymentOption] = useState('Deposit') // 'Deposit' | 'Full'
+  const [paymentOption, setPaymentOption] = useState(null) // 'Deposit' | 'Full', chosen by the client (nothing picked at first)
 
   // Every change is saved to the client's account as a Draft (shortly after the last change, and straight away
   // when leaving the page), so going back a step, leaving, or switching device never loses a booking in progress.
@@ -414,7 +414,7 @@ function ServiceCard({ service, selected, onToggle, name }) {
 
 /**
  * Design (optional): one "With Design" card for every set that has a design version. It adds the design to the chosen set
- * (Plain becomes With Design, BIAB becomes BIAB with Design); with nothing chosen yet it starts with Plain.
+ * (Soft Gel Extension or BIAB with Design; Plain has none); with nothing chosen yet it starts with the first set that has one.
  */
 function DesignOption({ cards, chosen, baseOf, designOf, onService, children }) {
   const base = baseOf(chosen)
@@ -422,23 +422,30 @@ function DesignOption({ cards, chosen, baseOf, designOf, onService, children }) 
   if (!fallback) return null
   const design = base ? designOf(base) : fallback
   const on = Boolean(chosen?.designOptionOfId)
-  const hint = !base ? 'Add a design to your Plain or BIAB set.'
+  // The card shows what the design adds to the chosen set (+₱100, +1 hr), not the set's full price.
+  const shown = design ?? fallback
+  const shownBase = baseOf(shown)
+  const extraPrice = shown.price - (shownBase?.price ?? 0)
+  const extraMinutes = (shown.durationMinutes ?? 0) - (shownBase?.durationMinutes ?? 0)
+  const withDesign = cards.filter((c) => designOf(c)).map((c) => c.name).join(' or ')
+  const hint = !base ? `Add a design to your ${withDesign} set.`
     : design ? `Adds a design to your ${base.name} set.` : `Designs aren't available with ${base.name}.`
   return (
     <div className="service-group">
       <h3 className="group-title">Design <span className="group-optional">(optional)</span></h3>
+      {/* Full width, so a long set name never wraps and pushes the card down. */}
+      <p className="muted small design-hint">{hint}</p>
       {/* The With Design card, with the design photos beside it; each column has one line above it so both line up. */}
       <div className="design-row">
         <div className="pick-column design-card">
-          <div className="pick-title-row"><span className="muted small">{hint}</span></div>
           <label className={`choice has-photo${on ? ' selected' : ''}${design ? '' : ' is-disabled'}`}>
           <img className="choice-photo" src={DESIGN_PHOTO} alt="" width="640" height="640" loading="lazy" />
           <input type="checkbox" name="design" checked={on} disabled={!design}
             onChange={() => onService(on ? base.id : design.id)} />
           <span className="choice-name">With Design</span>
           <span className="choice-facts">
-            <Money amount={(design ?? fallback).price} />
-            {(design ?? fallback).durationMinutes && <span className="choice-meta muted">{formatDuration((design ?? fallback).durationMinutes)}</span>}
+            <span className="choice-price">+<Money amount={extraPrice} /></span>
+            {extraMinutes > 0 && <span className="choice-meta muted">+{formatDuration(extraMinutes)}</span>}
           </span>
           </label>
         </div>
@@ -453,7 +460,7 @@ function ServiceStep({
   referenceImages, onReferenceImages, nails, onNails, hands, onHands,
 }) {
   const softGels = catalog.services.filter((s) => s.category === 'SoftGel')
-  // The "with design" versions (Plain with design, BIAB with design) share one "With Design" card under Optional,
+  // The "with design" versions (Soft Gel Extension with design, BIAB with design) share one "With Design" card under Optional,
   // which adds the design to whichever set is chosen.
   const designOf = (base) => base && softGels.find((s) => s.designOptionOfId === base.id)
   const cards = softGels.filter((s) => !s.designOptionOfId).sort((a, b) => cardOrder(a) - cardOrder(b))
@@ -515,12 +522,14 @@ function ServiceStep({
         )}
       </fieldset>
 
-      {softGel && colors.length > 0 && (
-        <fieldset className="choice-fieldset">
+      {/* Always shown, so clients see a colour comes next; greyed out until a set is chosen (a removal alone needs none). */}
+      {colors.length > 0 && (
+        <fieldset className="choice-fieldset" disabled={!softGel}>
           <legend className="step-heading">
-            <span><h2>Choose a colour</h2><span className="step-hint">Pick a shade from the colour chart for your {setPhrase(catalog, softGel)}.</span></span>
+            <span><h2>Choose a colour</h2><span className="step-hint">Pick a shade from the colour chart for your {softGel ? setPhrase(catalog, softGel) : 'set'}.</span></span>
           </legend>
-          <div className="stack">
+          {!softGel && <p className="muted small addon-note">Choose a service to pick a colour.</p>}
+          <div className={softGel ? 'stack' : 'stack is-disabled'}>
             <ColorChooser colors={colors} value={colorRequest === null ? color : ''}
               onChange={(c) => { onColorRequest(null); onColor(c) }}
               request={colorRequest} onRequest={(text) => { onColor(''); onColorRequest(text) }}
@@ -538,7 +547,9 @@ function ServiceStep({
         </legend>
         {!addOnsAllowed && (
           <p className="muted small addon-note">
-            {softGel ? `Nail art isn't available with ${baseOf(softGel)?.name ?? softGel.name} on its own. Tick "With Design" or choose another service to add it.`
+            {softGel ? (designOf(baseOf(softGel))
+              ? `Nail art isn't available with ${baseOf(softGel).name} on its own. Tick "With Design" or choose another service to add it.`
+              : `Nail art isn't available with ${baseOf(softGel)?.name ?? softGel.name}. Choose another service to add it.`)
               : 'Choose a service to add nail art.'}
           </p>
         )}

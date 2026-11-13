@@ -146,19 +146,20 @@ describe('Hands for Stone add-ons', () => {
     await signIn(CLIENT)
     renderApp('/book')
 
-    await user.click(await screen.findByRole('checkbox', { name: /^With Design/ }))
+    await user.click(await screen.findByRole('checkbox', { name: /^With Design/ })) // Soft Gel Extension with Design
     await user.click(screen.getByRole('checkbox', { name: /Chrome/ }))
-    // Unticking "With design" leaves Plain on its own.
-    await user.click(screen.getByRole('checkbox', { name: /^With Design/ }))
+    // Plain takes no nail art and no design.
+    await user.click(screen.getByRole('checkbox', { name: /^Plain/ }))
     expect(screen.getByRole('checkbox', { name: /^Plain/ })).toBeChecked()
+    expect(screen.getByRole('checkbox', { name: /^With Design/ })).toBeDisabled()
 
-    expect(screen.getByText(/Nail art isn.t available with Plain/)).toBeInTheDocument()
+    expect(screen.getByText("Nail art isn't available with Plain. Choose another service to add it.")).toBeInTheDocument()
     expect(screen.getByRole('checkbox', { name: /Chrome/ })).toBeDisabled()
     expect(screen.getByRole('checkbox', { name: /Chrome/ })).not.toBeChecked()
     expect(within(screen.getByRole('complementary')).queryByText(/Chrome/)).toBeNull() // not charged
 
-    // Back to With Design: the earlier Chrome is gone, not quietly restored.
-    await user.click(screen.getByRole('checkbox', { name: /^With Design/ }))
+    // Back to a set with nail art: the earlier Chrome is gone, not quietly restored.
+    await user.click(screen.getByRole('checkbox', { name: /^Soft Gel Extension/ }))
     expect(screen.getByRole('checkbox', { name: /Chrome/ })).not.toBeChecked()
   })
 
@@ -171,14 +172,14 @@ describe('Hands for Stone add-ons', () => {
     await user.click(screen.getByRole('checkbox', { name: /^My Work/ }))
     const aside = within(screen.getByRole('complementary'))
     expect(aside.getByText('Removal – My Work')).toBeInTheDocument()
-    expect(aside.getByText('Total').nextSibling).toHaveTextContent('₱500.00')
+    expect(aside.getByText('Total').nextSibling).toHaveTextContent('₱599.00') // ₱499 + ₱100
     expect(aside.getByText('~ 4 hr')).toBeInTheDocument()
 
     // Only one removal at a time, and a removal alone needs no colour.
     await user.click(screen.getByRole('checkbox', { name: /^Not My Work/ }))
     expect(screen.getByRole('checkbox', { name: /^My Work/ })).not.toBeChecked()
-    // A second tap on the Plain card un-chooses the set, design and all.
-    await user.click(screen.getByRole('checkbox', { name: /^Plain/ }))
+    // A second tap on the Soft Gel Extension card un-chooses the set, design and all.
+    await user.click(screen.getByRole('checkbox', { name: /^Soft Gel Extension/ }))
     expect(screen.queryByRole('radiogroup', { name: 'Nail colour' })).toBeNull()
     await user.click(screen.getByRole('button', { name: /^Next:/ }))
     expect(await screen.findByRole('radiogroup', { name: /Choose a date/ })).toBeInTheDocument()
@@ -222,15 +223,15 @@ describe('Booking drafts', () => {
     expect(screen.getByRole('radio', { name: 'Right hand' })).toHaveAttribute('aria-checked', 'true')
     expect(screen.getByRole('button', { name: 'Colour #46 – Plum-Grey. Change colour' })).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: /^Next:/ }))
-    await waitFor(() => expect(getDb().bookingDrafts.find((d) => d.clientId === 2)?.data).toMatchObject({ step: 1, serviceId: 2, color: '#46', hands: { 2: 'Right' } }))
+    await waitFor(() => expect(getDb().bookingDrafts.find((d) => d.clientId === 2)?.data).toMatchObject({ step: 1, serviceId: 8, color: '#46', hands: { 2: 'Right' } }))
     first.unmount()
 
     // It is a draft, not a booking: no appointment was created, and My bookings offers to continue it.
-    expect(getDb().bookings.filter((b) => b.clientId === 2 && b.serviceId === 2 && b.status === 'Pending')).toHaveLength(0)
+    expect(getDb().bookings.filter((b) => b.clientId === 2 && b.serviceId === 8 && b.status === 'Pending')).toHaveLength(0)
     const second = renderApp('/bookings')
     const card = await screen.findByRole('region', { name: 'Unfinished booking' })
     expect(within(card).getByText('Draft')).toBeInTheDocument()
-    expect(within(card).getByText('With Design')).toBeInTheDocument()
+    expect(within(card).getByText(/Soft Gel Extension with Design/i)).toBeInTheDocument()
     expect(within(card).getByRole('link', { name: 'Continue booking' })).toHaveAttribute('href', '/book')
     second.unmount()
 
@@ -257,16 +258,16 @@ describe('Deposit or full payment', () => {
   it('a paid booking stays Pending until the administrator verifies and confirms it', async () => {
     // The first day from 6 days ahead where 3:00 PM is open for this 3-hour service.
     let ahead = 6
-    const openAt3 = async (day) => (await mockRequest('GET', '/slots', { query: { date: dateFromToday(day), serviceId: 2 } }))
+    const openAt3 = async (day) => (await mockRequest('GET', '/slots', { query: { date: dateFromToday(day), serviceId: 8 } }))
       .slots.some((s) => s.startTime === '15:00:00' && s.status === 'Open')
     while (!(await openAt3(ahead))) ahead++
     await signIn(CLIENT)
     const { booking } = await mockRequest('POST', '/bookings', { body: {
-      serviceId: 2, addOns: [{ addOnId: 2, nailCount: 2, hand: 'Right' }], bookingDate: dateFromToday(ahead), startTime: '15:00:00',
+      serviceId: 8, addOns: [{ addOnId: 2, nailCount: 2, hand: 'Right' }], bookingDate: dateFromToday(ahead), startTime: '15:00:00',
       paymentMethod: 'GCash', paymentOption: 'Full', depositAcknowledged: true, idempotencyKey: crypto.randomUUID(),
       nailColor: '#51', termsVersion: termsAndConditions.version,
     } })
-    expect(booking).toMatchObject({ status: 'Pending', totalPrice: 420, balanceDue: 0, payment: { option: 'Full', amountPaid: 420, verified: false } })
+    expect(booking).toMatchObject({ status: 'Pending', totalPrice: 519, balanceDue: 0, payment: { option: 'Full', amountPaid: 519, verified: false } })
 
     await signIn(ADMIN)
     const confirmed = await mockRequest('POST', `/admin/bookings/${booking.id}/confirm`)

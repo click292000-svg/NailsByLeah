@@ -29,8 +29,9 @@ describe('Home page', () => {
     const card = within(pricing).getByRole('article', { name: 'Nails price list' })
     const row = (name) => within(card).getByText(name).closest('.pc-row')
     expect(row('Soft Gel Extension')).toHaveTextContent('₱399')
-    expect(row('Plain with design')).toHaveTextContent('₱400')
-    expect(row('BIAB with design')).toHaveTextContent('₱350')
+    expect(row('Soft Gel Extension with design')).toHaveTextContent('+₱100') // what the design adds, not the total
+    expect(within(card).queryByText('Plain with design')).toBeNull() // Plain takes no design
+    expect(row('BIAB with design')).toHaveTextContent('+₱100')
     expect(row('Rhinestone')).toHaveTextContent('₱15')
   })
 

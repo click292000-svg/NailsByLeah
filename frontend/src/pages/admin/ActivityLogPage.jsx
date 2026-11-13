@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useSearchParams } from 'react-router'
 import { api } from '../../api'
 import { useAsync } from '../../hooks/useAsync'
 import { errorMessage } from '../../api/errors'
@@ -6,7 +6,7 @@ import { formatDate, humanize } from '../../lib/format'
 import { toIsoDate } from '../../lib/dates'
 
 const dayLabel = (day) => (day.slice(0, 4) === String(new Date().getFullYear()) ? formatDate(day).replace(/, \d{4}$/, '') : formatDate(day))
-import { Alert, Card, EmptyState, PageHeader, PageLoader, Pager, SelectField } from '../../components/ui'
+import { Alert, Card, EmptyState, PageHeader, PageLoader, Pager, SelectField, Spinner } from '../../components/ui'
 
 const ACTIONS = [
   'BookingCreated', 'BookingConfirmed', 'BookingRescheduled', 'BookingCompleted', 'BookingCancelled',
@@ -14,7 +14,7 @@ const ACTIONS = [
   'UserRegistered', 'EmailVerified', 'LoginSucceeded', 'LoginFailed', 'AccountLocked', 'PasswordResetRequested', 'PasswordReset', 'ClientDataDeleted',
 ].map((a) => ({ value: a, label: humanize(a) }))
 
-const PAGE_SIZE = 25
+const PAGE_SIZE = 10 // entries per page, like Find bookings
 
 /** The colour of an entry's dot: problems red, payments green, bookings rose, price list and schedule amber, accounts blue. */
 function tone(action) {
@@ -29,10 +29,24 @@ const timeOf = (iso) => new Date(iso).toLocaleTimeString('en-PH', { hour: 'numer
 
 /** Who did what, and when (Ref 11.7). */
 export default function ActivityLogPage() {
-  const [action, setAction] = useState('')
-  const [page, setPage] = useState(1)
+  // Like Find bookings: the filter and page are in the address (?page=2), a new filter goes back to page 1, and a
+  // page change keeps the old entries on screen while the next ones load, then returns to the top of the list.
+  const [params, setParams] = useSearchParams()
+  const action = params.get('action') ?? ''
+  const page = Math.max(1, Number(params.get('page')) || 1)
   const logs = useAsync(() => api.admin.activityLogs({ action, page, pageSize: PAGE_SIZE }), [action, page])
-  const totalPages = logs.data ? Math.max(1, Math.ceil(logs.data.totalCount / PAGE_SIZE)) : 1
+  const count = logs.data?.totalCount ?? 0
+  const totalPages = Math.max(1, Math.ceil(count / PAGE_SIZE))
+  const show = (changes) => {
+    const next = new URLSearchParams(params)
+    Object.entries(changes).forEach(([key, value]) => (value && value !== 1 ? next.set(key, String(value)) : next.delete(key)))
+    setParams(next, { replace: true })
+  }
+  const setAction = (value) => show({ action: value, page: 1 })
+  const setPage = (n) => {
+    show({ page: n })
+    document.querySelector('.activity-card')?.scrollIntoView?.({ block: 'start' })
+  }
 
   // Entries arrive newest first; consecutive entries from the same day share a day heading.
   const days = []
@@ -45,15 +59,16 @@ export default function ActivityLogPage() {
   return (
     <div className="stack-lg">
       <PageHeader title="Activity log" subtitle="Sign-ins, bookings, payments and price list changes, newest first." />
-      <Card title="All activity" actions={
+      <Card className="activity-card" title="All activity" actions={
         <div className="card-filter">
+          {logs.loading && logs.data && <Spinner small label="Loading" />}
           <SelectField label="Show" value={action} placeholder="All actions" options={ACTIONS}
-            onChange={(e) => { setAction(e.target.value); setPage(1) }} />
+            onChange={(e) => setAction(e.target.value)} />
         </div>
       }>
-        {logs.loading && <PageLoader />}
+        {logs.loading && !logs.data && <PageLoader />}
         {logs.error && <Alert kind="error">{errorMessage(logs.error)}</Alert>}
-        {logs.data && !logs.loading && (logs.data.items.length === 0 ? (
+        {logs.data && (logs.data.items.length === 0 ? (
           <EmptyState title="No activity found">{action ? 'Try showing all actions.' : 'Activity appears here as people use the website.'}</EmptyState>
         ) : (
           <div className="activity">
@@ -88,7 +103,14 @@ export default function ActivityLogPage() {
             ))}
           </div>
         ))}
-        <Pager page={page} pages={totalPages} onChange={setPage} />
+        {count > 0 && (
+          <div className="fb-more">
+            <span className="muted small">
+              {count > PAGE_SIZE ? `Showing ${(page - 1) * PAGE_SIZE + 1}–${Math.min(page * PAGE_SIZE, count)} of ${count}` : `All ${count} ${count === 1 ? 'entry' : 'entries'} shown`}
+            </span>
+            <Pager page={page} pages={totalPages} onChange={setPage} />
+          </div>
+        )}
       </Card>
     </div>
   )

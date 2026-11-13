@@ -11,7 +11,7 @@ namespace NailsByLeah.Api.Tests.Integration;
 public sealed class BookingRulesTests(ApiFactory factory) : IClassFixture<ApiFactory>
 {
     private const int Plain = 1;
-    private const int WithDesign = 2;
+    private const int WithDesign = 8; // Soft Gel Extension with Design
     private const int RemovalMyWork = 4;
     private const int Chrome = 2;
 
@@ -98,6 +98,28 @@ public sealed class BookingRulesTests(ApiFactory factory) : IClassFixture<ApiFac
 
         var updated = await admin.PutJsonAsync($"/api/admin/services/{service.Id}", new UpdateServiceRequest(service.Name, 350m, true, AllowsAddOns: true));
         Assert.True((await updated.ReadAsync<ServiceItemResponse>()).AllowsAddOns);
+    }
+
+    [Fact]
+    public async Task With_design_always_costs_its_set_price_plus_100_and_takes_its_set_time_plus_an_hour()
+    {
+        var admin = await factory.CreateAdminClientAsync();
+        // Soft Gel Extension is ₱399 and 2 hours, so its design version stays ₱499 and 3 hours whatever is typed in for it.
+        var updated = await admin.PutJsonAsync("/api/admin/services/8", new UpdateServiceRequest("Soft Gel Extension with Design", 999m, true, 30));
+        await updated.ShouldHaveStatus(HttpStatusCode.OK);
+        var design = await updated.ReadAsync<ServiceItemResponse>();
+        Assert.Equal(499m, design.Price);
+        Assert.Equal(180, design.DurationMinutes);
+    }
+
+    [Fact]
+    public void A_design_version_follows_its_set()
+    {
+        var set = new SoftGelService { Name = "BIAB", Price = 280m, DurationMinutes = 150 };
+        var design = new SoftGelService { Name = "BIAB with Design", Price = 1m, DurationMinutes = 15 };
+        design.FollowSet(set);
+        Assert.Equal(380m, design.Price);
+        Assert.Equal(210, design.DurationMinutes);
     }
 
     // ---- Cancelling with "Others" ----

@@ -7,7 +7,7 @@ namespace NailsByLeah.Api.Tests.Integration;
 /// <summary>Paying the ₱150 deposit or the full amount, and administrator confirmation as a separate step.</summary>
 public sealed class PaymentOptionTests(ApiFactory factory) : IClassFixture<ApiFactory>
 {
-    private const int WithDesign = 2; // ₱400
+    private const int WithDesign = 8; // Soft Gel Extension with Design, ₱499
     private const int RemovalMyWork = 4; // ₱100, less than the deposit
     private const int Chrome = 2; // ₱10 per nail
 
@@ -23,12 +23,12 @@ public sealed class PaymentOptionTests(ApiFactory factory) : IClassFixture<ApiFa
         var result = await user.Client.BookAsync(request);
 
         Assert.Equal(150m, factory.Gateway.AmountsByKey[request.IdempotencyKey]);
-        Assert.Equal(420m, result.Booking.TotalPrice);
+        Assert.Equal(519m, result.Booking.TotalPrice);
         Assert.Equal(150m, result.Booking.Payment!.AmountPaid);
-        Assert.Equal(270m, result.Booking.BalanceDue);
+        Assert.Equal(369m, result.Booking.BalanceDue);
         Assert.Equal("Booking deposit", result.Receipt.PaymentOptionLabel);
         Assert.Equal(150m, result.Receipt.Amount);
-        Assert.Equal(270m, result.Receipt.BalanceDue);
+        Assert.Equal(369m, result.Receipt.BalanceDue);
     }
 
     [Fact] // 2, 3, 4, 5
@@ -40,14 +40,14 @@ public sealed class PaymentOptionTests(ApiFactory factory) : IClassFixture<ApiFa
         var result = await user.Client.BookAsync(request);
 
         Assert.Equal(1, factory.Gateway.ChargeCount(request.IdempotencyKey));
-        Assert.Equal(420m, factory.Gateway.AmountsByKey[request.IdempotencyKey]); // 400 + 10 x 2, not 420 + 150
+        Assert.Equal(519m, factory.Gateway.AmountsByKey[request.IdempotencyKey]); // 499 + 10 x 2, not 519 + 150
         Assert.Equal("Full", result.Booking.Payment!.Option);
-        Assert.Equal(420m, result.Booking.Payment.AmountPaid);
+        Assert.Equal(519m, result.Booking.Payment.AmountPaid);
         Assert.Equal(0m, result.Booking.BalanceDue);
         Assert.Equal(0m, result.Receipt.BalanceDue);
-        Assert.Equal(420m, result.Receipt.TotalAmount);
+        Assert.Equal(519m, result.Receipt.TotalAmount);
         var payment = factory.WithDb(db => db.Payments.Single(p => p.BookingId == result.Booking.Id));
-        Assert.Equal((PaymentOption.Full, 420m, 420m, 0m, user.Id), (payment.Option, payment.Amount, payment.TotalAmount, payment.BalanceAfter, payment.ClientId));
+        Assert.Equal((PaymentOption.Full, 519m, 519m, 0m, user.Id), (payment.Option, payment.Amount, payment.TotalAmount, payment.BalanceAfter, payment.ClientId));
     }
 
     [Fact]
@@ -116,7 +116,7 @@ public sealed class PaymentOptionTests(ApiFactory factory) : IClassFixture<ApiFa
 
         var admin = await factory.CreateAdminClientAsync();
         var seen = await admin.GetAsync<BookingResponse>($"/api/admin/bookings/{booked.Booking.Id}");
-        Assert.Equal(("Full payment", 400m), (seen.Payment!.OptionLabel, seen.Payment.AmountPaid));
+        Assert.Equal(("Full payment", 499m), (seen.Payment!.OptionLabel, seen.Payment.AmountPaid));
         Assert.NotNull(seen.Payment.ReferenceNumber);
 
         var confirmed = await admin.ConfirmAsync(booked.Booking.Id);

@@ -54,10 +54,21 @@ public abstract class CatalogService : Service
     public virtual bool TakesAddOns => AllowsAddOns;
 
     /// <summary>
-    /// Set on a "with design" version of another service ("With Design" is Plain with a design, "BIAB with Design" is BIAB
-    /// with one). The booking page shows it as the optional "With design" choice on that service's card, not as a card of its own.
+    /// Set on a "with design" version of another service ("Soft Gel Extension with Design", "BIAB with Design"; Plain has
+    /// none). The booking page shows it as the optional "With design" choice on that service's card, not as a card of its own.
     /// </summary>
     public int? DesignOptionOfId { get; set; }
+
+    /// <summary>What a design adds to its set: always ₱100 and one hour more than the set itself.</summary>
+    public const decimal DesignExtraPrice = 100m;
+    public const int DesignExtraMinutes = 60;
+
+    /// <summary>Gives this "with design" version its set's price and time plus the design's.</summary>
+    public void FollowSet(CatalogService set)
+    {
+        Price = set.Price + DesignExtraPrice;
+        DurationMinutes = set.DurationMinutes + DesignExtraMinutes;
+    }
 }
 
 public sealed class SoftGelService : CatalogService

@@ -1344,8 +1344,8 @@ namespace NailsByLeah.Api.Data.Migrations
                             CreatedAt = new DateTime(2026, 11, 1, 0, 0, 0, 0, DateTimeKind.Utc),
                             DesignOptionOfId = 1,
                             DurationMinutes = 180,
-                            IsActive = true,
-                            IsDeleted = false,
+                            IsActive = false,
+                            IsDeleted = true,
                             Name = "With Design",
                             Price = 400m,
                             UpdatedAt = new DateTime(2026, 11, 1, 0, 0, 0, 0, DateTimeKind.Utc)
@@ -1368,7 +1368,7 @@ namespace NailsByLeah.Api.Data.Migrations
                             AllowsAddOns = true,
                             CreatedAt = new DateTime(2026, 11, 1, 0, 0, 0, 0, DateTimeKind.Utc),
                             DesignOptionOfId = 3,
-                            DurationMinutes = 180,
+                            DurationMinutes = 240,
                             IsActive = true,
                             IsDeleted = false,
                             Name = "BIAB with Design",
@@ -1385,6 +1385,19 @@ namespace NailsByLeah.Api.Data.Migrations
                             IsDeleted = false,
                             Name = "Soft Gel Extension",
                             Price = 399m,
+                            UpdatedAt = new DateTime(2026, 11, 1, 0, 0, 0, 0, DateTimeKind.Utc)
+                        },
+                        new
+                        {
+                            Id = 8,
+                            AllowsAddOns = true,
+                            CreatedAt = new DateTime(2026, 11, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            DesignOptionOfId = 7,
+                            DurationMinutes = 180,
+                            IsActive = true,
+                            IsDeleted = false,
+                            Name = "Soft Gel Extension with Design",
+                            Price = 499m,
                             UpdatedAt = new DateTime(2026, 11, 1, 0, 0, 0, 0, DateTimeKind.Utc)
                         });
                 });

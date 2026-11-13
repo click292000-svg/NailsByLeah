@@ -20,10 +20,20 @@ export async function pickShade(user, number) {
   await user.click(within(chart).getByRole('button', { name: 'Use This Color' }))
 }
 
+/** Opens the Terms from the payment step (not the footer link), agrees in its window and closes it. */
+export const openPaymentTerms = (user) =>
+  user.click(screen.getAllByRole('button', { name: 'Terms & Conditions' }).find((b) => b.closest('.payment-panel')))
+
+/** Picks the deposit and GCash where nothing is chosen yet (the payment step starts with nothing picked), then agrees. */
 export async function readTermsAndAgree(user) {
-  await user.click(screen.getByRole('button', { name: /Review booking policies/ }))
-  await user.click(within(screen.getByRole('dialog', { name: 'Terms & Conditions' })).getByRole('button', { name: 'Done' }))
-  await user.click(screen.getByRole('checkbox', { name: /I have read and agree to the booking policies/ }))
+  const option = screen.queryAllByRole('radio', { name: /^(Booking deposit|Full payment)$/ })
+  if (option.length && !option.some((r) => r.checked)) await user.click(screen.getByRole('radio', { name: 'Booking deposit' }))
+  const method = screen.queryAllByRole('radio', { name: /^(GCash|Maya)$/ })
+  if (method.length && !method.some((r) => r.checked)) await user.click(screen.getByRole('radio', { name: 'GCash' }))
+  await openPaymentTerms(user)
+  const dialog = screen.getByRole('dialog', { name: 'Terms & Conditions' })
+  await user.click(within(dialog).getByRole('checkbox', { name: 'I have read and agree to the Terms & Conditions.' }))
+  await user.click(within(dialog).getByRole('button', { name: 'Agree and continue' }))
 }
 
 export const signIn = (account) => mockRequest('POST', '/auth/login', { body: { usernameOrEmail: account.username, password: account.password } })

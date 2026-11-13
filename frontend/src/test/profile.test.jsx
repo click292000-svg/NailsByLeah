@@ -191,7 +191,7 @@ describe('Client profile', () => {
     const visit = db.bookings.find((b) => b.clientId === me().id && b.status === 'Completed' && !b.isDeleted)
       ?? Object.assign(db.bookings.find((b) => b.clientId === me().id && !b.isDeleted), { status: 'Completed' })
     db.bookings.filter((b) => b.clientId === me().id && b.status === 'Completed' && b.id !== visit.id).forEach((b) => { b.isDeleted = true })
-    Object.assign(visit, { nailColor: '#41', bookingDate: '2026-10-01' })
+    Object.assign(visit, { serviceId: 3, removalServiceId: null, nailColor: '#41', bookingDate: '2026-10-01' }) // BIAB, still offered
     saveDb()
     await signIn(CLIENT)
     renderApp('/profile')

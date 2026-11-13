@@ -1,11 +1,11 @@
-import { useEffect, useRef, useState } from 'react'
+import { useState } from 'react'
 import { useSearchParams } from 'react-router'
 import { api } from '../../api'
 import { useAsync, useDebouncedValue } from '../../hooks/useAsync'
 import { errorMessage } from '../../api/errors'
 import { addDays, daysInMonth, toIsoDate, today } from '../../lib/dates'
 import { formatDate } from '../../lib/format'
-import { Alert, Button, Card, PageLoader, Spinner } from '../../components/ui'
+import { Alert, Button, Card, PageLoader, Pager, Spinner } from '../../components/ui'
 import { AdminBookingTable } from './AdminBookingTable'
 import { bookingClientName } from '../../lib/bookingClient'
 import { NewBookingDialog } from './NewBookingDialog'
@@ -32,7 +32,7 @@ const STATUSES = [
   { value: 'Cancelled', label: 'Cancelled', title: 'Cancelled bookings', icon: <CrossIcon /> },
   { value: 'NoShow', label: 'No-show', title: 'No-shows', icon: <BanIcon /> },
 ]
-const BATCH = 10 // bookings shown at first, and added each time the list is scrolled to the end
+const PAGE_SIZE = 10 // bookings per page
 const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 const PANELS_KEY = 'nbl.bookingPanels'
 
@@ -76,17 +76,22 @@ export default function BookingsPage() {
   }
 
   const catalog = useAsync(() => api.admin.services(), [])
-  // The list grows as Leyah scrolls: 10 bookings, then 10 more each time she reaches the end. New filters start again at 10.
-  const filterKey = JSON.stringify([date, status, debouncedSearch, serviceId])
-  const [more, setMore] = useState({ key: filterKey, shown: BATCH })
-  const shown = more.key === filterKey ? more.shown : BATCH
-  const results = useAsync(() => api.admin.searchBookings({ date, status, clientName: debouncedSearch, serviceId, page: 1, pageSize: shown }),
-    [date, status, debouncedSearch, serviceId, shown, refresh])
+  // 10 bookings a page; the page is in the address (?page=2), and a new filter goes back to page 1.
+  const page = Math.max(1, Number(params.get('page')) || 1)
+  const results = useAsync(() => api.admin.searchBookings({ date, status, clientName: debouncedSearch, serviceId, page, pageSize: PAGE_SIZE }),
+    [date, status, debouncedSearch, serviceId, page, refresh])
+  const goToPage = (n) => {
+    const next = new URLSearchParams(params)
+    if (n > 1) next.set('page', String(n))
+    else next.delete('page')
+    setParams(next, { replace: true })
+    document.querySelector('.fb-list')?.scrollIntoView?.({ block: 'start' }) // back to the top of the list
+  }
 
   const update = (changes) => {
     const next = new URLSearchParams(params)
     Object.entries(changes).forEach(([key, value]) => (value ? next.set(key, value) : next.delete(key)))
-    next.delete('page') // from the old page numbers; the list now loads as it scrolls
+    next.delete('page') // a new filter starts again at page 1
     setParams(next, { replace: true })
   }
 
@@ -99,9 +104,7 @@ export default function BookingsPage() {
   const clear = () => { setSearch(''); setParams(new URLSearchParams(), { replace: true }) }
   const count = results.data?.totalCount ?? 0
   const loaded = results.data?.items.length ?? 0
-  // More to load while the server sent all that was asked for and there are still some it didn't send.
-  const hasMore = loaded < count && loaded >= shown
-  const loadMore = () => { if (hasMore && !results.loading) setMore({ key: filterKey, shown: shown + BATCH }) }
+  const pages = Math.max(1, Math.ceil(count / PAGE_SIZE))
   const tab = STATUSES.find((s) => s.value === status) ?? STATUSES[0]
   const both = panels.calendar && panels.day
 
@@ -180,36 +183,17 @@ export default function BookingsPage() {
           <>
             <AdminBookingTable bookings={results.data.items} onChanged={changed}
               emptyText={filtered ? 'Try another date, status or service, or clear the filters.' : 'New bookings show up here.'} />
-            {loaded > 0 && <LoadMore loaded={loaded} count={count} hasMore={hasMore} loading={results.loading} onMore={loadMore} />}
+            {loaded > 0 && (
+              <div className="fb-more">
+                <span className="muted small">
+                  {count > PAGE_SIZE ? `Showing ${(page - 1) * PAGE_SIZE + 1}–${Math.min(page * PAGE_SIZE, count)} of ${count}` : `All ${count} booking${count === 1 ? '' : 's'} shown`}
+                </span>
+                <Pager page={page} pages={pages} onChange={goToPage} />
+              </div>
+            )}
           </>
         )}
       </Card>
-    </div>
-  )
-}
-
-/**
- * The end of the bookings list: loads the next 10 as soon as it scrolls into view, with a button as well (for keyboards,
- * and browsers that can't tell), and says when everything is shown.
- */
-function LoadMore({ loaded, count, hasMore, loading, onMore }) {
-  const ref = useRef(null)
-  const onMoreRef = useRef(onMore)
-  onMoreRef.current = onMore
-  useEffect(() => {
-    const el = ref.current
-    if (!el || !hasMore || typeof IntersectionObserver === 'undefined') return undefined
-    const seen = new IntersectionObserver((entries) => { if (entries.some((e) => e.isIntersecting)) onMoreRef.current() }, { rootMargin: '200px' })
-    seen.observe(el)
-    return () => seen.disconnect()
-  }, [hasMore, loaded])
-  return (
-    <div ref={ref} className="fb-more" aria-live="polite">
-      {hasMore ? (
-        loading ? <Spinner small label="Loading more bookings" />
-          : <Button variant="secondary" size="sm" onClick={onMore}>Show more</Button>
-      ) : null}
-      <span className="muted small">{hasMore ? `Showing ${loaded} of ${count}` : `All ${count} booking${count === 1 ? '' : 's'} shown`}</span>
     </div>
   )
 }

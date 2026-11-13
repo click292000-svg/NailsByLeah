@@ -14,6 +14,16 @@ export const termsAndConditions = {
   title: 'Terms & Conditions',
   version: '2.4',
   updated: 'November 11, 2026',
+  // The key points, shown above the full text. They only summarise it; the full text below is what applies.
+  reminders: [
+    'Every booking needs a ₱150 deposit, paid by GCash or Maya when you book. It counts toward your total.',
+    'The deposit is non-refundable if you cancel late or do not show up, unless the salon cancels.',
+    'You can reschedule online up to 24 hours before your appointment.',
+    'Please cancel at least 24 hours ahead. A late cancellation or no-show keeps the ₱150 deposit as the fee.',
+    'Your booking stays "Pending" until Leyah checks your payment and confirms it.',
+    'Arrive on time, come alone, and come with clean, bare nails unless you booked a removal.',
+    'If your nails lift or chip, message us within 3 days for a free repair.',
+  ],
   sections: [
     {
       heading: '1. About these terms',
@@ -106,6 +116,13 @@ export const privacyPolicy = {
   title: 'Privacy Policy',
   version: '2.3',
   updated: 'November 6, 2026',
+  reminders: [
+    'We collect only what we need to run your account and bookings: your name, contact details, bookings, payments and design photos.',
+    'We follow the Data Privacy Act of 2012 (Republic Act No. 10173).',
+    'Only you and the salon can see your bookings and design photos.',
+    'We do not sell your information or send marketing emails.',
+    'You can ask us to delete your information at any time.',
+  ],
   sections: [
     {
       heading: '1. Who we are',

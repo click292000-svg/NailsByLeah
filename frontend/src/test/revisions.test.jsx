@@ -19,7 +19,7 @@ async function payFromServiceStep(user) {
 const shade = (chart, n) => within(chart).getByRole('radio', { name: new RegExp(`^Shade #${n},`) })
 
 describe('Booking revisions', () => {
-  it('shows the services in order, then an optional Design section with one "With Design" card for Plain and BIAB', async () => {
+  it('shows the services in order, then an optional Design section with one "With Design" card for Soft Gel Extension and BIAB', async () => {
     const user = userEvent.setup()
     await signIn(CLIENT)
     renderApp('/book')
@@ -37,9 +37,16 @@ describe('Booking revisions', () => {
     expect(screen.getByRole('heading', { name: 'Nail Art (add-ons)' })).toBeInTheDocument()
     expect(screen.getByRole('checkbox', { name: /Rhinestone/ })).toBeEnabled()
 
-    // Soft Gel Extension has no design version.
+    // Soft Gel Extension with Design: ₱399 + ₱100, 2 hours + 1.
     await user.click(screen.getByRole('checkbox', { name: /^Soft Gel Extension/ }))
+    await user.click(screen.getByRole('checkbox', { name: /^With Design/ }))
+    expect(aside.getByText('Total').nextSibling).toHaveTextContent('₱499.00')
+    expect(aside.getByText('~ 3 hr')).toBeInTheDocument()
+
+    // Plain has no design version.
+    await user.click(screen.getByRole('checkbox', { name: /^Plain/ }))
     expect(screen.getByRole('checkbox', { name: /^With Design/ })).toBeDisabled()
+    expect(screen.getByText("Designs aren't available with Plain.")).toBeInTheDocument()
   })
 
   it('keeps an add-on at 1 nail; only × removes it', async () => {

@@ -26,6 +26,8 @@ export function Receipt({ receipt, booking }) {
       <dl className="receipt-lines">
         <dt>Reference number</dt>
         <dd className="mono">{receipt.referenceNumber}</dd>
+        <dt>Booking number</dt>
+        <dd>#{receipt.bookingId}</dd>
         <dt>Payment</dt>
         <dd>{receipt.paymentOptionLabel ?? 'Booking deposit'} via {receipt.method}</dd>
         <dt>Service</dt>
@@ -72,7 +74,7 @@ export function Receipt({ receipt, booking }) {
       {status === 'Pending' && (
         <p className="receipt-pending" role="note">Your payment is received. Leyah will check it and confirm your appointment; you&apos;ll get an email when she does.</p>
       )}
-      <p className="muted small">The booking deposit is non-refundable unless the salon cancels. Booking #{receipt.bookingId}.</p>
+      <p className="receipt-note" role="note">The booking deposit is non-refundable unless the salon cancels.</p>
     </div>
   )
 }

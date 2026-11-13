@@ -166,6 +166,18 @@ public sealed class ServiceCatalogService(
             service.AllowsAddOns = allows;
         }
         Apply(service, name, request);
+
+        // A "with design" version always costs its set's price + ₱100 and takes its set's time + 1 hour, so its own
+        // price and time can't be set; changing the set's price or time changes its design version's too.
+        var services = await catalog.GetServicesAsync(includeInactive: true, ct);
+        if (service.DesignOptionOfId is { } setId && services.FirstOrDefault((s) => s.Id == setId) is { } set)
+            service.FollowSet(set);
+        foreach (var design in services.Where((s) => s.DesignOptionOfId == service.Id))
+        {
+            design.FollowSet(service);
+            design.UpdatedAt = clock.UtcNow;
+        }
+
         audit.Record(AuditActions.ServiceUpdated, "Service", service.Id, details);
         await unitOfWork.SaveChangesAsync(ct);
         return ToResponse(service);

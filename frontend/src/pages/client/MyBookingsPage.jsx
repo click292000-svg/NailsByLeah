@@ -10,6 +10,7 @@ import { CancelBookingDialog, RescheduleDialog } from '../../components/BookingD
 import { Modal } from '../../components/Modal'
 import { Receipt } from '../../components/Receipt'
 import { ReceiptDownload } from '../../components/ReceiptDownload'
+import { canDownloadReceipt } from '../../lib/receiptPdf'
 import { colorLabel, colorRequestLabel, perNailText } from '../../lib/shades'
 import { ReferenceImageGallery } from '../../components/ReferenceImageGallery'
 import { clearBookingDraft, draftHasProgress, loadBookingDraft } from '../../lib/bookingDraft'
@@ -201,7 +202,18 @@ function ReceiptDialog({ booking, onClose }) {
   const receipt = useAsync(() => api.bookings.receipt(booking.id), [booking.id])
   return (
     <Modal title="Payment receipt" onClose={onClose}
-      footer={<>{receipt.data && <ReceiptDownload receipt={receipt.data} />}<Button variant="secondary" onClick={onClose}>Close</Button></>}>
+      footer={(
+        // Download (with why it's off, above it) on the left, Close on the right, level with Download.
+        <div className="receipt-foot">
+          {receipt.data && (
+            <div className="receipt-foot-left">
+              {!canDownloadReceipt(receipt.data) && <p className="muted small receipt-foot-hint">PDF available once Leyah verifies your payment.</p>}
+              <ReceiptDownload receipt={receipt.data} showHint={false} />
+            </div>
+          )}
+          <Button variant="secondary" onClick={onClose}>Close</Button>
+        </div>
+      )}>
       {receipt.loading && <PageLoader />}
       {receipt.error && <Alert kind="error">{errorMessage(receipt.error)}</Alert>}
       {receipt.data && <Receipt receipt={receipt.data} booking={booking} />}

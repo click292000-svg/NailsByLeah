@@ -16,13 +16,9 @@ export default function RegisterPage() {
   const [failure, setFailure] = useState(null)
   const [submitting, setSubmitting] = useState(false)
   const [usernameAvailable, setUsernameAvailable] = useState(null)
-  const [openDocument, setOpenDocument] = useState(null)
-  // The box can be ticked only once both documents have been read to the end.
-  const [read, setRead] = useState({ terms: false, privacy: false })
-  const readBoth = read.terms && read.privacy
-  const [nudge, setNudge] = useState(null)
-  // Decided when the window opens: unread, it must be scrolled to the end; read already, it is for reference only.
-  const open = (kind) => setOpenDocument({ kind, mustRead: !read[kind] })
+  // The Terms & Conditions and the Privacy Policy are read together in one window and agreed to once.
+  const [showTerms, setShowTerms] = useState(false)
+  const [read, setRead] = useState(false)
 
   const set = (field) => (value) => {
     setValues((v) => ({ ...v, [field]: value }))
@@ -86,38 +82,17 @@ export default function RegisterPage() {
           {/* The password rules span both columns so they stay readable. */}
           <PasswordRules password={values.password} />
 
-          {/* One light card: a row for each document (tap to read; a tick once read), then the agreement. */}
-          <div className={values.acceptTerms ? 'su-terms agreed' : 'su-terms'}>
-            <p className="su-terms-title">Before you sign up, please read:</p>
-            <ul className="su-docs">
-              {[['terms', 'Terms & Conditions'], ['privacy', 'Privacy Policy']].map(([kind, label]) => (
-                <li key={kind}>
-                  <button type="button" className={read[kind] ? 'su-doc is-read' : 'su-doc'} onClick={() => { setNudge(null); open(kind) }}
-                    aria-describedby="signup-agree-hint">
-                    <span className="su-doc-icon" aria-hidden="true">
-                      {read[kind]
-                        ? <svg viewBox="0 0 24 24"><path d="M6 12.5l4 4 8-9" /></svg>
-                        : <svg viewBox="0 0 24 24"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z" /><path d="M14 3v5h5M9 13h6M9 17h6" /></svg>}
-                    </span>
-                    <span className="su-doc-name">{label}</span>
-                    <span className="su-doc-state" aria-hidden="true">{read[kind] ? 'Read' : 'Tap to read'}</span>
-                    <svg className="su-doc-chevron" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6" /></svg>
-                  </button>
-                </li>
-              ))}
-            </ul>
-            {/* A click on the box before both are read can't reach it, so the row says why. */}
-            <label className={readBoth ? 'su-agree' : 'su-agree is-locked'}
-              onClick={() => !readBoth && setNudge('Please open and read both documents to the end first.')}>
-              <input type="checkbox" checked={values.acceptTerms} disabled={!readBoth} aria-describedby="signup-agree-hint"
-                onChange={(e) => { set('acceptTerms')(e.target.checked); setNudge(null) }} />
-              <span>I have read and accept the Terms &amp; Conditions and the Privacy Policy.</span>
-            </label>
-            <p id="signup-agree-hint" className={nudge || errors.acceptTerms ? 'su-hint field-error' : 'su-hint'}>
-              {nudge ?? errors.acceptTerms ?? (values.acceptTerms ? 'Thank you! You can create your account now.'
-                : readBoth ? 'Now tick the box to agree.'
-                  : `Open ${read.terms ? 'the Privacy Policy' : read.privacy ? 'the Terms & Conditions' : 'each one'} and scroll to the end to unlock the box.`)}
+          {/* One line: open each document, read it to the end and agree inside its window. */}
+          <div className={values.acceptTerms ? 'su-terms is-done' : errors.acceptTerms ? 'su-terms is-error' : 'su-terms'}>
+            <p className="su-terms-text">
+              Review and accept the{' '}
+              <button type="button" className="su-terms-link" onClick={() => setShowTerms(true)}>Terms &amp; Privacy Policy</button>
+              {' '}to continue.
             </p>
+            <p className="su-terms-status" aria-live="polite">
+              {values.acceptTerms ? '✓ Accepted' : 'Review required'}
+            </p>
+            {errors.acceptTerms && <p className="field-error">{errors.acceptTerms}</p>}
           </div>
 
           {/* Disabled until the Terms & Conditions are accepted (Ref 1.6). */}
@@ -130,9 +105,9 @@ export default function RegisterPage() {
       </Card>
       </div>
 
-      {openDocument && (
-        <LegalDocumentModal document={openDocument.kind} onClose={() => setOpenDocument(null)}
-          onReadToEnd={openDocument.mustRead ? () => setRead((r) => ({ ...r, [openDocument.kind]: true })) : undefined} />
+      {showTerms && (
+        <LegalDocumentModal document="both" onClose={() => setShowTerms(false)} onReadToEnd={() => setRead(true)}
+          agree={{ checked: values.acceptTerms, read, onChange: set('acceptTerms') }} />
       )}
     </div>
   )

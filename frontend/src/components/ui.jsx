@@ -73,13 +73,30 @@ export function StatCard({ label, value, hint, dot, action }) {
   )
 }
 
-/** Previous / Next for long lists. Shown only when there is more than one page. */
+/** The page numbers to show: always the first and last, the current one and its neighbours, "…" for the gaps. */
+function pageNumbers(page, pages) {
+  const wanted = [...new Set([1, page - 1, page, page + 1, pages])].filter((n) => n >= 1 && n <= pages).sort((a, b) => a - b)
+  return wanted.flatMap((n, i) => (i > 0 && n - wanted[i - 1] > 1 ? [n - wanted[i - 1] === 2 ? n - 1 : '…', n] : [n]))
+}
+
+/**
+ * Previous, the page numbers and Next for long lists, so page 1 (and the last page) is always one tap away.
+ * Shown only when there is more than one page.
+ */
 export function Pager({ page, pages, onChange }) {
   if (pages <= 1) return null
   return (
     <nav className="pager" aria-label="Pages">
       <Button variant="secondary" size="sm" disabled={page <= 1} onClick={() => onChange(page - 1)}>Previous</Button>
-      <span className="muted small">Page {page} of {pages}</span>
+      <span className="pager-pages">
+        {pageNumbers(page, pages).map((n, i) => (n === '…'
+          ? <span key={`gap-${i}`} className="pager-gap" aria-hidden="true">…</span>
+          : (
+            <button key={n} type="button" className={n === page ? 'pager-page is-current' : 'pager-page'}
+              aria-current={n === page ? 'page' : undefined} aria-label={`Page ${n}`} onClick={() => n !== page && onChange(n)}>{n}</button>
+          )))}
+      </span>
+      <span className="sr-only">Page {page} of {pages}</span>
       <Button variant="secondary" size="sm" disabled={page >= pages} onClick={() => onChange(page + 1)}>Next</Button>
     </nav>
   )

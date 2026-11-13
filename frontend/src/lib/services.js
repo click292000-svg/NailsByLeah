@@ -4,7 +4,7 @@ const setOrder = (service) => SET_ORDER[service.name.trim().toLowerCase()] ?? 1
 
 /**
  * The Soft Gel sets in price-list order, each with its "with design" version when it has one:
- * [{ base: Plain, design: With Design }, { base: Soft Gel Extension, design: null }, { base: BIAB, design: BIAB with Design }].
+ * [{ base: Plain, design: null }, { base: Soft Gel Extension, design: Soft Gel Extension with Design }, { base: BIAB, design: BIAB with Design }].
  */
 export function softGelSets(services) {
   const softGel = services.filter((s) => s.category === 'SoftGel')

@@ -11,7 +11,7 @@ public sealed class BookingTests(ApiFactory factory) : IClassFixture<ApiFactory>
 {
     // Seeded price list ids.
     private const int SoftGelPlain = 1;
-    private const int SoftGelWithDesign = 2;
+    private const int SoftGelWithDesign = 8; // Soft Gel Extension with Design, ₱499
     private const int FrenchTip = 1;
     private const int Chrome = 2;
 
@@ -24,7 +24,7 @@ public sealed class BookingTests(ApiFactory factory) : IClassFixture<ApiFactory>
         Assert.False(catalog.DepositRefundable);
         // Other tests in this class may add services, so only the seeded rows (ids 1-5) are compared.
         Assert.Equal(
-            ["Plain:300", "With Design:400", "BIAB:250", "My Work:100", "Not My Work:150"],
+            ["Plain:300", "BIAB:250", "My Work:100", "Not My Work:150"], // Plain's "With Design" (id 2) is retired
             catalog.Services.Where(s => s.Id <= 5).Select(s => $"{s.Name}:{s.Price:0}"));
         Assert.Equal(
             ["French Tip:15", "Chrome:10", "Cat Eye Polish:10", "Blooming Gel:10", "Embossed Art:15"],
@@ -41,10 +41,10 @@ public sealed class BookingTests(ApiFactory factory) : IClassFixture<ApiFactory>
             [new AddOnSelection(FrenchTip, 10, NailHand.Both), new AddOnSelection(Chrome, 2, NailHand.Right)]));
 
         Assert.Equal("Pending", result.Booking.Status); // paid, but only the administrator confirms
-        Assert.Equal(400m, result.Booking.ServicePrice);
-        Assert.Equal(570m, result.Booking.TotalPrice); // 400 + 15x10 + 10x2
+        Assert.Equal(499m, result.Booking.ServicePrice);
+        Assert.Equal(669m, result.Booking.TotalPrice); // 499 + 15x10 + 10x2
         Assert.Equal(150m, result.Booking.DepositAmount);
-        Assert.Equal(420m, result.Booking.BalanceDue);
+        Assert.Equal(519m, result.Booking.BalanceDue);
         Assert.Equal(150m, result.Receipt.Amount);
         Assert.Equal("GCash", result.Receipt.Method);
         Assert.False(result.Receipt.Refundable);
@@ -55,7 +55,7 @@ public sealed class BookingTests(ApiFactory factory) : IClassFixture<ApiFactory>
         Assert.Equal(result.Receipt.ReferenceNumber, receipt.ReferenceNumber);
         Assert.False(receipt.Verified); // paid, not yet checked by the salon: no PDF receipt yet
         Assert.Equal(3, receipt.Lines!.Count); // the service and the two Stone add-ons
-        Assert.Equal(570m, receipt.Lines.Sum(l => l.Amount));
+        Assert.Equal(669m, receipt.Lines.Sum(l => l.Amount));
         Assert.False(string.IsNullOrWhiteSpace(receipt.ClientName));
 
         var admin = await factory.CreateAdminClientAsync();
@@ -78,8 +78,8 @@ public sealed class BookingTests(ApiFactory factory) : IClassFixture<ApiFactory>
 
         var booked = await user.Client.BookAsync(TestHelpers.NewBooking(factory.NextSlot(), SoftGelWithDesign, addOns: new AddOnSelection(FrenchTip, 3, NailHand.Right)));
 
-        Assert.Equal(445m, booked.Booking.TotalPrice); // With Design 400 + French Tip 15 x 3
-        Assert.Equal(295m, booked.Booking.BalanceDue);
+        Assert.Equal(544m, booked.Booking.TotalPrice); // Soft Gel Extension with Design 499 + French Tip 15 x 3
+        Assert.Equal(394m, booked.Booking.BalanceDue);
     }
 
     [Fact] // 9.1.6

@@ -9,7 +9,7 @@ namespace NailsByLeah.Api.Tests.Integration;
 public sealed class EnhancementTests(ApiFactory factory) : IClassFixture<ApiFactory>
 {
     private const int Plain = 1;
-    private const int WithDesign = 2;
+    private const int WithDesign = 8; // Soft Gel Extension with Design
     private const int RemovalMyWork = 4;
     private const int Chrome = 2;
 

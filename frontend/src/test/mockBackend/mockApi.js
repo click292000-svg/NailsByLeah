@@ -1398,6 +1398,12 @@ const routes = [
     const admin = requireUser(db, 'Administrator')
     const row = db.services.find((s) => s.id === Number(params.id) && !s.isDeleted) ?? notFound('Service not found.')
     updateCatalogRow(db, admin, row, body, 'Service')
+    // A "with design" version always costs its set's price + ₱100 and takes its set's time + 1 hour.
+    const follow = (design, set) => Object.assign(design, { price: set.price + 100, durationMinutes: set.durationMinutes + 60 })
+    const set = row.designOptionOfId && db.services.find((s) => s.id === row.designOptionOfId)
+    if (set) follow(row, set)
+    db.services.filter((s) => s.designOptionOfId === row.id).forEach((design) => follow(design, row))
+    saveDb()
     return serviceItem(row)
   }],
   ['DELETE', '/admin/services/:id', (db, { params }) => {

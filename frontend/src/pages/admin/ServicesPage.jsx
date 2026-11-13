@@ -133,8 +133,10 @@ function CatalogRow({ item, kind, onChanged, designOf = null }) {
         <div className="affix">
           <span className="affix-text">₱</span>
           <input className="input input-compact" type="number" min="0" step="1" aria-label={`Price of ${item.name}`}
-            value={price} onChange={(e) => setPrice(e.target.value)} />
+            value={price} onChange={(e) => setPrice(e.target.value)} readOnly={Boolean(designOf)} />
         </div>
+        {/* A design version follows its set: the set's price + ₱100 and its time + 1 hour. */}
+        {designOf && <div className="catalog-was">{designOf.name} + <Money amount={100} /></div>}
         {errors.price && <div className="field-error">{errors.price}</div>}
         {!errors.price && Number(price) !== item.price && <div className="catalog-was">was <Money amount={item.price} /></div>}
       </div>
@@ -143,9 +145,10 @@ function CatalogRow({ item, kind, onChanged, designOf = null }) {
           <>
             <div className="affix affix-end">
               <input className="input input-compact" type="number" min="15" max="480" step="5" aria-label={`Duration of ${item.name} in minutes`}
-                value={duration} onChange={(e) => setDuration(e.target.value)} />
+                value={duration} onChange={(e) => setDuration(e.target.value)} readOnly={Boolean(designOf)} />
               <span className="affix-text">min</span>
             </div>
+            {designOf && <div className="catalog-was">{designOf.name} + 1 hr</div>}
             {errors.durationMinutes && <div className="field-error">{errors.durationMinutes}</div>}
           </>
         )}

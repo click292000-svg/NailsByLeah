@@ -90,7 +90,8 @@ function PriceCard({ catalog }) {
   const designs = sets.filter((s) => s.design)
   const groups = [
     { title: 'Soft gel', rows: sets.map((s) => [s.base.name, s.base.price]) },
-    { title: 'With design', note: 'optional', rows: designs.map((s) => [withDesignName(s.base), s.design.price]) },
+    // What the design adds to its set (+₱100), not the set's total.
+    { title: 'With design', note: 'optional', rows: designs.map((s) => [withDesignName(s.base), s.design.price - s.base.price, true]) },
     { title: 'Removal', rows: active(catalog.services.filter((s) => s.category === 'Removal')).map((s) => [s.name, s.price]) },
     { title: 'Add-ons', note: 'per nail', rows: active(catalog.addOns).map((a) => [a.name, a.price]) },
   ].filter((g) => g.rows.length)
@@ -102,8 +103,8 @@ function PriceCard({ catalog }) {
         <section key={g.title} className="pc-group" aria-label={g.title}>
           <h4 className="pc-pill">{g.title}{g.note && <small> ({g.note})</small>}</h4>
           <dl>
-            {g.rows.map(([name, price]) => (
-              <div key={name} className="pc-row"><dt>{name}</dt><span className="pc-dots" aria-hidden="true" /><dd>{peso(price)}</dd></div>
+            {g.rows.map(([name, price, extra]) => (
+              <div key={name} className="pc-row"><dt>{name}</dt><span className="pc-dots" aria-hidden="true" /><dd>{extra && <span className="pc-plus">+</span>}{peso(price)}</dd></div>
             ))}
           </dl>
         </section>

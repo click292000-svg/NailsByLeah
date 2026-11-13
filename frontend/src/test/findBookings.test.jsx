@@ -18,7 +18,7 @@ const listRows = () => within(screen.getByRole('heading', { name: 'All bookings'
 const activeBookings = () => getDb().bookings.filter((b) => !b.isDeleted)
 
 describe('Find bookings', () => {
-  it('A: opens with both panels hidden and the list showing, 10 at a time as it scrolls', async () => {
+  it('A: opens with both panels hidden and the list showing, 10 a page', async () => {
     const user = userEvent.setup()
     await openPage()
 
@@ -28,9 +28,15 @@ describe('Find bookings', () => {
     const total = activeBookings().length
     await waitFor(() => expect(listRows()).toHaveLength(Math.min(10, total)))
     if (total > 10) {
-      expect(screen.getByText(`Showing 10 of ${total}`)).toBeInTheDocument()
-      await user.click(screen.getByRole('button', { name: 'Show more' }))
-      await waitFor(() => expect(listRows()).toHaveLength(Math.min(20, total)))
+      expect(screen.getByText(`Showing 1–10 of ${total}`)).toBeInTheDocument()
+      expect(screen.getByText(`Page 1 of ${Math.ceil(total / 10)}`)).toBeInTheDocument()
+      await user.click(screen.getByRole('button', { name: 'Next' }))
+      await waitFor(() => expect(listRows()).toHaveLength(Math.min(10, total - 10)))
+      expect(screen.getByText(`Page 2 of ${Math.ceil(total / 10)}`)).toBeInTheDocument()
+      // Page 1 is always one tap away.
+      expect(screen.getByRole('button', { name: 'Page 2' })).toHaveAttribute('aria-current', 'page')
+      await user.click(screen.getByRole('button', { name: 'Page 1' }))
+      await waitFor(() => expect(screen.getByText(`Page 1 of ${Math.ceil(total / 10)}`)).toBeInTheDocument())
     }
   })
 

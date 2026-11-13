@@ -111,10 +111,10 @@ describe('Mock backend', () => {
 
   it('books a removal before a new set as one longer appointment', async () => {
     await signIn(CLIENT)
-    const day = await call('GET', '/slots', { query: { date: dateFromToday(20), serviceId: '2', removalServiceId: '4' } })
+    const day = await call('GET', '/slots', { query: { date: dateFromToday(20), serviceId: '8', removalServiceId: '4' } })
     expect(day.durationMinutes).toBe(240)
-    const { booking: created } = await call('POST', '/bookings', { body: booking({ serviceId: 2, removalServiceId: 4, bookingDate: dateFromToday(20), startTime: '11:00:00' }) })
-    expect(created).toMatchObject({ durationMinutes: 240, endTime: '15:00:00', totalPrice: 500, removalServiceName: 'My Work' })
+    const { booking: created } = await call('POST', '/bookings', { body: booking({ serviceId: 8, removalServiceId: 4, bookingDate: dateFromToday(20), startTime: '11:00:00' }) })
+    expect(created).toMatchObject({ durationMinutes: 240, endTime: '15:00:00', totalPrice: 599, removalServiceName: 'My Work' })
   })
 
   it('lists dates closed all day, and asks "Others" for a reason', async () => {

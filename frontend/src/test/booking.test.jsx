@@ -2,52 +2,60 @@ import { act, fireEvent, render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { PaymentPanel } from '../components/PaymentPanel'
 import { CancelBookingDialog } from '../components/BookingDialogs'
-import { CLIENT, readTermsAndAgree, renderApp, signIn, pickDate, pickShade } from './helpers'
+import { CLIENT, openPaymentTerms, readTermsAndAgree, renderApp, signIn, pickDate, pickShade } from './helpers'
 import { dateFromToday } from '../lib/dates'
 import { getDb } from './mockBackend/db'
 import { lookups } from './mockBackend/data/lookups'
 
-// With Design (₱400) + Chrome × 2 (₱20): a ₱150 deposit or ₱420 in full.
-const QUOTE = { total: 420, deposit: 150, fullAmount: 420, balanceDue: 270, lines: [] }
+// Soft Gel Extension with Design (₱499) + Chrome × 2 (₱20): a ₱150 deposit or ₱519 in full.
+const QUOTE = { total: 519, deposit: 150, fullAmount: 519, balanceDue: 369, lines: [] }
 const panel = (props) => <PaymentPanel quote={QUOTE} option="Deposit" onOptionChange={() => {}} {...props} />
 
 describe('Payment step', () => {
+  it('starts with nothing picked: the client chooses how much and how to pay', async () => {
+    const user = userEvent.setup()
+    render(panel({ option: null }))
+
+    for (const name of ['Booking deposit', 'Full payment', 'GCash', 'Maya']) expect(screen.getByRole('radio', { name })).not.toBeChecked()
+    expect(screen.getByRole('button', { name: 'Pay' })).toBeDisabled()
+    expect(screen.getByText('Choose how much to pay now (step 1) to continue.')).toBeInTheDocument()
+    await readTermsAndAgree(user) // agreeing alone is not enough
+    expect(screen.getByRole('button', { name: 'Pay' })).toBeDisabled()
+  })
+
   it('keeps Pay disabled until the booking policy is accepted (7.6)', async () => {
     const user = userEvent.setup()
     const onPay = vi.fn()
     render(panel({ onPay }))
 
     expect(screen.getByRole('note')).toHaveTextContent('₱150.00 booking depositNon-refundable for cancellations and no-shows. This amount is deducted from your total service cost.')
-    expect(screen.getByText('Read the booking policies in step 1 to continue.')).toBeInTheDocument()
+    expect(screen.getByText('Choose GCash or Maya (step 2) to continue.')).toBeInTheDocument()
+    await user.click(screen.getByRole('radio', { name: 'GCash' }))
+    expect(screen.getByText('Review and accept the Terms & Conditions to continue.')).toBeInTheDocument()
+    expect(screen.getByText('Review required')).toBeInTheDocument()
     const pay = screen.getByRole('button', { name: /Pay/ })
     expect(pay).toBeDisabled()
     await user.click(pay)
     expect(onPay).not.toHaveBeenCalled()
 
-    // The box can't be ticked before the Terms have been opened and read to the end.
-    const agree = screen.getByRole('checkbox', { name: /I have read and agree to the booking policies/ })
-    expect(agree).toBeDisabled()
-    expect(screen.getByRole('button', { name: /Review booking policies/ })).toHaveTextContent('Required before payment')
-    await user.click(agree.closest('label'))
-    expect(screen.getByText('Please open and read the booking policies to the end first.')).toBeInTheDocument()
-
     await readTermsAndAgree(user)
+    expect(screen.getByText('✓ Accepted')).toBeInTheDocument()
     expect(pay).toBeEnabled()
   })
 
-  it('opens the Terms & Conditions without ticking the box or leaving the page', async () => {
+  it('opens the Terms & Conditions without agreeing for the client or leaving the page', async () => {
     const user = userEvent.setup()
     render(panel({ onPay: vi.fn() }))
 
-    await user.click(screen.getByRole('button', { name: /Review booking policies/ }))
-
+    await openPaymentTerms(user)
     const dialog = screen.getByRole('dialog', { name: 'Terms & Conditions' })
-    expect(dialog).toHaveTextContent('You have read to the end.')
-    await user.click(within(dialog).getByRole('button', { name: 'Done' }))
-    expect(screen.getByRole('button', { name: /Review booking policies/ })).toHaveTextContent('Read to the end')
-    const agree = screen.getByRole('checkbox', { name: /I have read and agree to the booking policies/ })
-    expect(agree).toBeEnabled()
+    const agree = within(dialog).getByRole('checkbox', { name: 'I have read and agree to the Terms & Conditions.' })
     expect(agree).not.toBeChecked() // reading never ticks it
+    expect(within(dialog).getByRole('button', { name: 'Agree and continue' })).toBeDisabled()
+    await user.click(within(dialog).getAllByRole('button', { name: 'Close' }).at(-1))
+
+    expect(screen.getByText('Review required')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Pay/ })).toBeDisabled()
   })
 
   it('sends only one payment when Pay is clicked several times quickly (7.7)', async () => {
@@ -73,14 +81,14 @@ describe('Payment step', () => {
     const { rerender } = render(panel({ onPay: vi.fn(), onOptionChange }))
 
     expect(screen.getByRole('radio', { name: 'Booking deposit' }).closest('label')).toHaveTextContent('₱150.00')
-    expect(screen.getByRole('radio', { name: 'Booking deposit' }).closest('label')).toHaveTextContent('Pay the rest (₱270.00) at the salon')
-    expect(screen.getByRole('radio', { name: 'Full payment' }).closest('label')).toHaveTextContent('₱420.00')
+    expect(screen.getByRole('radio', { name: 'Booking deposit' }).closest('label')).toHaveTextContent('Pay the rest (₱369.00) at the salon')
+    expect(screen.getByRole('radio', { name: 'Full payment' }).closest('label')).toHaveTextContent('₱519.00')
     expect(screen.getByRole('button', { name: /Pay ₱150.00 deposit/ })).toBeInTheDocument()
 
     await user.click(screen.getByRole('radio', { name: 'Full payment' }))
     expect(onOptionChange).toHaveBeenCalledWith('Full')
     rerender(panel({ onPay: vi.fn(), onOptionChange, option: 'Full' }))
-    expect(screen.getByRole('button', { name: /Pay ₱420.00 in full/ })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Pay ₱519.00 in full/ })).toBeInTheDocument()
     // The deposit notice applies to a full payment too.
     expect(screen.getByRole('note')).toHaveTextContent('included in your full payment')
   })
@@ -128,18 +136,18 @@ describe('Booking flow', () => {
     // Step 1: service, colour and add-ons; the total updates as they change (Ref 10.4).
     await user.click(await screen.findByRole('checkbox', { name: /^With Design/ }))
     const total = () => within(screen.getByRole('complementary')).getByText('Total').nextSibling.textContent
-    expect(total()).toBe('₱400.00')
+    expect(total()).toBe('₱499.00')
     // A new add-on goes on both hands, all 10 nails; one hand is 5, and the counter lowers it for an accent.
     await user.click(screen.getByRole('checkbox', { name: /French Tip/ }))
     expect(screen.getByRole('radio', { name: 'Both hands' })).toHaveAttribute('aria-checked', 'true')
     expect(screen.getByText('10 nails')).toBeInTheDocument()
-    expect(total()).toBe('₱550.00')
+    expect(total()).toBe('₱649.00')
     await user.click(screen.getByRole('radio', { name: 'Right hand' }))
     expect(screen.getByText('5 nails')).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: 'Fewer nails for French Tip' }))
     await user.click(screen.getByRole('button', { name: 'Fewer nails for French Tip' }))
     expect(screen.getByText('3 nails')).toBeInTheDocument()
-    expect(total()).toBe('₱445.00')
+    expect(total()).toBe('₱544.00')
     // A colour is required for a new set.
     await user.click(screen.getByRole('button', { name: /^Next:/ }))
     expect(screen.getByText('Choose a nail colour to continue.')).toBeInTheDocument()
@@ -171,12 +179,12 @@ describe('Booking flow', () => {
     expect(screen.getByText(/French Tip — Right hand/)).toBeInTheDocument()
     expect(screen.getByText('#06 – Light Pink-Lavender', { selector: '.review-color' , exact: false })).toBeInTheDocument()
     expect(screen.getByText("Short almond nails please. I'll bring a reference photo")).toBeInTheDocument()
-    // Paying in full: the summary and the Pay button switch to the whole amount (₱400 + French Tip × 3 = ₱445).
+    // Paying in full: the summary and the Pay button switch to the whole amount (₱499 + French Tip × 3 = ₱544).
     await user.click(screen.getByRole('radio', { name: 'Full payment' }))
-    expect(screen.getByText('Full payment now').nextSibling).toHaveTextContent('₱445.00')
+    expect(screen.getByText('Full payment now').nextSibling).toHaveTextContent('₱544.00')
     await user.click(screen.getByRole('radio', { name: 'Maya' }))
     await readTermsAndAgree(user)
-    await user.click(screen.getByRole('button', { name: /Pay ₱445.00 in full/ }))
+    await user.click(screen.getByRole('button', { name: /Pay ₱544.00 in full/ }))
 
     // Paid, but waiting for Leyah to confirm.
     expect(await screen.findByRole('heading', { name: 'Booking received!' })).toBeInTheDocument()
@@ -184,8 +192,8 @@ describe('Booking flow', () => {
     expect(screen.getByText(/Leyah will check it and confirm/)).toBeInTheDocument()
     const payment = getDb().payments.at(-1)
     expect(screen.getByText(payment.referenceNumber)).toBeInTheDocument()
-    expect(payment).toMatchObject({ method: 'Maya', option: 'Full', amount: 445, balanceAfter: 0 })
-    expect(getDb().bookings.at(-1)).toMatchObject({ bookingDate: dateFromToday(3), startTime: '11:00:00', durationMinutes: 180, status: 'Pending', amountPaid: 445, nailColor: '#06' })
+    expect(payment).toMatchObject({ method: 'Maya', option: 'Full', amount: 544, balanceAfter: 0 })
+    expect(getDb().bookings.at(-1)).toMatchObject({ bookingDate: dateFromToday(3), startTime: '11:00:00', durationMinutes: 180, status: 'Pending', amountPaid: 544, nailColor: '#06' })
     expect(getDb().bookings.at(-1).note).toBe("Short almond nails please. I'll bring a reference photo")
     expect(getDb().bookingAddOns.at(-1)).toMatchObject({ addOnId: 1, nailCount: 3, hand: 'Right' })
   })
